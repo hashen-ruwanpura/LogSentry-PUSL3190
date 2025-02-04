@@ -37,6 +37,15 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'log_ingestion',
+    'threat_detection',
+    'incident_detection',
+    'alerts',
+    'dashboard',
+    'reports',
+    'authentication',
+    'smtp_integration',
+    'rest_framework',
 ]
 
 MIDDLEWARE = [
@@ -75,8 +84,12 @@ WSGI_APPLICATION = 'LogDetection.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'log_detection',  
+        'USER': 'root',           
+        'PASSWORD': '',           # Your MySQL password (leave empty if no password)
+        'HOST': 'localhost',     
+        'PORT': '3306',           
     }
 }
 
