@@ -16,9 +16,62 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.conf import settings  # Add this import
+from django.conf.urls.static import static  # Add this import if not already present
+from django.contrib.auth import views as auth_views
+from authentication.views import signup_view
+from .views import home  # Import the home view
+from authentication import views
+from authentication.views import signup_view, CustomLoginView, admin_home
+from authentication import views_admin
+from authentication import views_admin_logs
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('login/', CustomLoginView.as_view(), name='login'),
+    path('signup/', signup_view, name='signup'),
+    path('logout/', auth_views.LogoutView.as_view(
+        template_name='registration/logout.html',
+        next_page='/',
+        http_method_names=['get', 'post']  # This allows GET requests
+    ), name='logout'),
+    path('profile/', views.profile_view, name='profile'),
+    path('contact/', views.contact_view, name='contact'),
     path('api-auth/', include('rest_framework.urls')),
     path('api/dashboard/', include('dashboard.urls')),
+    path('dashboard/', views.dashboard_view, name='dashboard'),
+
+    path('events/', views.events_view, name='events'),
+    path('events/export/', views.export_events, name='export_events'),
+    path('apache-logs/', views.apache_logs_view, name='apache_logs'),
+    path('mysql-logs/', views.mysql_logs_view, name='mysql_logs'),
+    path('reports/', views.reports_view, name='reports'),
+    path('settings/', views.settings_view, name='settings'),
+    path('explore-agent/', views.explore_agent_view, name='explore_agent'),
+    path('generate-report/', views.generate_report_view, name='generate_report'),
+    path('alerts-details/', views.alerts_details_view, name='alerts_details'),
+    path('mitre-details/', views.mitre_details_view, name='mitre_details'),
+    
+    # Add the admin_home URL pattern here
+    path('admin-home/', admin_home, name='admin_home'),
+
+    path('admin-panel/users/', views_admin.user_management_view, name='user_management'),
+    # Admin log analysis views
+    path('admin-panel/logs/', views_admin_logs.logs_view, name='admin_logs'),
+    
+    # API endpoints for user management
+    path('api/users/', views_admin.api_users_list, name='api_users_list'),
+    path('api/users/create/', views_admin.api_user_create, name='api_user_create'),
+    path('api/users/<int:user_id>/update/', views_admin.api_user_update, name='api_user_update'),
+    path('api/users/<int:user_id>/delete/', views_admin.api_user_delete, name='api_user_delete'),
+
+    # API endpoints for log analysis
+    path('api/admin/logs/', views_admin_logs.api_logs_list, name='api_admin_logs'),
+    path('api/admin/logs/<int:log_id>/', views_admin_logs.api_log_detail, name='api_admin_log_detail'),
+    path('api/admin/logs/<int:log_id>/export/', views_admin_logs.api_log_export, name='api_admin_log_export'),
+    
+    path('', home),  # Add this line to handle the root URL
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

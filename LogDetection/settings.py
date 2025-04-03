@@ -11,7 +11,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 from pathlib import Path
-
+import os
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -46,6 +46,8 @@ INSTALLED_APPS = [
     'authentication',
     'smtp_integration',
     'rest_framework',
+    'siem',
+    'frontend',  
 ]
 
 MIDDLEWARE = [
@@ -59,11 +61,16 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'LogDetection.urls'
+import os
 
+# Make sure this part of your settings includes the frontend directory
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [
+            os.path.join(BASE_DIR, 'templates'),
+            os.path.join(BASE_DIR, 'frontend'),  # Add this line
+        ],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -86,9 +93,9 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'log_detection',  
-        'USER': 'root',           
-        'PASSWORD': '',           # Your MySQL password (leave empty if no password)
-        'HOST': 'localhost',     
+        'USER': 'root',          
+        'PASSWORD': '',           
+        'HOST': 'localhost',      
         'PORT': '3306',           
     }
 }
@@ -99,16 +106,10 @@ DATABASES = {
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        'OPTIONS': {
+            'min_length': 4,  # Set to a lower value for simpler passwords
+        }
     },
 ]
 
@@ -128,9 +129,27 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
-STATIC_URL = 'static/'
+
+STATIC_URL = '/static/'
+STATICFILES_DIRS = [
+    BASE_DIR / 'frontend' / 'static',  # Updated path
+]
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+LOGIN_REDIRECT_URL = '/'  # Redirect to homepage after login
+LOGOUT_REDIRECT_URL = '/login/'  # Redirect to login page after logout
+SIGNUP_REDIRECT_URL = '/login/'  # Redirect to login page after signup
+
+# Email settings for account verification (if needed)
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'  # Update with your SMTP server
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = ''  
+EMAIL_HOST_PASSWORD = ''

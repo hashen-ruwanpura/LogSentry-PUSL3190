@@ -1,0 +1,499 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard | Threat Detection Platform</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #3a6ea5;
+            --secondary-color: #004e8a;
+            --accent-color: #ff6b6b;
+            --light-bg: #f8f9fa;
+            --dark-bg: #343a40;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+        }
+        
+        .sidebar {
+            background-color: var(--dark-bg);
+            min-height: 100vh;
+            color: white;
+            position: fixed;
+            width: 250px;
+            z-index: 100;
+        }
+        
+        .logo {
+            padding: 20px 15px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .nav-link {
+            color: rgba(255,255,255,0.8);
+            padding: 12px 20px;
+            margin: 4px 0;
+            border-radius: 4px;
+            transition: all 0.3s;
+        }
+        
+        .nav-link:hover, .nav-link.active {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .nav-link i {
+            margin-right: 10px;
+            width: 20px;
+            text-align: center;
+        }
+        
+        .main-content {
+            margin-left: 250px;
+            padding: 20px;
+        }
+        
+        .card {
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+            margin-bottom: 20px;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .card-stat {
+            border-left: 4px solid var(--primary-color);
+        }
+        
+        .alert-count {
+            font-size: 2rem;
+            font-weight: bold;
+        }
+        
+        .top-bar {
+            background-color: white;
+            padding: 15px 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+        
+        .chart-container {
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        
+        .status-active {
+            background-color: #2ecc71;
+        }
+        
+        .status-warning {
+            background-color: #f39c12;
+        }
+        
+        .status-danger {
+            background-color: #e74c3c;
+        }
+        
+        .recent-alerts-table {
+            font-size: 0.9rem;
+        }
+        
+        .severity-high {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        
+        .severity-medium {
+            color: #f39c12;
+        }
+        
+        .severity-low {
+            color: #3498db;
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="logo">
+            <i class="fas fa-shield-alt"></i> ThreatGuard
+        </div>
+        <div class="mt-4">
+            <a href="/admin-home/" class="nav-link active">
+                <i class="fas fa-tachometer-alt"></i> Dashboard
+            </a>
+            <a href="/admin-panel/logs/" class="nav-link">
+                <i class="fas fa-clipboard-list"></i> Log Analysis
+            </a>
+            <a href="/admin-panel/alerts/" class="nav-link">
+                <i class="fas fa-exclamation-triangle"></i> Alerts
+            </a>
+            <a href="/admin-panel/reports/" class="nav-link">
+                <i class="fas fa-chart-bar"></i> Reports
+            </a>
+            <a href="/admin-panel/users/" class="nav-link">
+                <i class="fas fa-users"></i> User Management
+            </a>
+            <a href="/admin-panel/settings/" class="nav-link">
+                <i class="fas fa-cog"></i> Settings
+            </a>
+            <a href="/logout/" class="nav-link mt-5">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </a>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <div class="top-bar d-flex justify-content-between align-items-center">
+            <h4 class="mb-0">Admin Dashboard</h4>
+            <div>
+                <span class="me-3">Welcome, Admin</span>
+                <span class="badge bg-primary"><i class="fas fa-clock"></i> Last refresh: <span id="last-refresh-time">Just now</span></span>
+            </div>
+        </div>
+
+        <!-- Stats Row -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card card-stat">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="card-subtitle mb-2 text-muted">Total Alerts</h6>
+                                <h2 class="alert-count">127</h2>
+                                <p class="mb-0 text-success"><i class="fas fa-arrow-up"></i> 12% from last week</p>
+                            </div>
+                            <div class="bg-primary bg-opacity-10 p-3 rounded">
+                                <i class="fas fa-bell text-primary fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card card-stat" style="border-left-color: #e74c3c;">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="card-subtitle mb-2 text-muted">Critical Threats</h6>
+                                <h2 class="alert-count text-danger">14</h2>
+                                <p class="mb-0 text-danger"><i class="fas fa-arrow-up"></i> 5% from last week</p>
+                            </div>
+                            <div class="bg-danger bg-opacity-10 p-3 rounded">
+                                <i class="fas fa-radiation-alt text-danger fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card card-stat" style="border-left-color: #2ecc71;">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="card-subtitle mb-2 text-muted">Servers Monitored</h6>
+                                <h2 class="alert-count">8</h2>
+                                <p class="mb-0 text-success"><i class="fas fa-check"></i> All online</p>
+                            </div>
+                            <div class="bg-success bg-opacity-10 p-3 rounded">
+                                <i class="fas fa-server text-success fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card card-stat" style="border-left-color: #f39c12;">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="card-subtitle mb-2 text-muted">Active Users</h6>
+                                <h2 class="alert-count">42</h2>
+                                <p class="mb-0 text-success"><i class="fas fa-arrow-up"></i> 8% from last month</p>
+                            </div>
+                            <div class="bg-warning bg-opacity-10 p-3 rounded">
+                                <i class="fas fa-users text-warning fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="row mb-4">
+            <div class="col-md-8">
+                <div class="chart-container">
+                    <h5>Threat Activity (Last 7 Days)</h5>
+                    <canvas id="threatActivityChart" height="250"></canvas>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="chart-container">
+                    <h5>Alert Distribution</h5>
+                    <canvas id="alertDistributionChart" height="250"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Alerts and Server Status Row -->
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header bg-white">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">Recent Alerts</h5>
+                            <a href="aalerts.html" class="btn btn-sm btn-primary">View All</a>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover recent-alerts-table">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Source</th>
+                                        <th>Alert Type</th>
+                                        <th>Severity</th>
+                                        <th>Status</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>Today, 14:25</td>
+                                        <td>Apache Server</td>
+                                        <td>Multiple 403 Forbidden</td>
+                                        <td><span class="severity-high">High</span></td>
+                                        <td><span class="badge bg-danger">New</span></td>
+                                        <td><button class="btn btn-sm btn-outline-primary">Details</button></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Today, 12:18</td>
+                                        <td>MySQL Server</td>
+                                        <td>Failed Login Attempts</td>
+                                        <td><span class="severity-medium">Medium</span></td>
+                                        <td><span class="badge bg-warning text-dark">Investigating</span></td>
+                                        <td><button class="btn btn-sm btn-outline-primary">Details</button></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Today, 10:45</td>
+                                        <td>Apache Server</td>
+                                        <td>SQL Injection Attempt</td>
+                                        <td><span class="severity-high">High</span></td>
+                                        <td><span class="badge bg-success">Resolved</span></td>
+                                        <td><button class="btn btn-sm btn-outline-primary">Details</button></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Today, 09:12</td>
+                                        <td>MySQL Server</td>
+                                        <td>Database Connection Spike</td>
+                                        <td><span class="severity-low">Low</span></td>
+                                        <td><span class="badge bg-success">Resolved</span></td>
+                                        <td><button class="btn btn-sm btn-outline-primary">Details</button></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Yesterday, 22:38</td>
+                                        <td>Apache Server</td>
+                                        <td>Directory Traversal Attempt</td>
+                                        <td><span class="severity-high">High</span></td>
+                                        <td><span class="badge bg-success">Resolved</span></td>
+                                        <td><button class="btn btn-sm btn-outline-primary">Details</button></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header bg-white">
+                        <h5 class="mb-0">Server Status</h5>
+                    </div>
+                    <div class="card-body">
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <span class="status-indicator status-active"></span>
+                                    Web Server (Apache)
+                                </div>
+                                <div>
+                                    <span class="badge bg-success">Online</span>
+                                    <small class="text-muted ms-2">Load: 42%</small>
+                                </div>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <span class="status-indicator status-active"></span>
+                                    Database Server (MySQL)
+                                </div>
+                                <div>
+                                    <span class="badge bg-success">Online</span>
+                                    <small class="text-muted ms-2">Load: 38%</small>
+                                </div>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <span class="status-indicator status-warning"></span>
+                                    Application Server
+                                </div>
+                                <div>
+                                    <span class="badge bg-warning text-dark">High Load</span>
+                                    <small class="text-muted ms-2">Load: 78%</small>
+                                </div>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <span class="status-indicator status-active"></span>
+                                    Backup Server
+                                </div>
+                                <div>
+                                    <span class="badge bg-success">Online</span>
+                                    <small class="text-muted ms-2">Load: 12%</small>
+                                </div>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <span class="status-indicator status-active"></span>
+                                    Log Analysis Service
+                                </div>
+                                <div>
+                                    <span class="badge bg-success">Active</span>
+                                    <small class="text-muted ms-2">Last run: 5m ago</small>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="card mt-4">
+                    <div class="card-header bg-white">
+                        <h5 class="mb-0">Quick Actions</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-primary mb-2"><i class="fas fa-sync-alt me-2"></i> Run Log Analysis</button>
+                            <button class="btn btn-outline-primary mb-2"><i class="fas fa-file-export me-2"></i> Export Report</button>
+                            <button class="btn btn-outline-primary"><i class="fas fa-bell me-2"></i> Configure Alerts</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // Initialize charts when the DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            // Threat Activity Chart
+            const threatCtx = document.getElementById('threatActivityChart').getContext('2d');
+            const threatChart = new Chart(threatCtx, {
+                type: 'line',
+                data: {
+                    labels: ['6 days ago', '5 days ago', '4 days ago', '3 days ago', '2 days ago', 'Yesterday', 'Today'],
+                    datasets: [
+                        {
+                            label: 'High Severity',
+                            data: [5, 7, 4, 9, 12, 8, 14],
+                            borderColor: '#e74c3c',
+                            backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        },
+                        {
+                            label: 'Medium Severity',
+                            data: [12, 15, 18, 14, 22, 17, 19],
+                            borderColor: '#f39c12',
+                            backgroundColor: 'rgba(243, 156, 18, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        },
+                        {
+                            label: 'Low Severity',
+                            data: [25, 32, 28, 35, 42, 38, 30],
+                            borderColor: '#3498db',
+                            backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+
+            // Alert Distribution Chart
+            const alertCtx = document.getElementById('alertDistributionChart').getContext('2d');
+            const alertChart = new Chart(alertCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Apache Server', 'MySQL Server', 'Authentication', 'Network', 'Other'],
+                    datasets: [{
+                        data: [45, 25, 15, 10, 5],
+                        backgroundColor: [
+                            '#3a6ea5',
+                            '#e74c3c',
+                            '#f39c12',
+                            '#2ecc71',
+                            '#9b59b6'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                        }
+                    }
+                }
+            });
+
+            // Update last refresh time
+            setInterval(() => {
+                const now = new Date();
+                const timeString = now.toLocaleTimeString();
+                document.getElementById('last-refresh-time').textContent = timeString;
+            }, 60000); // Update every minute
+        });
+    </script>
+</body>
+</html>

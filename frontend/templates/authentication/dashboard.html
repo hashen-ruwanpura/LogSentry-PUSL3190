@@ -1,0 +1,684 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log Detection Platform - Dashboard</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #17a2b8;
+            --primary-dark: #138496;
+            --secondary-color: #343a40;
+            --secondary-light: #495057;
+            --light-bg: #f8f9fa;
+            --border-color: #dee2e6;
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+            --info-color: #0dcaf0;
+            --text-muted: #6c757d;
+            --sidebar-width: 250px;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+        
+        a {
+            text-decoration: none;
+            color: inherit;
+        }
+        
+        /* Dashboard Layout */
+        .dashboard-container {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        
+        .main-header {
+            background-color: var(--secondary-color);
+            color: #fff;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.8rem 1.5rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+        }
+        
+        .logo-section {
+            display: flex;
+            align-items: center;
+        }
+        
+        .logo-section h1 {
+            font-size: 1.2rem;
+            margin-left: 1rem;
+            font-weight: 500;
+        }
+        
+        .sidebar-toggle {
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 1.2rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.5rem;
+        }
+        
+        .sidebar-toggle:hover {
+            color: var(--primary-color);
+        }
+        
+        .header-actions {
+            display: flex;
+            align-items: center;
+        }
+        
+        .username {
+            margin-right: 1rem;
+            font-weight: 500;
+        }
+        
+        .logout-btn {
+            background-color: var(--primary-color);
+            color: #fff;
+            padding: 0.4rem 0.8rem;
+            border-radius: 3px;
+            font-size: 0.9rem;
+            transition: background-color 0.2s ease;
+        }
+        
+        .logout-btn:hover {
+            background-color: var(--primary-dark);
+        }
+        
+        .main-content {
+            display: flex;
+            margin-top: 60px;
+            min-height: calc(100vh - 60px);
+        }
+        
+        .sidebar {
+            width: var(--sidebar-width);
+            background-color: var(--secondary-color);
+            color: #fff;
+            position: fixed;
+            top: 60px;
+            left: 0;
+            bottom: 0;
+            overflow-y: auto;
+            transition: transform 0.3s ease;
+            z-index: 90;
+        }
+        
+        .sidebar-nav ul {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .sidebar-nav li {
+            padding: 0.8rem 1.5rem;
+            transition: background-color 0.2s ease;
+        }
+        
+        .sidebar-nav li a {
+            display: flex;
+            align-items: center;
+        }
+        
+        .sidebar-nav li i {
+            margin-right: 0.8rem;
+            width: 20px;
+            text-align: center;
+        }
+        
+        .sidebar-nav li.active {
+            background-color: var(--primary-color);
+        }
+        
+        .sidebar-nav li:hover:not(.active) {
+            background-color: var(--secondary-light);
+        }
+        
+        .content {
+            flex: 1;
+            margin-left: var(--sidebar-width);
+            padding: 1.5rem;
+        }
+        
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+        
+        .page-header h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            color: var(--secondary-color);
+        }
+        
+        .actions {
+            display: flex;
+            gap: 0.8rem;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+        }
+        
+        .btn i {
+            margin-right: 0.5rem;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: #fff;
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--primary-dark);
+        }
+        
+        .btn-secondary {
+            background-color: var(--secondary-color);
+            color: #fff;
+        }
+        
+        .btn-secondary:hover {
+            background-color: var(--secondary-light);
+        }
+        
+        .btn-outline {
+            background-color: transparent;
+            border: 1px solid var(--border-color);
+        }
+        
+        .btn-outline:hover {
+            background-color: #f0f0f0;
+        }
+        
+        /* Filters */
+        .filters {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .filter-group {
+            display: flex;
+            align-items: center;
+            margin-right: 1.5rem;
+        }
+        
+        .filter-group label {
+            margin-right: 0.5rem;
+            font-weight: 500;
+            color: var(--text-muted);
+        }
+        
+        .filter-group input, .filter-group select {
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+        
+        .filter-group input {
+            width: 250px;
+        }
+        
+        /* Metrics Overview */
+        .metrics-overview {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .metric-card {
+            background-color: #fff;
+            border-left: 4px solid var(--primary-color);
+            border-radius: 4px;
+            padding: 1.2rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            transition: transform 0.2s ease;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .metric-card h3 {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+        }
+        
+        .metric-card .metric-value {
+            font-size: 2rem;
+            font-weight: 600;
+            color: var(--secondary-color);
+        }
+        
+        .metric-card.danger {
+            border-left-color: var(--danger-color);
+        }
+        
+        .metric-card.success {
+            border-left-color: var(--success-color);
+        }
+        
+        .metric-card.warning {
+            border-left-color: var(--warning-color);
+        }
+        
+        /* Charts Container */
+        .charts-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .chart-card {
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            padding: 1.5rem;
+        }
+        
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .chart-header h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--secondary-color);
+        }
+        
+        .expand-btn {
+            color: var(--text-muted);
+            font-size: 1rem;
+            transition: color 0.2s ease;
+        }
+        
+        .expand-btn:hover {
+            color: var(--secondary-color);
+        }
+        
+        .chart {
+            height: 300px;
+        }
+        
+        /* Tables */
+        .security-alerts {
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            overflow-x: auto;
+        }
+        
+        .security-alerts h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--secondary-color);
+            margin-bottom: 1rem;
+        }
+        
+        .alerts-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .alerts-table th, .alerts-table td {
+            padding: 0.8rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .alerts-table th {
+            background-color: var(--light-bg);
+            font-weight: 600;
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+        
+        .alerts-table tr:hover {
+            background-color: #f5f5f5;
+        }
+        
+        /* Responsive */
+        @media (max-width: 992px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            
+            .content {
+                margin-left: 0;
+            }
+            
+            .sidebar.active {
+                transform: translateX(0);
+            }
+            
+            .charts-container {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .page-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+            }
+            
+            .actions {
+                flex-direction: column;
+                width: 100%;
+            }
+            
+            .filters {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+            }
+            
+            .filter-group {
+                width: 100%;
+                margin-right: 0;
+            }
+            
+            .metric-card {
+                padding: 1rem;
+            }
+            
+            .metric-card .metric-value {
+                font-size: 1.5rem;
+            }
+        }
+        
+        /* Sidebar Toggle */
+        .sidebar-open .content {
+            margin-left: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <header class="main-header">
+            <div class="logo-section">
+                <button id="sidebar-toggle" class="sidebar-toggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <h1>Log Detection Platform</h1>
+            </div>
+            <div class="header-actions">
+                <span class="username">{{ user.username }}</span>
+                <a href="{% url 'logout' %}" class="logout-btn">Logout</a>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <aside class="sidebar">
+                <nav class="sidebar-nav">
+                    <ul>
+                        <li class="active"><a href="/dashboard/"><i class="fas fa-chart-line"></i> Dashboard</a></li>
+                        <li><a href="/events/"><i class="fas fa-calendar-alt"></i> Events</a></li>
+                        <li><a href="/apache-logs/"><i class="fas fa-server"></i> Apache Logs</a></li>
+                        <li><a href="/mysql-logs/"><i class="fas fa-database"></i> MySQL Logs</a></li>
+                        <li><a href="/reports/"><i class="fas fa-file-alt"></i> AI Reports</a></li>
+                        <li><a href="/profile/"><i class="fas fa-user"></i> Profile</a></li>
+                        <li><a href="/settings/"><i class="fas fa-cog"></i> Settings</a></li>
+                        <li><a href="/contact/"><i class="fas fa-envelope"></i> Contact Us</a></li>
+                    </ul>
+                </nav>
+            </aside>
+
+            <main class="content">
+                <div class="page-header">
+                    <h2>Dashboard</h2>
+                    <div class="actions">
+                        <a href="#" class="btn btn-secondary"><i class="fas fa-search"></i> Explore Logs</a>
+                        <a href="#" class="btn btn-primary"><i class="fas fa-file-export"></i> Generate Report</a>
+                    </div>
+                </div>
+
+                <div class="filters">
+                    <div class="filter-group">
+                        <label for="search">Search:</label>
+                        <input type="text" id="search" name="search" placeholder="Search logs...">
+                    </div>
+                    <div class="filter-group">
+                        <label for="timeframe">Timeframe:</label>
+                        <select id="timeframe" name="timeframe">
+                            <option value="24h" selected>Last 24 hours</option>
+                            <option value="7d">Last 7 days</option>
+                            <option value="30d">Last 30 days</option>
+                            <option value="custom">Custom range</option>
+                        </select>
+                    </div>
+                    <button id="refresh-btn" class="btn btn-outline"><i class="fas fa-sync-alt"></i> Refresh</button>
+                </div>
+
+                <div class="metrics-overview">
+                    <div class="metric-card">
+                        <h3>Total Log Entries</h3>
+                        <p class="metric-value">{{ total_logs|default:"0" }}</p>
+                    </div>
+                    <div class="metric-card warning">
+                        <h3>High Severity Alerts</h3>
+                        <p class="metric-value">{{ high_level_alerts|default:"0" }}</p>
+                    </div>
+                    <div class="metric-card danger">
+                        <h3>Authentication Failures</h3>
+                        <p class="metric-value">{{ auth_failures|default:"0" }}</p>
+                    </div>
+                    <div class="metric-card success">
+                        <h3>Authentication Success</h3>
+                        <p class="metric-value">{{ auth_success|default:"0" }}</p>
+                    </div>
+                </div>
+
+                <div class="charts-container">
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3>Alerts Evolution</h3>
+                            <a href="#" class="expand-btn"><i class="fas fa-expand"></i></a>
+                        </div>
+                        <div class="chart">
+                            <canvas id="alerts-chart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3>Top MITRE ATT&CK Tactics</h3>
+                            <a href="#" class="expand-btn"><i class="fas fa-expand"></i></a>
+                        </div>
+                        <div class="chart">
+                            <canvas id="mitre-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="security-alerts">
+                    <h3>Recent Security Alerts</h3>
+                    <table class="alerts-table">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Source</th>
+                                <th>MITRE ID</th>
+                                <th>Tactic</th>
+                                <th>Description</th>
+                                <th>Severity</th>
+                                <th>Rule ID</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if security_alerts %}
+                                {% for alert in security_alerts %}
+                                <tr>
+                                    <td>{{ alert.timestamp|date:"Y-m-d H:i" }}</td>
+                                    <td>{{ alert.source_ip|default:alert.agent_name|default:"-" }}</td>
+                                    <td>{{ alert.mitre_id|default:"-" }}</td>
+                                    <td>{{ alert.status|default:alert.mitre_tactic|default:"-" }}</td>
+                                    <td>{{ alert.normalized_data|default:alert.description|default:"-" }}</td>
+                                    <td>{{ alert.log_level|default:alert.level|default:"-" }}</td>
+                                    <td>{{ alert.id|default:alert.rule_id|default:"-" }}</td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="7" style="text-align: center; padding: 2rem;">No recent security alerts found.</td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script>
+        // Toggle sidebar
+        document.getElementById('sidebar-toggle').addEventListener('click', function() {
+            document.querySelector('.sidebar').classList.toggle('active');
+            document.querySelector('.content').classList.toggle('sidebar-open');
+        });
+        
+        // Charts
+        document.addEventListener('DOMContentLoaded', function() {
+            // Alert Evolution Chart
+            const alertsChartCtx = document.getElementById('alerts-chart').getContext('2d');
+            const alertsChart = new Chart(alertsChartCtx, {
+                type: 'line',
+                data: {
+                    labels: {{ chart_labels|safe|default:"[]" }},
+                    datasets: [{
+                        label: 'Alerts',
+                        data: {{ alerts_data|safe|default:"[]" }},
+                        borderColor: '#17a2b8',
+                        backgroundColor: 'rgba(23, 162, 184, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+            
+            // MITRE Tactics Chart
+            const mitreChartCtx = document.getElementById('mitre-chart').getContext('2d');
+            const mitreChart = new Chart(mitreChartCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: {{ mitre_labels|safe|default:"['No Data']" }},
+                    datasets: [{
+                        data: {{ mitre_data|safe|default:"[100]" }},
+                        backgroundColor: [
+                            '#17a2b8',
+                            '#28a745',
+                            '#ffc107',
+                            '#dc3545',
+                            '#6c757d',
+                            '#fd7e14',
+                            '#20c997',
+                            '#6610f2'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                        }
+                    }
+                }
+            });
+            
+            // Refresh button functionality
+            document.getElementById('refresh-btn').addEventListener('click', function() {
+                location.reload();
+            });
+            
+            // Search functionality
+            document.getElementById('search').addEventListener('keyup', function(e) {
+                if (e.key === 'Enter') {
+                    const searchTerm = this.value.toLowerCase();
+                    filterTable(searchTerm);
+                }
+            });
+            
+            function filterTable(searchTerm) {
+                const rows = document.querySelectorAll('.alerts-table tbody tr');
+                
+                rows.forEach(row => {
+                    const text = row.textContent.toLowerCase();
+                    row.style.display = text.includes(searchTerm) ? '' : 'none';
+                });
+            }
+        });
+    </script>
+</body>
+</html>

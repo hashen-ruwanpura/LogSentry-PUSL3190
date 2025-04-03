@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log Detection Platform - Logged Out</title>
+    
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/login.css' %}">
+    <style>
+        body {
+            background-image: url("/static/images/background.jpg");
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+        }
+        
+        .logout-icon {
+            font-size: 3.5rem;
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+        }
+        
+        .action-links {
+            margin-top: 2rem;
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+        }
+        
+        .action-button {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 0.8rem 1.5rem;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        
+        .action-button:hover {
+            background-color: var(--primary-dark);
+        }
+        
+        .action-button.secondary {
+            background-color: #6c757d;
+        }
+        
+        .action-button.secondary:hover {
+            background-color: #5a6268;
+        }
+        
+        .login-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-box">
+            <div class="login-header">
+                <div class="logout-icon">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <h2>Successfully Logged Out</h2>
+                <p>You have been logged out securely from Log Analyzer</p>
+            </div>
+            <div class="action-links">
+                <a href="{% url 'signup' %}" class="action-button">Sign In</a>
+                <a href="/" class="action-button secondary">Back</a>
+                
+            </div>
+        </div>
+    </div>
+</body>
+</html>

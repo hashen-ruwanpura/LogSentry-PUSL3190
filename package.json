@@ -16,5 +16,8 @@
   "bugs": {
     "url": "https://github.com/hashen-ruwanpura/Threat-Detection-and-Notification-Platform-by-Analyzing-Logs-of-Apache-and-MySQL-servers-/issues"
   },
-  "homepage": "https://github.com/hashen-ruwanpura/Threat-Detection-and-Notification-Platform-by-Analyzing-Logs-of-Apache-and-MySQL-servers-#readme"
+  "homepage": "https://github.com/hashen-ruwanpura/Threat-Detection-and-Notification-Platform-by-Analyzing-Logs-of-Apache-and-MySQL-servers-#readme",
+  "dependencies": {
+    "web-vitals": "^4.2.4"
+  }
 }
