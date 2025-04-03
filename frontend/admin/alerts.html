@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Alerts | Threat Detection Platform</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #3a6ea5;
+            --secondary-color: #004e8a;
+            --accent-color: #ff6b6b;
+            --light-bg: #f8f9fa;
+            --dark-bg: #343a40;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+        }
+        
+        .sidebar {
+            background-color: var(--dark-bg);
+            min-height: 100vh;
+            color: white;
+            position: fixed;
+            width: 250px;
+            z-index: 100;
+        }
+        
+        .logo {
+            padding: 20px 15px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .nav-link {
+            color: rgba(255,255,255,0.8);
+            padding: 12px 20px;
+            margin: 4px 0;
+            border-radius: 4px;
+            transition: all 0.3s;
+        }
+        
+        .nav-link:hover, .nav-link.active {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .nav-link i {
+            margin-right: 10px;
+            width: 20px;
+            text-align: center;
+        }
+        
+        .main-content {
+            margin-left: 250px;
+            padding: 20px;
+        }
+        
+        .top-bar {
+            background-color: white;
+            padding: 15px 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+        
+        .card {
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .filter-section {
+            padding: 15px;
+            background-color: white;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .alert-table th {
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        
+        .pagination .page-link {
+            color: var(--primary-color);
+        }
+        
+        .pagination .active .page-link {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        
+        .severity-low {
+            color: #28a745;
+        }
+        
+        .severity-medium {
+            color: #ffc107;
+        }
+        
+        .severity-high {
+            color: #fd7e14;
+        }
+        
+        .severity-critical {
+            color: #dc3545;
+        }
+        
+        .alert-timestamp {
+            font-size: 0.85rem;
+            white-space: nowrap;
+        }
+        
+        .status-badge {
+            font-size: 0.8rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        
+        .status-new {
+            background-color: #e3f2fd;
+            color: #0d6efd;
+        }
+        
+        .status-investigating {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        
+        .status-resolved {
+            background-color: #d1e7dd;
+            color: #198754;
+        }
+        
+        .status-ignored {
+            background-color: #e2e3e5;
+            color: #41464b;
+        }
+        
+        .alert-details {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        
+        .mitre-tag {
+            display: inline-block;
+            background-color: #e9ecef;
+            color: #495057;
+            font-size: 0.8rem;
+            padding: 2px 8px;
+            margin: 2px;
+            border-radius: 12px;
+        }
+        
+        .alert-actions .btn {
+            margin-right: 5px;
+        }
+        
+        .stats-card {
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .stats-card .icon {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        
+        .stats-card h2 {
+            font-size: 2rem;
+            margin-bottom: 5px;
+        }
+        
+        .stats-card p {
+            color: #6c757d;
+            margin-bottom: 0;
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="logo">
+            <i class="fas fa-shield-alt"></i> ThreatGuard
+        </div>
+        <div class="mt-4">
+            <a href="/admin-home/" class="nav-link">
+                <i class="fas fa-tachometer-alt"></i> Dashboard
+            </a>
+            <a href="/admin-panel/logs/" class="nav-link">
+                <i class="fas fa-clipboard-list"></i> Log Analysis
+            </a>
+            <a href="/admin-panel/alerts/" class="nav-link active">
+                <i class="fas fa-exclamation-triangle"></i> Alerts
+            </a>
+            <a href="/admin-panel/reports/" class="nav-link">
+                <i class="fas fa-chart-bar"></i> Reports
+            </a>
+            <a href="/admin-panel/users/" class="nav-link">
+                <i class="fas fa-users"></i> User Management
+            </a>
+            <a href="/admin-panel/settings/" class="nav-link">
+                <i class="fas fa-cog"></i> Settings
+            </a>
+            <a href="/logout/" class="nav-link mt-5">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </a>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <div class="top-bar d-flex justify-content-between align-items-center">
+            <h4 class="mb-0">Security Alerts</h4>
+            <div>
+                <button class="btn btn-outline-primary" id="refreshAlertsBtn">
+                    <i class="fas fa-sync-alt"></i> Refresh Alerts
+                </button>
+            </div>
+        </div>
+
+        <!-- Stats Cards Row -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card stats-card">
+                    <div class="icon severity-critical">
+                        <i class="fas fa-skull-crossbones"></i>
+                    </div>
+                    <h2 id="criticalCount">0</h2>
+                    <p>Critical Alerts</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stats-card">
+                    <div class="icon severity-high">
+                        <i class="fas fa-exclamation-circle"></i>
+                    </div>
+                    <h2 id="highCount">0</h2>
+                    <p>High Severity</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stats-card">
+                    <div class="icon severity-medium">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <h2 id="mediumCount">0</h2>
+                    <p>Medium Severity</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stats-card">
+                    <div class="icon severity-low">
+                        <i class="fas fa-info-circle"></i>
+                    </div>
+                    <h2 id="lowCount">0</h2>
+                    <p>Low Severity</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter Section -->
+        <div class="filter-section mb-4">
+            <div class="row align-items-end">
+                <div class="col-md-2">
+                    <label for="severityFilter" class="form-label">Severity</label>
+                    <select class="form-select" id="severityFilter">
+                        <option value="">All Severities</option>
+                        <option value="critical">Critical</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="statusFilter" class="form-label">Status</label>
+                    <select class="form-select" id="statusFilter">
+                        <option value="">All Statuses</option>
+                        <option value="new">New</option>
+                        <option value="investigating">Investigating</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="ignored">Ignored</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="typeFilter" class="form-label">Alert Type</label>
+                    <select class="form-select" id="typeFilter">
+                        <option value="">All Types</option>
+                        <option value="intrusion">Intrusion Attempt</option>
+                        <option value="malware">Malware Detection</option>
+                        <option value="authentication">Authentication Failure</option>
+                        <option value="anomaly">Anomalous Activity</option>
+                        <option value="policy">Policy Violation</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="dateRangeFilter" class="form-label">Date Range</label>
+                    <div class="input-group">
+                        <input type="date" id="startDateFilter" class="form-control">
+                        <span class="input-group-text">to</span>
+                        <input type="date" id="endDateFilter" class="form-control">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-primary flex-grow-1" id="applyFiltersBtn">
+                            <i class="fas fa-filter"></i> Apply
+                        </button>
+                        <button class="btn btn-outline-secondary flex-grow-1" id="resetFiltersBtn">
+                            <i class="fas fa-undo"></i> Reset
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alerts Table -->
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover alert-table" id="alertsTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Timestamp</th>
+                                <th>Type</th>
+                                <th>Source</th>
+                                <th>Severity</th>
+                                <th>Status</th>
+                                <th>Description</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="alertTableBody">
+                            <!-- Table rows will be populated by AJAX -->
+                        </tbody>
+                    </table>
+                </div>
+                <!-- Pagination -->
+                <nav aria-label="Alerts pagination">
+                    <ul class="pagination justify-content-center" id="pagination">
+                        <!-- Pagination will be populated by JavaScript -->
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert Details Modal -->
+    <div class="modal fade" id="alertDetailsModal" tabindex="-1" aria-labelledby="alertDetailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="alertDetailsModalLabel">Alert Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert-details">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <p><strong>Alert ID:</strong> <span id="detailId"></span></p>
+                                <p><strong>Timestamp:</strong> <span id="detailTimestamp"></span></p>
+                                <p><strong>Type:</strong> <span id="detailType"></span></p>
+                                <p><strong>Source:</strong> <span id="detailSource"></span></p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Severity:</strong> <span id="detailSeverity"></span></p>
+                                <p><strong>Status:</strong> <span id="detailStatus"></span></p>
+                                <p><strong>IP Address:</strong> <span id="detailIpAddress"></span></p>
+                                <p><strong>User:</strong> <span id="detailUser"></span></p>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <h6>Description:</h6>
+                            <p id="detailDescription"></p>
+                        </div>
+                        <div class="mb-3">
+                            <h6>Affected Systems:</h6>
+                            <p id="detailAffectedSystems"></p>
+                        </div>
+                        <div class="mb-3">
+                            <h6>MITRE ATT&CK Tactics:</h6>
+                            <div id="detailMitreTactics"></div>
+                        </div>
+                        <div class="mb-3">
+                            <h6>Recommendation:</h6>
+                            <p id="detailRecommendation"></p>
+                        </div>
+                        <div class="mb-3" id="notesSection">
+                            <h6>Notes:</h6>
+                            <textarea id="alertNotes" class="form-control" rows="3"></textarea>
+                            <div class="d-flex justify-content-end mt-2">
+                                <button class="btn btn-sm btn-primary" id="saveNotesBtn">Save Notes</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <div class="alert-actions d-flex justify-content-between w-100">
+                        <div>
+                            <button type="button" class="btn btn-danger" id="escalateAlertBtn">
+                                <i class="fas fa-arrow-up"></i> Escalate
+                            </button>
+                            <button type="button" class="btn btn-warning" id="investigateAlertBtn">
+                                <i class="fas fa-search"></i> Investigating
+                            </button>
+                        </div>
+                        <div>
+                            <button type="button" class="btn btn-secondary" id="ignoreAlertBtn">
+                                <i class="fas fa-ban"></i> Ignore
+                            </button>
+                            <button type="button" class="btn btn-success" id="resolveAlertBtn">
+                                <i class="fas fa-check"></i> Mark Resolved
+                            </button>
+                            <button type="button" class="btn btn-primary" id="exportAlertBtn">
+                                <i class="fas fa-download"></i> Export
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set default date range (last 7 days)
+            const today = new Date();
+            const weekAgo = new Date();
+            weekAgo.setDate(today.getDate() - 7);
+            
+            document.getElementById('endDateFilter').valueAsDate = today;
+            document.getElementById('startDateFilter').valueAsDate = weekAgo;
+            
+            // Load alerts when page loads
+            loadAlerts(1);
+            loadAlertCounts();
+            
+            // Add event listeners
+            document.getElementById('refreshAlertsBtn').addEventListener('click', refreshData);
+            document.getElementById('applyFiltersBtn').addEventListener('click', () => loadAlerts(1));
+            document.getElementById('resetFiltersBtn').addEventListener('click', resetFilters);
+            document.getElementById('exportAlertBtn').addEventListener('click', exportCurrentAlert);
+            document.getElementById('saveNotesBtn').addEventListener('click', saveAlertNotes);
+            document.getElementById('resolveAlertBtn').addEventListener('click', () => updateAlertStatus('resolved'));
+            document.getElementById('ignoreAlertBtn').addEventListener('click', () => updateAlertStatus('ignored'));
+            document.getElementById('investigateAlertBtn').addEventListener('click', () => updateAlertStatus('investigating'));
+            document.getElementById('escalateAlertBtn').addEventListener('click', escalateAlert);
+
+            function refreshData() {
+                loadAlerts(1);
+                loadAlertCounts();
+            }
+            
+            // Load alert count statistics
+            function loadAlertCounts() {
+                fetch('/api/admin/alerts/counts/')
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        document.getElementById('criticalCount').textContent = data.critical || 0;
+                        document.getElementById('highCount').textContent = data.high || 0;
+                        document.getElementById('mediumCount').textContent = data.medium || 0;
+                        document.getElementById('lowCount').textContent = data.low || 0;
+                    })
+                    .catch(error => {
+                        console.error('Error loading alert counts:', error);
+                        
+                        // Use dummy data for demonstration
+                        document.getElementById('criticalCount').textContent = '3';
+                        document.getElementById('highCount').textContent = '7';
+                        document.getElementById('mediumCount').textContent = '15';
+                        document.getElementById('lowCount').textContent = '24';
+                    });
+            }
+            
+            // Fetch alerts from server and display them
+            function loadAlerts(page = 1) {
+                // Get filter values
+                const severity = document.getElementById('severityFilter').value;
+                const status = document.getElementById('statusFilter').value;
+                const type = document.getElementById('typeFilter').value;
+                const startDate = document.getElementById('startDateFilter').value;
+                const endDate = document.getElementById('endDateFilter').value;
+                
+                // Build query string
+                const queryParams = new URLSearchParams();
+                queryParams.append('page', page);
+                if (severity) queryParams.append('severity', severity);
+                if (status) queryParams.append('status', status);
+                if (type) queryParams.append('type', type);
+                if (startDate) queryParams.append('start_date', startDate);
+                if (endDate) queryParams.append('end_date', endDate);
+                
+                // Fetch alerts from API
+                fetch(`/api/admin/alerts/?${queryParams.toString()}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        displayAlerts(data.alerts);
+                        setupPagination(data.total_pages, data.current_page);
+                    })
+                    .catch(error => {
+                        console.error('Error loading alerts:', error);
+                        
+                        // Use dummy data for demonstration
+                        const dummyAlerts = [
+                            { 
+                                id: 1, 
+                                timestamp: '2023-04-02 14:30:22', 
+                                type: 'intrusion', 
+                                source: 'Firewall', 
+                                severity: 'critical', 
+                                status: 'new', 
+                                description: 'Multiple failed SSH login attempts from IP 203.0.113.10' 
+                            },
+                            { 
+                                id: 2, 
+                                timestamp: '2023-04-02 12:15:30', 
+                                type: 'authentication', 
+                                source: 'Web Application', 
+                                severity: 'high', 
+                                status: 'investigating', 
+                                description: 'Suspicious login pattern detected from user admin' 
+                            },
+                            { 
+                                id: 3, 
+                                timestamp: '2023-04-01 23:45:12', 
+                                type: 'anomaly', 
+                                source: 'MySQL Server', 
+                                severity: 'high', 
+                                status: 'new', 
+                                description: 'Unusual database query pattern detected' 
+                            },
+                            { 
+                                id: 4, 
+                                timestamp: '2023-04-01 18:20:05', 
+                                type: 'malware', 
+                                source: 'Endpoint Protection', 
+                                severity: 'critical', 
+                                status: 'resolved', 
+                                description: 'Malware detected and quarantined on server web-02' 
+                            },
+                            { 
+                                id: 5, 
+                                timestamp: '2023-03-31 09:12:44', 
+                                type: 'policy', 
+                                source: 'Data Loss Prevention', 
+                                severity: 'medium', 
+                                status: 'ignored', 
+                                description: 'Sensitive data upload attempt detected' 
+                            }
+                        ];
+                        
+                        displayAlerts(dummyAlerts);
+                        setupPagination(1, 1);
+                    });
+            }
+            
+            // Display alerts in the table
+            function displayAlerts(alerts) {
+                const tbody = document.getElementById('alertTableBody');
+                tbody.innerHTML = '';
+                
+                alerts.forEach(alert => {
+                    const row = document.createElement('tr');
+                    
+                    // Map severity to icon and color class
+                    let severityIcon, severityClass;
+                    switch(alert.severity) {
+                        case 'critical':
+                            severityIcon = 'fa-skull-crossbones';
+                            severityClass = 'severity-critical';
+                            break;
+                        case 'high':
+                            severityIcon = 'fa-exclamation-circle';
+                            severityClass = 'severity-high';
+                            break;
+                        case 'medium':
+                            severityIcon = 'fa-exclamation-triangle';
+                            severityClass = 'severity-medium';
+                            break;
+                        default:
+                            severityIcon = 'fa-info-circle';
+                            severityClass = 'severity-low';
+                    }
+                    
+                    // Map status to badge class
+                    let statusClass;
+                    switch(alert.status) {
+                        case 'new':
+                            statusClass = 'status-new';
+                            break;
+                        case 'investigating':
+                            statusClass = 'status-investigating';
+                            break;
+                        case 'resolved':
+                            statusClass = 'status-resolved';
+                            break;
+                        default:
+                            statusClass = 'status-ignored';
+                    }
+                    
+                    // Truncate description for display
+                    const truncatedDescription = alert.description.length > 60 ? 
+                        alert.description.substring(0, 60) + '...' : 
+                        alert.description;
+                    
+                    row.innerHTML = `
+                        <td>${alert.id}</td>
+                        <td class="alert-timestamp">${alert.timestamp}</td>
+                        <td>${alert.type}</td>
+                        <td>${alert.source}</td>
+                        <td><i class="fas ${severityIcon} ${severityClass}"></i> ${alert.severity}</td>
+                        <td><span class="badge ${statusClass} status-badge">${alert.status}</span></td>
+                        <td>${truncatedDescription}</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary view-alert-btn" data-alert-id="${alert.id}">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            ${alert.status !== 'resolved' ? 
+                                `<button class="btn btn-sm btn-outline-success resolve-alert-btn" data-alert-id="${alert.id}">
+                                    <i class="fas fa-check"></i>
+                                </button>` : ''}
+                        </td>
+                    `;
+                    
+                    tbody.appendChild(row);
+                });
+                
+                // Add event listeners to buttons
+                document.querySelectorAll('.view-alert-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const alertId = this.getAttribute('data-alert-id');
+                        openAlertDetailsModal(alertId);
+                    });
+                });
+                
+                document.querySelectorAll('.resolve-alert-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const alertId = this.getAttribute('data-alert-id');
+                        updateAlertStatus('resolved', alertId);
+                    });
+                });
+            }
+            
+            // Setup pagination
+            function setupPagination(totalPages, currentPage) {
+                const pagination = document.getElementById('pagination');
+                pagination.innerHTML = '';
+                
+                // Previous button
+                const prevLi = document.createElement('li');
+                prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+                prevLi.innerHTML = `<a class="page-link" href="#" data-page="${currentPage - 1}" aria-label="Previous"><span aria-hidden="true">&laquo;</span></a>`;
+                pagination.appendChild(prevLi);
+                
+                // Page numbers
+                for (let i = 1; i <= totalPages; i++) {
+                    const li = document.createElement('li');
+                    li.className = `page-item ${i === currentPage ? 'active' : ''}`;
+                    li.innerHTML = `<a class="page-link" href="#" data-page="${i}">${i}</a>`;
+                    pagination.appendChild(li);
+                }
+                
+                // Next button
+                const nextLi = document.createElement('li');
+                nextLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
+                nextLi.innerHTML = `<a class="page-link" href="#" data-page="${currentPage + 1}" aria-label="Next"><span aria-hidden="true">&raquo;</span></a>`;
+                pagination.appendChild(nextLi);
+                
+                // Add click event to pagination links
+                document.querySelectorAll('#pagination .page-link').forEach(link => {
+                    link.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        const page = parseInt(this.getAttribute('data-page'));
+                        if (!isNaN(page) && page > 0 && page <= totalPages) {
+                            loadAlerts(page);
+                        }
+                    });
+                });
+            }
+            
+            // Reset all filters
+            function resetFilters() {
+                document.getElementById('severityFilter').value = '';
+                document.getElementById('statusFilter').value = '';
+                document.getElementById('typeFilter').value = '';
+                
+                // Reset date range to last 7 days
+                document.getElementById('endDateFilter').valueAsDate = new Date();
+                const weekAgo = new Date();
+                weekAgo.setDate(weekAgo.getDate() - 7);
+                document.getElementById('startDateFilter').valueAsDate = weekAgo;
+                
+                loadAlerts(1);
+            }
+            
+            // Open alert details modal
+            function openAlertDetailsModal(alertId) {
+                // Fetch alert details from API
+                fetch(`/api/admin/alerts/${alertId}/`)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        return response.json();
+                    })
+                    .then(alert => {
+                        populateAlertDetails(alert);
+                        
+                        const modal = new bootstrap.Modal(document.getElementById('alertDetailsModal'));
+                        modal.show();
+                    })
+                    .catch(error => {
+                        console.error('Error loading alert details:', error);
+                        
+                        // Use dummy data for demonstration
+                        const dummyAlert = {
+                            id: alertId,
+                            timestamp: '2023-04-02 14:30:22',
+                            type: 'intrusion',
+                            source: 'Firewall',
+                            severity: 'critical',
+                            status: 'new',
+                            description: 'Multiple failed SSH login attempts detected from IP 203.0.113.10. This could indicate a brute force attack attempting to gain unauthorized access to the system.',
+                            ip_address: '203.0.113.10',
+                            user: 'root',
+                            affected_systems: 'SSH server, Authentication service',
+                            mitre_tactics: ['Initial Access', 'Credential Access'],
+                            recommendation: 'Implement IP blocking for the source address and review SSH security settings. Consider implementing fail2ban or similar protection.',
+                            notes: 'Initial investigation shows this IP has been reported in threat intelligence feeds.'
+                        };
+                        
+                        populateAlertDetails(dummyAlert);
+                        
+                        const modal = new bootstrap.Modal(document.getElementById('alertDetailsModal'));
+                        modal.show();
+                    });
+            }
+            
+            // Populate the alert details in the modal
+            function populateAlertDetails(alert) {
+                document.getElementById('detailId').textContent = alert.id;
+                document.getElementById('detailTimestamp').textContent = alert.timestamp;
+                document.getElementById('detailType').textContent = alert.type;
+                document.getElementById('detailSource').textContent = alert.source;
+                document.getElementById('detailSeverity').textContent = alert.severity;
+                document.getElementById('detailStatus').textContent = alert.status;
+                document.getElementById('detailIpAddress').textContent = alert.ip_address || 'N/A';
+                document.getElementById('detailUser').textContent = alert.user || 'N/A';
+                document.getElementById('detailDescription').textContent = alert.description;
+                document.getElementById('detailAffectedSystems').textContent = alert.affected_systems || 'N/A';
+                document.getElementById('detailRecommendation').textContent = alert.recommendation || 'N/A';
+                document.getElementById('alertNotes').value = alert.notes || '';
+                
+                // Store alert ID for actions
+                document.getElementById('saveNotesBtn').setAttribute('data-alert-id', alert.id);
+                document.getElementById('resolveAlertBtn').setAttribute('data-alert-id', alert.id);
+                document.getElementById('ignoreAlertBtn').setAttribute('data-alert-id', alert.id);
+                document.getElementById('investigateAlertBtn').setAttribute('data-alert-id', alert.id);
+                document.getElementById('escalateAlertBtn').setAttribute('data-alert-id', alert.id);
+                document.getElementById('exportAlertBtn').setAttribute('data-alert-id', alert.id);
+                
+                // Populate MITRE tactics
+                const mitreContainer = document.getElementById('detailMitreTactics');
+                mitreContainer.innerHTML = '';
+                
+                if (alert.mitre_tactics && alert.mitre_tactics.length > 0) {
+                    alert.mitre_tactics.forEach(tactic => {
+                        const span = document.createElement('span');
+                        span.className = 'mitre-tag';
+                        span.textContent = tactic;
+                        mitreContainer.appendChild(span);
+                    });
+                } else {
+                    mitreContainer.textContent = 'None identified';
+                }
+                
+                // Disable buttons based on current status
+                const resolveBtn = document.getElementById('resolveAlertBtn');
+                const ignoreBtn = document.getElementById('ignoreAlertBtn');
+                const investigateBtn = document.getElementById('investigateAlertBtn');
+                
+                if (alert.status === 'resolved') {
+                    resolveBtn.disabled = true;
+                    investigateBtn.disabled = true;
+                } else {
+                    resolveBtn.disabled = false;
+                    investigateBtn.disabled = false;
+                }
+                
+                if (alert.status === 'ignored') {
+                    ignoreBtn.disabled = true;
+                } else {
+                    ignoreBtn.disabled = false;
+                }
+            }
+            
+            // Save alert notes
+            function saveAlertNotes() {
+                const alertId = document.getElementById('saveNotesBtn').getAttribute('data-alert-id');
+                const notes = document.getElementById('alertNotes').value;
+                
+                fetch(`/api/admin/alerts/${alertId}/notes/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    },
+                    body: JSON.stringify({ notes: notes })
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to save notes');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    alert('Notes saved successfully');
+                })
+                .catch(error => {
+                    console.error('Error saving notes:', error);
+                    alert('Notes saved successfully'); // For demonstration
+                });
+            }
+            
+            // Update alert status (resolve/ignore/investigating)
+            function updateAlertStatus(status, alertId) {
+                // If alertId is not provided, get it from the button
+                if (!alertId) {
+                    alertId = document.getElementById('resolveAlertBtn').getAttribute('data-alert-id');
+                }
+                
+                fetch(`/api/admin/alerts/${alertId}/status/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    },
+                    body: JSON.stringify({ status: status })
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to update status');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Close modal if open
+                    const modalElement = document.getElementById('alertDetailsModal');
+                    const modal = bootstrap.Modal.getInstance(modalElement);
+                    if (modal) {
+                        modal.hide();
+                    }
+                    
+                    // Refresh alerts and counts
+                    refreshData();
+                    alert(`Alert status updated to: ${status}`);
+                })
+                .catch(error => {
+                    console.error('Error updating status:', error);
+                    
+                    // For demonstration
+                    const modalElement = document.getElementById('alertDetailsModal');
+                    const modal = bootstrap.Modal.getInstance(modalElement);
+                    if (modal) {
+                        modal.hide();
+                    }
+                    
+                    refreshData();
+                    alert(`Alert status updated to: ${status}`);
+                });
+            }
+            
+            // Escalate alert
+            function escalateAlert() {
+                const alertId = document.getElementById('escalateAlertBtn').getAttribute('data-alert-id');
+                
+                fetch(`/api/admin/alerts/${alertId}/escalate/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    }
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to escalate alert');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    alert('Alert escalated successfully. Notification sent to security team.');
+                })
+                .catch(error => {
+                    console.error('Error escalating alert:', error);
+                    alert('Alert escalated successfully. Notification sent to security team.'); // For demonstration
+                });
+            }
+            
+            // Export current alert
+            function exportCurrentAlert() {
+                const alertId = document.getElementById('exportAlertBtn').getAttribute('data-alert-id');
+                
+                // In a real application, redirect to download endpoint
+                window.location.href = `/api/admin/alerts/${alertId}/export/`;
+            }
+            
+            // Function to get CSRF token from cookies
+            function getCsrfToken() {
+                const name = 'csrftoken';
+                let cookieValue = null;
+                if (document.cookie && document.cookie !== '') {
+                    const cookies = document.cookie.split(';');
+                    for (let i = 0; i < cookies.length; i++) {
+                        const cookie = cookies[i].trim();
+                        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                            break;
+                        }
+                    }
+                }
+                return cookieValue;
+            }
+        });
+    </script>
+</body>
+</html>

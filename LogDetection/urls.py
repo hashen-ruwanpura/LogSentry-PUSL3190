@@ -25,6 +25,7 @@ from authentication import views
 from authentication.views import signup_view, CustomLoginView, admin_home
 from authentication import views_admin
 from authentication import views_admin_logs
+from authentication import views_admin_alerts
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -69,6 +70,18 @@ urlpatterns = [
     path('api/admin/logs/', views_admin_logs.api_logs_list, name='api_admin_logs'),
     path('api/admin/logs/<int:log_id>/', views_admin_logs.api_log_detail, name='api_admin_log_detail'),
     path('api/admin/logs/<int:log_id>/export/', views_admin_logs.api_log_export, name='api_admin_log_export'),
+
+     # Admin alerts views
+    path('admin-panel/alerts/', views_admin_alerts.alerts_view, name='admin_alerts'),
+
+    # API endpoints for alert management
+    path('api/admin/alerts/', views_admin_alerts.api_alerts_list, name='api_admin_alerts'),
+    path('api/admin/alerts/counts/', views_admin_alerts.api_alert_counts, name='api_admin_alert_counts'),
+    path('api/admin/alerts/<int:alert_id>/', views_admin_alerts.api_alert_detail, name='api_admin_alert_detail'),
+    path('api/admin/alerts/<int:alert_id>/notes/', views_admin_alerts.api_alert_notes, name='api_admin_alert_notes'),
+    path('api/admin/alerts/<int:alert_id>/status/', views_admin_alerts.api_alert_status, name='api_admin_alert_status'),
+    path('api/admin/alerts/<int:alert_id>/escalate/', views_admin_alerts.api_alert_escalate, name='api_admin_alert_escalate'),
+    path('api/admin/alerts/<int:alert_id>/export/', views_admin_alerts.api_alert_export, name='api_admin_alert_export'),
     
     path('', home),  # Add this line to handle the root URL
 ]
