@@ -1,0 +1,843 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Settings | Threat Detection Platform</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #3a6ea5;
+            --secondary-color: #004e8a;
+            --accent-color: #ff6b6b;
+            --light-bg: #f8f9fa;
+            --dark-bg: #343a40;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+        }
+        
+        .sidebar {
+            background-color: var(--dark-bg);
+            min-height: 100vh;
+            color: white;
+            position: fixed;
+            width: 250px;
+            z-index: 100;
+        }
+        
+        .logo {
+            padding: 20px 15px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .nav-link {
+            color: rgba(255,255,255,0.8);
+            padding: 12px 20px;
+            margin: 4px 0;
+            border-radius: 4px;
+            transition: all 0.3s;
+        }
+        
+        .nav-link:hover, .nav-link.active {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .nav-link i {
+            margin-right: 10px;
+            width: 20px;
+            text-align: center;
+        }
+        
+        .main-content {
+            margin-left: 250px;
+            padding: 20px;
+        }
+        
+        .top-bar {
+            background-color: white;
+            padding: 15px 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+        
+        .settings-nav {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .settings-nav .nav-link {
+            color: var(--dark-bg);
+            border-left: 3px solid transparent;
+            border-radius: 0;
+            padding: 12px 15px;
+        }
+        
+        .settings-nav .nav-link.active {
+            background-color: var(--light-bg);
+            border-left: 3px solid var(--primary-color);
+            color: var(--primary-color);
+        }
+        
+        .settings-tab-content {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        
+        .settings-section {
+            margin-bottom: 30px;
+        }
+        
+        .settings-section h5 {
+            margin-bottom: 15px;
+            border-bottom: 1px solid #dee2e6;
+            padding-bottom: 10px;
+        }
+        
+        .sensitive-field {
+            -webkit-text-security: disc;
+        }
+        
+        .toggle-password {
+            cursor: pointer;
+        }
+
+        .alert-float {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            min-width: 300px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="logo">
+            <i class="fas fa-shield-alt"></i> ThreatGuard
+        </div>
+        <div class="mt-4">
+            <a href="/admin-home/" class="nav-link">
+                <i class="fas fa-tachometer-alt"></i> Dashboard
+            </a>
+            <a href="/admin-panel/logs/" class="nav-link">
+                <i class="fas fa-clipboard-list"></i> Log Analysis
+            </a>
+            <a href="/admin-panel/alerts/" class="nav-link">
+                <i class="fas fa-exclamation-triangle"></i> Alerts
+            </a>
+            <a href="/admin-panel/reports/" class="nav-link">
+                <i class="fas fa-chart-bar"></i> Reports
+            </a>
+            <a href="/admin-panel/users/" class="nav-link">
+                <i class="fas fa-users"></i> User Management
+            </a>
+            <a href="/admin-panel/settings/" class="nav-link active">
+                <i class="fas fa-cog"></i> Settings
+            </a>
+            <a href="/logout/" class="nav-link mt-5">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </a>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <div class="top-bar d-flex justify-content-between align-items-center">
+            <h4 class="mb-0">System Settings</h4>
+            <div>
+                <span class="me-3">Settings last updated: <span id="lastUpdated">Loading...</span></span>
+            </div>
+        </div>
+
+        <!-- Alerts container -->
+        <div id="alertsContainer"></div>
+
+        <div class="row">
+            <!-- Settings Nav -->
+            <div class="col-md-3 mb-4">
+                <div class="settings-nav">
+                    <div class="p-3 border-bottom">
+                        <h5 class="mb-0">Settings</h5>
+                    </div>
+                    <div class="nav flex-column nav-pills" id="settings-tab" role="tablist" aria-orientation="vertical">
+                        <button class="nav-link active" id="general-tab" data-bs-toggle="pill" data-bs-target="#general" type="button" role="tab">
+                            <i class="fas fa-sliders-h"></i> General
+                        </button>
+                        <button class="nav-link" id="security-tab" data-bs-toggle="pill" data-bs-target="#security" type="button" role="tab">
+                            <i class="fas fa-lock"></i> Security
+                        </button>
+                        <button class="nav-link" id="notification-tab" data-bs-toggle="pill" data-bs-target="#notification" type="button" role="tab">
+                            <i class="fas fa-bell"></i> Notifications
+                        </button>
+                        <button class="nav-link" id="backup-tab" data-bs-toggle="pill" data-bs-target="#backup" type="button" role="tab">
+                            <i class="fas fa-database"></i> Backup & Logs
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Content -->
+            <div class="col-md-9">
+                <div class="settings-tab-content tab-content">
+                    <!-- General Settings -->
+                    <div class="tab-pane fade show active" id="general" role="tabpanel" aria-labelledby="general-tab">
+                        <h4>General Settings</h4>
+                        <p class="text-muted">Configure basic system settings and preferences.</p>
+                        
+                        <form id="generalSettingsForm">
+                            <div class="settings-section">
+                                <h5>System Information</h5>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-3 col-form-label">System Name</label>
+                                    <div class="col-sm-9">
+                                        <input type="text" class="form-control" id="systemName" value="ThreatGuard Detection System">
+                                    </div>
+                                </div>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-3 col-form-label">Organization</label>
+                                    <div class="col-sm-9">
+                                        <input type="text" class="form-control" id="organization" value="Example Inc.">
+                                    </div>
+                                </div>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-3 col-form-label">Admin Contact</label>
+                                    <div class="col-sm-9">
+                                        <input type="email" class="form-control" id="adminContact" value="admin@example.com">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="settings-section">
+                                <h5>User Interface</h5>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-3 col-form-label">Default Theme</label>
+                                    <div class="col-sm-9">
+                                        <select class="form-select" id="defaultTheme">
+                                            <option value="light" selected>Light</option>
+                                            <option value="dark">Dark</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-3 col-form-label">Session Timeout</label>
+                                    <div class="col-sm-9">
+                                        <div class="input-group">
+                                            <input type="number" class="form-control" id="sessionTimeout" value="30">
+                                            <span class="input-group-text">minutes</span>
+                                        </div>
+                                        <div class="form-text">Time before an inactive session is logged out</div>
+                                    </div>
+                                </div>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-3 col-form-label">Items Per Page</label>
+                                    <div class="col-sm-9">
+                                        <select class="form-select" id="itemsPerPage">
+                                            <option value="10">10</option>
+                                            <option value="25" selected>25</option>
+                                            <option value="50">50</option>
+                                            <option value="100">100</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="d-flex justify-content-end">
+                                <button type="button" class="btn btn-outline-secondary me-2" id="resetGeneralBtn">Reset</button>
+                                <button type="submit" class="btn btn-primary" id="saveGeneralBtn">Save Changes</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Security Settings -->
+                    <div class="tab-pane fade" id="security" role="tabpanel" aria-labelledby="security-tab">
+                        <h4>Security Settings</h4>
+                        <p class="text-muted">Configure security policies and access controls.</p>
+                        
+                        <form id="securitySettingsForm">
+                            <div class="settings-section">
+                                <h5>Password Policy</h5>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-4 col-form-label">Minimum Password Length</label>
+                                    <div class="col-sm-8">
+                                        <input type="number" class="form-control" id="minPasswordLength" value="8" min="6" max="32">
+                                    </div>
+                                </div>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-4 col-form-label">Password Complexity</label>
+                                    <div class="col-sm-8">
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="requireUppercase" checked>
+                                            <label class="form-check-label" for="requireUppercase">
+                                                Require uppercase letters
+                                            </label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="requireNumbers" checked>
+                                            <label class="form-check-label" for="requireNumbers">
+                                                Require numbers
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="requireSpecial">
+                                            <label class="form-check-label" for="requireSpecial">
+                                                Require special characters
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-4 col-form-label">Password Expiry</label>
+                                    <div class="col-sm-8">
+                                        <div class="input-group">
+                                            <input type="number" class="form-control" id="passwordExpiry" value="90">
+                                            <span class="input-group-text">days</span>
+                                        </div>
+                                        <div class="form-text">0 for no expiration</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="settings-section">
+                                <h5>Login Security</h5>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-4 col-form-label">Account Lockout</label>
+                                    <div class="col-sm-8">
+                                        <div class="input-group">
+                                            <input type="number" class="form-control" id="accountLockout" value="5">
+                                            <span class="input-group-text">failed attempts</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-4 col-form-label">Lockout Duration</label>
+                                    <div class="col-sm-8">
+                                        <div class="input-group">
+                                            <input type="number" class="form-control" id="lockoutDuration" value="30">
+                                            <span class="input-group-text">minutes</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="d-flex justify-content-end">
+                                <button type="button" class="btn btn-outline-secondary me-2" id="resetSecurityBtn">Reset</button>
+                                <button type="submit" class="btn btn-primary" id="saveSecurityBtn">Save Changes</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Notification Settings -->
+                    <div class="tab-pane fade" id="notification" role="tabpanel" aria-labelledby="notification-tab">
+                        <h4>Notification Settings</h4>
+                        <p class="text-muted">Configure email notifications for alerts and system events.</p>
+                        
+                        <form id="notificationSettingsForm">
+                            <div class="settings-section">
+                                <h5>Email Configuration</h5>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-4 col-form-label">Enable Email Notifications</label>
+                                    <div class="col-sm-8">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="enableEmailNotifications" checked>
+                                            <label class="form-check-label" for="enableEmailNotifications">
+                                                Send email notifications
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-4 col-form-label">SMTP Server</label>
+                                    <div class="col-sm-8">
+                                        <input type="text" class="form-control" id="smtpServer" value="smtp.example.com">
+                                    </div>
+                                </div>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-4 col-form-label">SMTP Port</label>
+                                    <div class="col-sm-8">
+                                        <input type="number" class="form-control" id="smtpPort" value="587">
+                                    </div>
+                                </div>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-4 col-form-label">SMTP Username</label>
+                                    <div class="col-sm-8">
+                                        <input type="text" class="form-control" id="smtpUsername" value="notifications@example.com">
+                                    </div>
+                                </div>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-4 col-form-label">SMTP Password</label>
+                                    <div class="col-sm-8">
+                                        <div class="input-group">
+                                            <input type="password" class="form-control sensitive-field" id="smtpPassword" value="">
+                                            <button class="btn btn-outline-secondary toggle-password" type="button" data-target="smtpPassword">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-4 col-form-label">Use SSL/TLS</label>
+                                    <div class="col-sm-8">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="useSmtpTLS" checked>
+                                            <label class="form-check-label" for="useSmtpTLS">
+                                                Enable SSL/TLS encryption
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-4 col-form-label">Sender Email</label>
+                                    <div class="col-sm-8">
+                                        <input type="email" class="form-control" id="senderEmail" value="alerts@threatguard.example.com">
+                                    </div>
+                                </div>
+                                <div class="mb-3 row">
+                                    <div class="col-sm-8 offset-sm-4">
+                                        <button type="button" class="btn btn-outline-primary" id="testEmailBtn">
+                                            <i class="fas fa-paper-plane"></i> Send Test Email
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="settings-section">
+                                <h5>Alert Notifications</h5>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-4 col-form-label">Alert Recipients</label>
+                                    <div class="col-sm-8">
+                                        <textarea class="form-control" id="alertRecipients" rows="2">admin@example.com, security@example.com</textarea>
+                                        <div class="form-text">Comma-separated list of email addresses</div>
+                                    </div>
+                                </div>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-4 col-form-label">Notify For Severity</label>
+                                    <div class="col-sm-8">
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="notifyCritical" checked>
+                                            <label class="form-check-label" for="notifyCritical">
+                                                Critical
+                                            </label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="notifyHigh" checked>
+                                            <label class="form-check-label" for="notifyHigh">
+                                                High
+                                            </label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="notifyMedium">
+                                            <label class="form-check-label" for="notifyMedium">
+                                                Medium
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="notifyLow">
+                                            <label class="form-check-label" for="notifyLow">
+                                                Low
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="d-flex justify-content-end">
+                                <button type="button" class="btn btn-outline-secondary me-2" id="resetNotificationBtn">Reset</button>
+                                <button type="submit" class="btn btn-primary" id="saveNotificationBtn">Save Changes</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Backup & Log Settings -->
+                    <div class="tab-pane fade" id="backup" role="tabpanel" aria-labelledby="backup-tab">
+                        <h4>Backup & Log Settings</h4>
+                        <p class="text-muted">Configure system backup and log retention policies.</p>
+                        
+                        <form id="backupSettingsForm">
+                            <div class="settings-section">
+                                <h5>Automated Backups</h5>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-4 col-form-label">Enable Automated Backups</label>
+                                    <div class="col-sm-8">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="enableAutoBackup" checked>
+                                            <label class="form-check-label" for="enableAutoBackup">
+                                                Enable scheduled backups
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-4 col-form-label">Backup Frequency</label>
+                                    <div class="col-sm-8">
+                                        <select class="form-select" id="backupFrequency">
+                                            <option value="daily" selected>Daily</option>
+                                            <option value="weekly">Weekly</option>
+                                            <option value="monthly">Monthly</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-4 col-form-label">Backup Retention</label>
+                                    <div class="col-sm-8">
+                                        <div class="input-group">
+                                            <input type="number" class="form-control" id="backupRetention" value="30">
+                                            <span class="input-group-text">days</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-4 col-form-label">Backup Directory</label>
+                                    <div class="col-sm-8">
+                                        <input type="text" class="form-control" id="backupDirectory" value="/var/backups/threatguard/">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="settings-section">
+                                <h5>Log Retention</h5>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-4 col-form-label">Apache Logs Retention</label>
+                                    <div class="col-sm-8">
+                                        <div class="input-group">
+                                            <input type="number" class="form-control" id="apacheLogRetention" value="90">
+                                            <span class="input-group-text">days</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-4 col-form-label">MySQL Logs Retention</label>
+                                    <div class="col-sm-8">
+                                        <div class="input-group">
+                                            <input type="number" class="form-control" id="mysqlLogRetention" value="90">
+                                            <span class="input-group-text">days</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mb-3 row">
+                                    <label class="col-sm-4 col-form-label">Alert History Retention</label>
+                                    <div class="col-sm-8">
+                                        <div class="input-group">
+                                            <input type="number" class="form-control" id="alertRetention" value="180">
+                                            <span class="input-group-text">days</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="d-flex justify-content-between">
+                                <button type="button" class="btn btn-primary" id="startBackupBtn">
+                                    <i class="fas fa-download"></i> Start Manual Backup
+                                </button>
+                                <div>
+                                    <button type="button" class="btn btn-outline-secondary me-2" id="resetBackupBtn">Reset</button>
+                                    <button type="submit" class="btn btn-primary" id="saveBackupBtn">Save Changes</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load settings when page loads
+            loadSettings();
+            
+            // Form submissions
+            document.getElementById('generalSettingsForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                saveSettings('general');
+            });
+            
+            document.getElementById('securitySettingsForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                saveSettings('security');
+            });
+            
+            document.getElementById('notificationSettingsForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                saveSettings('notification');
+            });
+            
+            document.getElementById('backupSettingsForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                saveSettings('backup');
+            });
+            
+            // Reset buttons
+            document.getElementById('resetGeneralBtn').addEventListener('click', function() {
+                resetSettings('general');
+            });
+            
+            document.getElementById('resetSecurityBtn').addEventListener('click', function() {
+                resetSettings('security');
+            });
+            
+            document.getElementById('resetNotificationBtn').addEventListener('click', function() {
+                resetSettings('notification');
+            });
+            
+            document.getElementById('resetBackupBtn').addEventListener('click', function() {
+                resetSettings('backup');
+            });
+            
+            // Special actions
+            document.getElementById('testEmailBtn').addEventListener('click', sendTestEmail);
+            document.getElementById('startBackupBtn').addEventListener('click', startManualBackup);
+            
+            // Password visibility toggle
+            document.querySelectorAll('.toggle-password').forEach(button => {
+                button.addEventListener('click', function() {
+                    const targetId = this.getAttribute('data-target');
+                    const input = document.getElementById(targetId);
+                    
+                    if (input.type === 'password') {
+                        input.type = 'text';
+                        this.innerHTML = '<i class="fas fa-eye-slash"></i>';
+                    } else {
+                        input.type = 'password';
+                        this.innerHTML = '<i class="fas fa-eye"></i>';
+                    }
+                });
+            });
+        });
+        
+        // Load settings from server
+        function loadSettings() {
+            fetch('/api/admin/settings/', {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to load settings');
+                }
+                return response.json();
+            })
+            .then(data => {
+                populateSettingsForms(data.settings);
+                document.getElementById('lastUpdated').textContent = data.last_updated || 'Never';
+            })
+            .catch(error => {
+                console.error('Error loading settings:', error);
+                showAlert('Error loading settings. Please try again.', 'danger');
+            });
+        }
+        
+        // Save settings to server
+        function saveSettings(section) {
+            // Get form data based on section
+            const formData = getFormData(section);
+            
+            fetch('/api/admin/settings/save/', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken(),
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: JSON.stringify({
+                    section: section,
+                    data: formData
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to save settings');
+                }
+                return response.json();
+            })
+            .then(data => {
+                document.getElementById('lastUpdated').textContent = data.last_updated;
+                showAlert(`${capitalize(section)} settings saved successfully!`, 'success');
+            })
+            .catch(error => {
+                console.error('Error saving settings:', error);
+                showAlert(`Error saving ${section} settings. Please try again.`, 'danger');
+            });
+        }
+        
+        // Reset settings to defaults
+        function resetSettings(section) {
+            if (confirm(`Are you sure you want to reset ${section} settings to defaults?`)) {
+                fetch('/api/admin/settings/reset/', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken(),
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: JSON.stringify({
+                        section: section
+                    })
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to reset settings');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    showAlert(`${capitalize(section)} settings have been reset to defaults.`, 'info');
+                    loadSettings(); // Reload all settings to reflect changes
+                })
+                .catch(error => {
+                    console.error('Error resetting settings:', error);
+                    showAlert(`Error resetting ${section} settings. Please try again.`, 'danger');
+                });
+            }
+        }
+        
+        // Send test email
+        function sendTestEmail() {
+            const email = document.getElementById('adminContact').value;
+            const recipient = prompt("Enter email address to send test to:", email || '');
+            
+            if (!recipient) return;
+            
+            fetch('/api/admin/settings/test-email/', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken(),
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: JSON.stringify({
+                    recipient: recipient
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to send test email');
+                }
+                return response.json();
+            })
+            .then(data => {
+                showAlert(`Test email sent to ${recipient}. Please check your inbox.`, 'success');
+            })
+            .catch(error => {
+                console.error('Error sending test email:', error);
+                showAlert('Failed to send test email. Please check your SMTP configuration.', 'danger');
+            });
+        }
+        
+        // Start manual backup
+        function startManualBackup() {
+            fetch('/api/admin/settings/backup/', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken(),
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to start backup');
+                }
+                return response.json();
+            })
+            .then(data => {
+                showAlert('Manual backup started successfully. You will be notified when complete.', 'success');
+            })
+            .catch(error => {
+                console.error('Error starting backup:', error);
+                showAlert('Failed to start backup. Please try again.', 'danger');
+            });
+        }
+        
+        // Helper function to get form data based on section
+        function getFormData(section) {
+            const formData = {};
+            const form = document.getElementById(`${section}SettingsForm`);
+            const inputs = form.querySelectorAll('input, select, textarea');
+            
+            inputs.forEach(input => {
+                if (input.type === 'checkbox') {
+                    formData[input.id] = input.checked;
+                } else {
+                    formData[input.id] = input.value;
+                }
+            });
+            
+            return formData;
+        }
+        
+        // Populate form fields with settings data
+        function populateSettingsForms(settings) {
+            if (!settings) return;
+            
+            for (const section in settings) {
+                const sectionData = settings[section];
+                for (const key in sectionData) {
+                    const element = document.getElementById(key);
+                    if (element) {
+                        if (element.type === 'checkbox') {
+                            element.checked = sectionData[key];
+                        } else {
+                            element.value = sectionData[key];
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Helper function to get CSRF token
+        function getCsrfToken() {
+            return document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+                   document.cookie.replace(/(?:(?:^|.*;\s*)csrftoken\s*\=\s*([^;]*).*$)|^.*$/, "$1");
+        }
+        
+        // Create and display an alert
+        function showAlert(message, type) {
+            const alertsContainer = document.getElementById('alertsContainer');
+            const alertEl = document.createElement('div');
+            alertEl.className = `alert alert-${type} alert-dismissible fade show alert-float`;
+            alertEl.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            `;
+            alertsContainer.appendChild(alertEl);
+            
+            // Auto-dismiss after 5 seconds
+            setTimeout(() => {
+                const dismissButton = alertEl.querySelector('button.btn-close');
+                if (dismissButton) {
+                    dismissButton.click();
+                }
+            }, 5000);
+        }
+        
+        // Capitalize first letter of a string
+        function capitalize(string) {
+            return string.charAt(0).toUpperCase() + string.slice(1);
+        }
+    </script>
+</body>
+</html>

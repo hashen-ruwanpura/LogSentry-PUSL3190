@@ -26,6 +26,7 @@ from authentication.views import signup_view, CustomLoginView, admin_home
 from authentication import views_admin
 from authentication import views_admin_logs
 from authentication import views_admin_alerts
+from authentication import views_admin_settings
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -82,6 +83,16 @@ urlpatterns = [
     path('api/admin/alerts/<int:alert_id>/status/', views_admin_alerts.api_alert_status, name='api_admin_alert_status'),
     path('api/admin/alerts/<int:alert_id>/escalate/', views_admin_alerts.api_alert_escalate, name='api_admin_alert_escalate'),
     path('api/admin/alerts/<int:alert_id>/export/', views_admin_alerts.api_alert_export, name='api_admin_alert_export'),
+
+    # Admin settings view
+    path('admin-panel/settings/', views_admin_settings.settings_view, name='admin_settings'),
+
+     # API endpoints for settings
+    path('api/admin/settings/', views_admin_settings.api_settings_get, name='api_admin_settings'),
+    path('api/admin/settings/save/', views_admin_settings.api_settings_save, name='api_admin_settings_save'),
+    path('api/admin/settings/reset/', views_admin_settings.api_settings_reset, name='api_admin_settings_reset'),
+    path('api/admin/settings/test-email/', views_admin_settings.api_test_email, name='api_admin_test_email'),
+    path('api/admin/settings/backup/', views_admin_settings.api_manual_backup, name='api_admin_backup'),
     
     path('', home),  # Add this line to handle the root URL
 ]
