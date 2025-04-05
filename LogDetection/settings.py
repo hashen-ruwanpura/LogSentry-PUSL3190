@@ -47,7 +47,8 @@ INSTALLED_APPS = [
     'smtp_integration',
     'rest_framework',
     'siem',
-    'frontend',  
+    'frontend',
+    'analytics', 
 ]
 
 MIDDLEWARE = [
@@ -70,6 +71,7 @@ TEMPLATES = [
         'DIRS': [
             os.path.join(BASE_DIR, 'templates'),
             os.path.join(BASE_DIR, 'frontend'),  # Add this line
+            BASE_DIR,  # Include the project root as well
         ],
         'APP_DIRS': True,
         'OPTIONS': {
