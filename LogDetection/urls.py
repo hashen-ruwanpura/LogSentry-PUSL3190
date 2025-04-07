@@ -96,7 +96,8 @@ urlpatterns = [
     path('api/admin/settings/test-email/', views_admin_settings.api_test_email, name='api_admin_test_email'),
     path('api/admin/settings/backup/', views_admin_settings.api_manual_backup, name='api_admin_backup'),
 
-
+    # user-mangement
+    path('api/users/<int:user_id>/', views_admin.api_user_detail, name='api_user_detail'),
 
     path('admin-panel/reports/', analytics_views.admin_reports_view, name='admin_reports'),
     # Keep the redirect for backward compatibility:

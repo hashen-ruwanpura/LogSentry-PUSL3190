@@ -30,6 +30,28 @@ def user_management_view(request):
     # If no template is found, return an error
     return HttpResponse("User management template not found", status=500)
 
+
+@login_required
+@user_passes_test(is_superuser)
+def api_user_detail(request, user_id):
+    """API endpoint to get details of a specific user"""
+    try:
+        # Get user or return 404
+        user = get_object_or_404(User, id=user_id)
+        
+        # Format user data for response
+        user_data = {
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'role': 'admin' if user.is_superuser else 'regular',
+            'is_active': user.is_active
+        }
+        
+        return JsonResponse(user_data)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
 @login_required
 @user_passes_test(is_superuser)
 def api_users_list(request):
