@@ -29,6 +29,7 @@ from authentication import views_admin_alerts
 from authentication import views_admin_settings
 from analytics import views as analytics_views
 from django.shortcuts import redirect
+from authentication import views_admin
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -103,8 +104,12 @@ urlpatterns = [
     # Keep the redirect for backward compatibility:
     path('admin-panel/adminreports/', lambda request: redirect('admin_reports'), name='admin_reports_redirect'),
     # Then include the rest of analytics urls
-     path('api/admin/reports/', include('analytics.urls')),  # Include analytics URLs
+    path('api/admin/reports/', include('analytics.urls')),  # Include analytics URLs
 
+    #admin-dashboard
+    path('api/admin/dashboard-data/', views_admin.admin_dashboard_data, name='admin_dashboard_data'),
+    path('api/admin/run-log-analysis/', views_admin.run_log_analysis, name='run_log_analysis'),
+    path('api/admin/export-report/', views_admin.export_report, name='export_report'),
     
     path('', home),  # Add this line to handle the root URL
 ]

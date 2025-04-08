@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -132,6 +131,22 @@
         .severity-low {
             color: #3498db;
         }
+
+        .dropdown-item {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem 1rem;
+        }
+        
+        .dropdown-item:hover {
+            background-color: rgba(58, 110, 165, 0.1);
+        }
+        
+        .dropdown-item i {
+            font-size: 1.1rem;
+            width: 20px;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -170,6 +185,9 @@
         <div class="top-bar d-flex justify-content-between align-items-center">
             <h4 class="mb-0">Admin Dashboard</h4>
             <div>
+                <button id="refreshDashboardBtn" class="btn btn-sm btn-outline-primary me-3">
+                    <i class="fas fa-sync-alt"></i> Refresh Data
+                </button>
                 <span class="me-3">Welcome, Admin</span>
                 <span class="badge bg-primary"><i class="fas fa-clock"></i> Last refresh: <span id="last-refresh-time">Just now</span></span>
             </div>
@@ -266,7 +284,7 @@
                     <div class="card-header bg-white">
                         <div class="d-flex justify-content-between align-items-center">
                             <h5 class="mb-0">Recent Alerts</h5>
-                            <a href="aalerts.html" class="btn btn-sm btn-primary">View All</a>
+                            <a href="/admin-panel/alerts/" class="btn btn-sm btn-primary">View All</a>
                         </div>
                     </div>
                     <div class="card-body">
@@ -396,9 +414,23 @@
                     </div>
                     <div class="card-body">
                         <div class="d-grid gap-2">
-                            <button class="btn btn-primary mb-2"><i class="fas fa-sync-alt me-2"></i> Run Log Analysis</button>
-                            <button class="btn btn-outline-primary mb-2"><i class="fas fa-file-export me-2"></i> Export Report</button>
-                            <button class="btn btn-outline-primary"><i class="fas fa-bell me-2"></i> Configure Alerts</button>
+                            <button id="runLogAnalysisBtn" class="btn btn-primary mb-2">
+                                <i class="fas fa-sync-alt me-2"></i> Run Log Analysis
+                            </button>
+                            <div class="dropdown d-grid">
+                                <button id="exportReportBtn" class="btn btn-outline-primary mb-2 dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="fas fa-file-export me-2"></i> Export Report
+                                </button>
+                                <ul class="dropdown-menu w-100" aria-labelledby="exportReportBtn">
+                                    <li><h6 class="dropdown-header">Select Format</h6></li>
+                                    <li><a class="dropdown-item" href="#" data-format="pdf"><i class="fas fa-file-pdf text-danger me-2"></i> PDF Document</a></li>
+                                    <li><a class="dropdown-item" href="#" data-format="xlsx"><i class="fas fa-file-excel text-success me-2"></i> Excel Spreadsheet</a></li>
+                                    <li><a class="dropdown-item" href="#" data-format="csv"><i class="fas fa-file-csv text-primary me-2"></i> CSV File</a></li>
+                                </ul>
+                            </div>
+                            <a href="/admin-panel/settings/" id="configureAlertsBtn" class="btn btn-outline-primary">
+                                <i class="fas fa-bell me-2"></i> Configure Alerts
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -409,18 +441,111 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
+
         // Initialize charts when the DOM is loaded
         document.addEventListener('DOMContentLoaded', function() {
-            // Threat Activity Chart
+            // Fetch dashboard data from backend
+            fetchDashboardData();
+            
+            // Update last refresh time
+            updateRefreshTime();
+            setInterval(updateRefreshTime, 60000); // Update every minute
+        });
+
+        function updateRefreshTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString();
+            document.getElementById('last-refresh-time').textContent = timeString;
+        }
+
+        // Replace or update the fetchDashboardData function:
+        function fetchDashboardData() {
+            // Show loading spinners or indicators
+            document.getElementById('refreshDashboardBtn').innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Loading...';
+            
+            console.log('Fetching dashboard data...');
+            return fetch('/api/admin/dashboard-data/')
+                .then(response => {
+                    console.log('API response status:', response.status);
+                    if (!response.ok) {
+                        // Your existing error handling code
+                        if (response.status === 500) {
+                            console.error('Server error: The dashboard data API returned a 500 error');
+                            return response.json().then(errorData => {
+                                throw new Error(`Server error: ${errorData.error || 'Unknown server error'}`);
+                            });
+                        }
+                        if (response.status === 404) {
+                            throw new Error('API endpoint not found: Check URL configuration');
+                        }
+                        if (response.status === 403) {
+                            throw new Error('Access denied: You might not have permission to access this resource');
+                        }
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Dashboard data received:', data);
+                    
+                    // Check data structure
+                    if (!data.counts) console.warn('Missing counts data');
+                    if (!data.threat_activity) console.warn('Missing threat_activity data');
+                    if (!data.alert_distribution) console.warn('Missing alert_distribution data');
+                    if (!data.recent_alerts) console.warn('Missing recent_alerts data');
+                    if (!data.server_status) console.warn('Missing server_status data');
+                    
+                    // Update dashboard with fetched data
+                    updateCounts(data.counts || {});
+                    updateThreatActivityChart(data.threat_activity || {});
+                    updateAlertDistributionChart(data.alert_distribution || {});
+                    updateRecentAlerts(data.recent_alerts || []);
+                    updateServerStatus(data.server_status || []);
+                    
+                    // Update last refresh time
+                    updateRefreshTime();
+                    
+                    // Reset the refresh button
+                    document.getElementById('refreshDashboardBtn').innerHTML = '<i class="fas fa-sync-alt"></i> Refresh Data';
+                    
+                    return data; // Return data for any further processing
+                })
+                .catch(error => {
+                    console.error('Error fetching dashboard data:', error);
+                    // Show error message to the user
+                    alert(`Failed to load dashboard data: ${error.message}`);
+                    // Use existing hardcoded data as fallback
+                    initializeChartsWithHardcodedData();
+                    // Reset the refresh button
+                    document.getElementById('refreshDashboardBtn').innerHTML = '<i class="fas fa-sync-alt"></i> Refresh Data';
+                });
+        }
+
+        function updateCounts(counts) {
+            // Update count cards with real data
+            document.querySelector('.col-md-3:nth-child(1) .alert-count').textContent = counts.total_alerts;
+            document.querySelector('.col-md-3:nth-child(2) .alert-count').textContent = counts.critical_alerts;
+            document.querySelector('.col-md-3:nth-child(3) .alert-count').textContent = counts.servers_monitored;
+            document.querySelector('.col-md-3:nth-child(4) .alert-count').textContent = counts.active_users;
+        }
+
+        function updateThreatActivityChart(threatActivity) {
             const threatCtx = document.getElementById('threatActivityChart').getContext('2d');
-            const threatChart = new Chart(threatCtx, {
+            
+            // Check if chart already exists and destroy it
+            if (window.threatChart) {
+                window.threatChart.destroy();
+            }
+            
+            // Create new chart with real data
+            window.threatChart = new Chart(threatCtx, {
                 type: 'line',
                 data: {
-                    labels: ['6 days ago', '5 days ago', '4 days ago', '3 days ago', '2 days ago', 'Yesterday', 'Today'],
+                    labels: threatActivity.labels,
                     datasets: [
                         {
                             label: 'High Severity',
-                            data: [5, 7, 4, 9, 12, 8, 14],
+                            data: threatActivity.high_severity,
                             borderColor: '#e74c3c',
                             backgroundColor: 'rgba(231, 76, 60, 0.1)',
                             tension: 0.4,
@@ -428,7 +553,7 @@
                         },
                         {
                             label: 'Medium Severity',
-                            data: [12, 15, 18, 14, 22, 17, 19],
+                            data: threatActivity.medium_severity,
                             borderColor: '#f39c12',
                             backgroundColor: 'rgba(243, 156, 18, 0.1)',
                             tension: 0.4,
@@ -436,7 +561,234 @@
                         },
                         {
                             label: 'Low Severity',
-                            data: [25, 32, 28, 35, 42, 38, 30],
+                            data: threatActivity.low_severity,
+                            borderColor: '#3498db',
+                            backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateAlertDistributionChart(alertDistribution) {
+            const alertCtx = document.getElementById('alertDistributionChart').getContext('2d');
+            
+            // Check if chart already exists and destroy it
+            if (window.alertChart) {
+                window.alertChart.destroy();
+            }
+            
+            // Ensure alertDistribution is an object
+            if (!alertDistribution || typeof alertDistribution !== 'object') {
+                console.error('Invalid alert distribution data:', alertDistribution);
+                alertDistribution = {"No Data Available": 1};
+            }
+            
+            // Convert alert distribution data to arrays for chart
+            const labels = Object.keys(alertDistribution);
+            const data = Object.values(alertDistribution);
+            
+            console.log('Alert Distribution Chart Data:', { labels, data });
+            
+            // Use default colors if not enough data points
+            const colors = [
+                '#3a6ea5',
+                '#e74c3c',
+                '#f39c12',
+                '#2ecc71',
+                '#9b59b6'
+            ];
+            
+            // Create new chart with real data
+            window.alertChart = new Chart(alertCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels.length > 0 ? labels : ['No Data Available'],
+                    datasets: [{
+                        data: data.length > 0 ? data : [1],
+                        backgroundColor: colors.slice(0, labels.length || 1),
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateRecentAlerts(alerts) {
+            const tbody = document.querySelector('.recent-alerts-table tbody');
+            if (!tbody) {
+                console.error('Recent alerts table body not found');
+                return;
+            }
+            
+            // If no alerts, show a message
+            if (!alerts || !alerts.length) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center">No recent alerts</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = ''; // Clear existing rows
+            
+            alerts.forEach(alert => {
+                // Ensure alert has id property
+                const alertId = alert.id || '';
+                
+                // Determine severity class
+                let severityClass = 'severity-low';
+                if (alert.severity === 'high') {
+                    severityClass = 'severity-high';
+                } else if (alert.severity === 'medium') {
+                    severityClass = 'severity-medium';
+                }
+                
+                // Determine status badge
+                let statusBadge = '';
+                switch(alert.status) {
+                    case 'new':
+                        statusBadge = '<span class="badge bg-danger">New</span>';
+                        break;
+                    case 'investigating':
+                        statusBadge = '<span class="badge bg-warning text-dark">Investigating</span>';
+                        break;
+                    case 'resolved':
+                        statusBadge = '<span class="badge bg-success">Resolved</span>';
+                        break;
+                    default:
+                        statusBadge = `<span class="badge bg-secondary">${alert.status || 'Unknown'}</span>`;
+                }
+                
+                // Format timestamp
+                const timestamp = new Date(alert.timestamp);
+                const today = new Date();
+                let timeDisplay;
+                
+                if (isNaN(timestamp.getTime())) {
+                    timeDisplay = alert.timestamp || 'Unknown date';
+                } else if (timestamp.toDateString() === today.toDateString()) {
+                    timeDisplay = 'Today, ' + timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                } else if (timestamp.toDateString() === new Date(today - 86400000).toDateString()) {
+                    timeDisplay = 'Yesterday, ' + timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                } else {
+                    timeDisplay = timestamp.toLocaleDateString() + ', ' + timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                }
+                
+                // Create and append row
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${timeDisplay}</td>
+                    <td>${alert.source || 'Unknown'}</td>
+                    <td>${alert.type || 'Unknown'}</td>
+                    <td><span class="${severityClass}">${alert.severity || 'Unknown'}</span></td>
+                    <td>${statusBadge}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary" onclick="showAlertDetails('${alertId}')">Details</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function updateServerStatus(servers) {
+            const listGroup = document.querySelector('.card .list-group');
+            if (!listGroup || !servers.length) return;
+            
+            listGroup.innerHTML = ''; // Clear existing items
+            
+            servers.forEach(server => {
+                // Determine status indicator class
+                let statusClass = 'status-active';
+                let statusBadge = '<span class="badge bg-success">Online</span>';
+                let statusInfo = '';
+                
+                if (server.status === 'high_load') {
+                    statusClass = 'status-warning';
+                    statusBadge = '<span class="badge bg-warning text-dark">High Load</span>';
+                    statusInfo = `<small class="text-muted ms-2">Load: ${server.load}%</small>`;
+                } else if (server.status === 'offline') {
+                    statusClass = 'status-danger';
+                    statusBadge = '<span class="badge bg-danger">Offline</span>';
+                } else if (server.status === 'active') {
+                    statusBadge = '<span class="badge bg-success">Active</span>';
+                    statusInfo = `<small class="text-muted ms-2">Last run: ${server.last_run}</small>`;
+                } else {
+                    statusInfo = `<small class="text-muted ms-2">Load: ${server.load}%</small>`;
+                }
+                
+                // Create and append list item
+                const item = document.createElement('li');
+                item.className = 'list-group-item d-flex justify-content-between align-items-center';
+                item.innerHTML = `
+                    <div>
+                        <span class="status-indicator ${statusClass}"></span>
+                        ${server.name}
+                    </div>
+                    <div>
+                        ${statusBadge}
+                        ${statusInfo}
+                    </div>
+                `;
+                listGroup.appendChild(item);
+            });
+        }
+
+        // Fallback to hardcoded data if API fails
+        function initializeChartsWithHardcodedData() {
+            // First check if charts already exist and destroy them
+            if (window.threatChart) {
+                window.threatChart.destroy();
+            }
+            if (window.alertChart) {
+                window.alertChart.destroy();
+            }
+
+            // Initialize threat activity chart with sample data
+            const threatCtx = document.getElementById('threatActivityChart').getContext('2d');
+            window.threatChart = new Chart(threatCtx, {
+                type: 'line',
+                data: {
+                    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                    datasets: [
+                        {
+                            label: 'High Severity',
+                            data: [4, 3, 2, 5, 3, 1, 4],
+                            borderColor: '#e74c3c',
+                            backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        },
+                        {
+                            label: 'Medium Severity',
+                            data: [7, 6, 8, 9, 6, 5, 7],
+                            borderColor: '#f39c12',
+                            backgroundColor: 'rgba(243, 156, 18, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        },
+                        {
+                            label: 'Low Severity',
+                            data: [12, 10, 13, 8, 11, 9, 14],
                             borderColor: '#3498db',
                             backgroundColor: 'rgba(52, 152, 219, 0.1)',
                             tension: 0.4,
@@ -459,20 +811,19 @@
                 }
             });
 
-            // Alert Distribution Chart
+            // Initialize alert distribution chart with sample data
             const alertCtx = document.getElementById('alertDistributionChart').getContext('2d');
-            const alertChart = new Chart(alertCtx, {
+            window.alertChart = new Chart(alertCtx, {
                 type: 'doughnut',
                 data: {
-                    labels: ['Apache Server', 'MySQL Server', 'Authentication', 'Network', 'Other'],
+                    labels: ['Apache Server', 'MySQL Server', 'Application Server', 'Other'],
                     datasets: [{
-                        data: [45, 25, 15, 10, 5],
+                        data: [45, 30, 15, 10],
                         backgroundColor: [
                             '#3a6ea5',
                             '#e74c3c',
                             '#f39c12',
-                            '#2ecc71',
-                            '#9b59b6'
+                            '#2ecc71'
                         ],
                         borderWidth: 1
                     }]
@@ -486,14 +837,248 @@
                     }
                 }
             });
+        }
 
-            // Update last refresh time
-            setInterval(() => {
-                const now = new Date();
-                const timeString = now.toLocaleTimeString();
-                document.getElementById('last-refresh-time').textContent = timeString;
-            }, 60000); // Update every minute
+        // Function to show alert details
+        function showAlertDetails(alertId) {
+            // In a real implementation, fetch alert details and show in modal
+            window.location.href = `/admin-panel/alerts/details/${alertId}/`;
+        }
+
+        document.getElementById('refreshDashboardBtn').addEventListener('click', function() {
+            // Show spinning icon while refreshing
+            this.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Refreshing...';
+            this.disabled = true;
+            
+            fetchDashboardData().finally(() => {
+                // Reset button after refresh
+                this.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh Data';
+                this.disabled = false;
+                updateRefreshTime();
+            });
         });
+
+        // Add this code after the existing event listeners
+
+        // Quick Actions Event Listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            // Run Log Analysis Button
+            document.getElementById('runLogAnalysisBtn').addEventListener('click', runLogAnalysis);
+            
+            // Export Report Button - attach listeners to dropdown items instead of the button
+            document.querySelectorAll('#exportReportBtn + .dropdown-menu .dropdown-item').forEach(item => {
+                item.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const format = this.getAttribute('data-format');
+                    exportDashboardReport(format);
+                });
+            });
+            
+            // Configure Alerts Button is already an <a> tag so no JavaScript needed for navigation
+        });
+
+        // Function to run log analysis
+        function runLogAnalysis() {
+            const button = document.getElementById('runLogAnalysisBtn');
+            
+            // Disable button and show loading state
+            button.disabled = true;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Running Analysis...';
+            
+            // Make API call to trigger log analysis
+            fetch('/api/admin/run-log-analysis/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to start log analysis');
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Show success message
+                button.classList.remove('btn-primary');
+                button.classList.add('btn-success');
+                button.innerHTML = '<i class="fas fa-check me-2"></i> Analysis Complete';
+                
+                // Show toast notification
+                showToast('Log Analysis', 'Analysis completed successfully. New threats detected: ' + (data.threats_detected || 0), 'success');
+                
+                // Refresh dashboard data to show new results
+                setTimeout(() => {
+                    fetchDashboardData();
+                    // Reset button after 3 seconds
+                    setTimeout(() => {
+                        button.classList.remove('btn-success');
+                        button.classList.add('btn-primary');
+                        button.innerHTML = '<i class="fas fa-sync-alt me-2"></i> Run Log Analysis';
+                        button.disabled = false;
+                    }, 3000);
+                }, 1000);
+            })
+            .catch(error => {
+                console.error('Error running log analysis:', error);
+                
+                // Show error state
+                button.classList.remove('btn-primary');
+                button.classList.add('btn-danger');
+                button.innerHTML = '<i class="fas fa-exclamation-circle me-2"></i> Analysis Failed';
+                
+                // Show error toast
+                showToast('Log Analysis', 'Failed to complete analysis: ' + error.message, 'error');
+                
+                // Reset button after 3 seconds
+                setTimeout(() => {
+                    button.classList.remove('btn-danger');
+                    button.classList.add('btn-primary');
+                    button.innerHTML = '<i class="fas fa-sync-alt me-2"></i> Run Log Analysis';
+                    button.disabled = false;
+                }, 3000);
+            });
+        }
+
+        // Function to export dashboard report
+        function exportDashboardReport(format) {
+            // Get button element
+            const button = document.getElementById('exportReportBtn');
+            
+            // Validate format
+            if (!['pdf', 'xlsx', 'csv'].includes(format)) {
+                showToast('Export Error', 'Invalid export format selected', 'error');
+                return;
+            }
+            
+            // Disable button and show loading state
+            button.disabled = true;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Generating Report...';
+            
+            // Make API call to generate report
+            fetch(`/api/admin/export-report/?format=${format.toLowerCase()}`, {
+                headers: {
+                    'X-CSRFToken': getCsrfToken()
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to generate report');
+                }
+                
+                // Check if it's a download or just a response
+                const contentType = response.headers.get('Content-Type');
+                if (contentType && (contentType.includes('application/pdf') || 
+                                   contentType.includes('text/csv') || 
+                                   contentType.includes('application/vnd.openxmlformats'))) {
+                    return response.blob().then(blob => {
+                        // Create download link and trigger download
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.style.display = 'none';
+                        a.href = url;
+                        a.download = `threat_report_${new Date().toISOString().slice(0,10)}.${format}`;
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        return { success: true, message: 'Report downloaded' };
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Show success message
+                button.classList.remove('btn-outline-primary');
+                button.classList.add('btn-success');
+                button.innerHTML = '<i class="fas fa-check me-2"></i> Report Generated';
+                
+                // Show success toast
+                showToast('Report Export', 'Report generated and downloaded successfully', 'success');
+                
+                // Reset button after 3 seconds
+                setTimeout(() => {
+                    button.classList.remove('btn-success');
+                    button.classList.add('btn-outline-primary');
+                    button.innerHTML = '<i class="fas fa-file-export me-2"></i> Export Report';
+                    button.disabled = false;
+                }, 3000);
+            })
+            .catch(error => {
+                console.error('Error exporting report:', error);
+                
+                // Show error state
+                button.classList.remove('btn-outline-primary');
+                button.classList.add('btn-danger');
+                button.innerHTML = '<i class="fas fa-exclamation-circle me-2"></i> Export Failed';
+                
+                // Show error toast
+                showToast('Report Export', 'Failed to generate report: ' + error.message, 'error');
+                
+                // Reset button after 3 seconds
+                setTimeout(() => {
+                    button.classList.remove('btn-danger');
+                    button.classList.add('btn-outline-primary');
+                    button.innerHTML = '<i class="fas fa-file-export me-2"></i> Export Report';
+                    button.disabled = false;
+                }, 3000);
+            });
+        }
+
+        // Helper function to get CSRF token
+        function getCsrfToken() {
+            const cookieValue = document.cookie
+                .split('; ')
+                .find(row => row.startsWith('csrftoken='))
+                ?.split('=')[1];
+            return cookieValue || '';
+        }
+
+        // Helper function to show toast notifications
+        function showToast(title, message, type) {
+            // Check if we have Bootstrap 5 toast
+            if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
+                // Create toast container if it doesn't exist
+                let toastContainer = document.querySelector('.toast-container');
+                if (!toastContainer) {
+                    toastContainer = document.createElement('div');
+                    toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+                    document.body.appendChild(toastContainer);
+                }
+                
+                // Create toast element
+                const toastElement = document.createElement('div');
+                toastElement.className = `toast align-items-center text-white bg-${type === 'error' ? 'danger' : 'success'} border-0`;
+                toastElement.setAttribute('role', 'alert');
+                toastElement.setAttribute('aria-live', 'assertive');
+                toastElement.setAttribute('aria-atomic', 'true');
+                
+                // Create toast content
+                toastElement.innerHTML = `
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            <strong>${title}</strong>: ${message}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                `;
+                
+                // Add to container
+                toastContainer.appendChild(toastElement);
+                
+                // Initialize and show toast
+                const toast = new bootstrap.Toast(toastElement);
+                toast.show();
+                
+                // Remove after it's hidden
+                toastElement.addEventListener('hidden.bs.toast', function () {
+                    toastElement.remove();
+                });
+            } else {
+                // Fallback to alert if Bootstrap Toast is not available
+                alert(`${title}: ${message}`);
+            }
+        }
     </script>
 </body>
 </html>
