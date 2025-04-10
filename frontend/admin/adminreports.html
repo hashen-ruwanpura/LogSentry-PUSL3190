@@ -399,6 +399,7 @@
                                 <i class="fas fa-download"></i> Export
                             </button>
                             <ul class="dropdown-menu" aria-labelledby="tableExportDropdown">
+                                <li><a class="dropdown-item export-btn" data-format="pdf" href="#"><i class="far fa-file-pdf me-2"></i> PDF</a></li>
                                 <li><a class="dropdown-item export-btn" data-format="csv" href="#"><i class="far fa-file-excel me-2"></i> CSV</a></li>
                                 <li><a class="dropdown-item export-btn" data-format="json" href="#"><i class="far fa-file-code me-2"></i> JSON</a></li>
                             </ul>
@@ -511,26 +512,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
     
     <script>
-        // Initialize date range picker
-        $(function() {
-            $('#dateRange').daterangepicker({
-                ranges: {
-                   'Today': [moment(), moment()],
-                   'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
-                   'Last 7 Days': [moment().subtract(6, 'days'), moment()],
-                   'Last 30 Days': [moment().subtract(29, 'days'), moment()],
-                   'This Month': [moment().startOf('month'), moment().endOf('month')],
-                   'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
-                },
-                startDate: moment().subtract(6, 'days'),
-                endDate: moment()
-            });
-        });
-        
         document.addEventListener('DOMContentLoaded', function() {
             console.log("Document loaded, initializing reports dashboard...");
             
-            // Initialize date range picker first
+            // Initialize date range picker with default dates
             $('#dateRange').daterangepicker({
                 ranges: {
                    'Today': [moment(), moment()],
@@ -541,10 +526,14 @@
                    'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
                 },
                 startDate: moment().subtract(30, 'days'),
-                endDate: moment()
+                endDate: moment(),
+                maxDate: moment(),
+                locale: {
+                    format: 'YYYY-MM-DD'
+                }
             });
             
-            // Ensure the daterangepicker has initialized before trying to restore filters
+            // Wait for daterangepicker to fully initialize before restoring filters
             setTimeout(() => {
                 // Restore filters from session storage if available
                 const savedFilters = sessionStorage.getItem('reportFilters');
@@ -553,63 +542,57 @@
                         const filters = JSON.parse(savedFilters);
                         console.log("Restoring saved filters:", filters);
                         
-                        // Set daterangepicker dates
+                        // Use moment objects consistently for date handling
                         if (filters.startDate && filters.endDate) {
-                            $('#dateRange').data('daterangepicker').setStartDate(filters.startDate);
-                            $('#dateRange').data('daterangepicker').setEndDate(filters.endDate);
+                            try {
+                                // Always create proper moment objects
+                                const startDate = moment(filters.startDate, 'YYYY-MM-DD');
+                                const endDate = moment(filters.endDate, 'YYYY-MM-DD');
+                                
+                                if (startDate.isValid() && endDate.isValid()) {
+                                    const today = moment();
+                                    // Use the moment objects directly
+                                    $('#dateRange').data('daterangepicker').setStartDate(
+                                        startDate.isAfter(today) ? today : startDate
+                                    );
+                                    $('#dateRange').data('daterangepicker').setEndDate(
+                                        endDate.isAfter(today) ? today : endDate
+                                    );
+                                } else {
+                                    console.error("Invalid dates in saved filters");
+                                    resetToDefaultDates();
+                                }
+                            } catch (dateError) {
+                                console.error("Error setting date range:", dateError);
+                                resetToDefaultDates();
+                            }
                         }
                         
                         // Set select inputs
-                        if (filters.logType) {
+                        if (filters.logType && document.getElementById('logType')) {
                             document.getElementById('logType').value = filters.logType;
                         }
-                        if (filters.severity) {
+                        if (filters.severity && document.getElementById('severityFilter')) {
                             document.getElementById('severityFilter').value = filters.severity;
                         }
-                        if (filters.groupBy) {
+                        if (filters.groupBy && document.getElementById('groupBy')) {
                             document.getElementById('groupBy').value = filters.groupBy;
                         }
                     } catch (e) {
                         console.error("Error restoring filters:", e);
+                        resetToDefaultDates();
                     }
                 }
                 
                 // Load initial data
                 loadDashboardData();
-            }, 200);
+            }, 500); // Increased timeout to ensure initialization
             
-            // Rest of your initialization code...
-        });
-        
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log("Document loaded, initializing reports dashboard...");
-            
-            // Restore filters from session storage if available
-            const savedFilters = sessionStorage.getItem('reportFilters');
-            if (savedFilters) {
-                const filters = JSON.parse(savedFilters);
-                console.log("Restoring saved filters:", filters);
-                
-                // Set daterangepicker dates
-                if (filters.startDate && filters.endDate) {
-                    $('#dateRange').data('daterangepicker').setStartDate(filters.startDate);
-                    $('#dateRange').data('daterangepicker').setEndDate(filters.endDate);
-                }
-                
-                // Set select inputs
-                if (filters.logType) {
-                    document.getElementById('logType').value = filters.logType;
-                }
-                if (filters.severity) {
-                    document.getElementById('severityFilter').value = filters.severity;
-                }
-                if (filters.groupBy) {
-                    document.getElementById('groupBy').value = filters.groupBy;
-                }
+            // Helper function to reset dates
+            function resetToDefaultDates() {
+                $('#dateRange').data('daterangepicker').setStartDate(moment().subtract(30, 'days'));
+                $('#dateRange').data('daterangepicker').setEndDate(moment());
             }
-            
-            // Load initial data
-            loadDashboardData();
             
             // Set up event listeners
             document.getElementById('reportFilters').addEventListener('submit', function(e) {
@@ -621,16 +604,17 @@
                 loadDashboardData();
             });
             
-            // Set up export buttons
+            // Add event listeners for export buttons
             document.querySelectorAll('.export-btn').forEach(btn => {
                 btn.addEventListener('click', function(e) {
                     e.preventDefault();
                     const format = this.getAttribute('data-format');
+                    console.log("Exporting in format:", format);
                     exportReports(format);
                 });
             });
             
-            // Time period buttons for charts
+            // Set up period buttons for threat trend chart
             document.querySelectorAll('.btn-group[role="group"] button').forEach(button => {
                 button.addEventListener('click', function() {
                     // Remove active class from all buttons
@@ -714,10 +698,12 @@
             let startDate = moment().subtract(30, 'days').format('YYYY-MM-DD');
             let endDate = moment().format('YYYY-MM-DD');
             
-            // If daterangepicker is initialized, use its values
+            // If daterangepicker is initialized, use its values with consistent format
             if (dateRange && dateRange.startDate && dateRange.endDate) {
-                startDate = dateRange.startDate.format('YYYY-MM-DD');
-                endDate = dateRange.endDate.format('YYYY-MM-DD');
+                if (dateRange.startDate.isValid() && dateRange.endDate.isValid()) {
+                    startDate = dateRange.startDate.format('YYYY-MM-DD');
+                    endDate = dateRange.endDate.format('YYYY-MM-DD');
+                }
             }
             
             const logType = document.getElementById('logType')?.value || 'all';
@@ -1087,56 +1073,71 @@
         
         // Export reports
         function exportReports(format) {
+            console.log("Starting export in format:", format);
             const filters = getFilters();
             
-            // Create a form for the export
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = '/api/admin/reports/export';
-            form.target = '_blank';
-            
-            // Add CSRF token
-            const csrfInput = document.createElement('input');
-            csrfInput.type = 'hidden';
-            csrfInput.name = 'csrfmiddlewaretoken';
-            csrfInput.value = getCsrfToken();
-            form.appendChild(csrfInput);
-            
-            // Add filter inputs
-            const startDateInput = document.createElement('input');
-            startDateInput.type = 'hidden';
-            startDateInput.name = 'startDate';
-            startDateInput.value = filters.startDate;
-            form.appendChild(startDateInput);
-            
-            const endDateInput = document.createElement('input');
-            endDateInput.type = 'hidden';
-            endDateInput.name = 'endDate';
-            endDateInput.value = filters.endDate;
-            form.appendChild(endDateInput);
-            
-            const logTypeInput = document.createElement('input');
-            logTypeInput.type = 'hidden';
-            logTypeInput.name = 'logType';
-            logTypeInput.value = filters.logType;
-            form.appendChild(logTypeInput);
-            
-            const severityInput = document.createElement('input');
-            severityInput.type = 'hidden';
-            severityInput.name = 'severity';
-            severityInput.value = filters.severity;
-            form.appendChild(severityInput);
-            
-            const formatInput = document.createElement('input');
-            formatInput.type = 'hidden';
-            formatInput.name = 'format';
-            formatInput.value = format;
-            form.appendChild(formatInput);
-            
-            // Submit the form
-            document.body.appendChild(form);
-            form.submit();
-            document.body.removeChild(form);
+            try {
+                // Create a form for the export
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '/api/admin/reports/export';
+                form.target = '_blank';
+                
+                // Add CSRF token
+                const csrfInput = document.createElement('input');
+                csrfInput.type = 'hidden';
+                csrfInput.name = 'csrfmiddlewaretoken';
+                csrfInput.value = getCsrfToken();
+                form.appendChild(csrfInput);
+                
+                // Add filter inputs
+                const startDateInput = document.createElement('input');
+                startDateInput.type = 'hidden';
+                startDateInput.name = 'startDate';
+                startDateInput.value = filters.startDate;
+                form.appendChild(startDateInput);
+                
+                const endDateInput = document.createElement('input');
+                endDateInput.type = 'hidden';
+                endDateInput.name = 'endDate';
+                endDateInput.value = filters.endDate;
+                form.appendChild(endDateInput);
+                
+                const logTypeInput = document.createElement('input');
+                logTypeInput.type = 'hidden';
+                logTypeInput.name = 'logType';
+                logTypeInput.value = filters.logType;
+                form.appendChild(logTypeInput);
+                
+                const severityInput = document.createElement('input');
+                severityInput.type = 'hidden';
+                severityInput.name = 'severity';
+                severityInput.value = filters.severity;
+                form.appendChild(severityInput);
+                
+                const formatInput = document.createElement('input');
+                formatInput.type = 'hidden';
+                formatInput.name = 'format';
+                formatInput.value = format;
+                form.appendChild(formatInput);
+                
+                console.log("Export form created with data:", {
+                    startDate: filters.startDate,
+                    endDate: filters.endDate,
+                    logType: filters.logType,
+                    severity: filters.severity,
+                    format: format
+                });
+                
+                // Submit the form
+                document.body.appendChild(form);
+                form.submit();
+                document.body.removeChild(form);
+                console.log("Export form submitted");
+            } catch (error) {
+                console.error("Error during export:", error);
+                alert("Failed to export reports: " + error.message);
+            }
         }
         
         // Show loaders

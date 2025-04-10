@@ -782,8 +782,6 @@ def export_json(reports):
 
 def export_pdf(reports, start_date, end_date):
     """Export reports as PDF"""
-    # For PDF export, we'll use a third-party library like reportlab or WeasyPrint
-    # This is a simplified implementation
     try:
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import letter, landscape
@@ -792,12 +790,25 @@ def export_pdf(reports, start_date, end_date):
         from io import BytesIO
         
         buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter))
+        
+        # Set document properties to avoid "anonymous" in PDF metadata
+        doc = SimpleDocTemplate(
+            buffer, 
+            pagesize=landscape(letter),
+            author="ThreatGuard Admin",  # Set proper author metadata
+            title="LogAnalyzer - Threat Report",  # Set proper title metadata
+            subject="Security Threat Report"  # Add descriptive subject
+        )
+        
         elements = []
         
-        # Add title
+        # Format dates
+        start_date_str = start_date.strftime('%Y-%m-%d')
+        end_date_str = f"{end_date.date()} 23:59"
+        
+        # Add title with project name
         styles = getSampleStyleSheet()
-        elements.append(Paragraph(f"Threat Report ({start_date} to {end_date})", styles['Title']))
+        elements.append(Paragraph(f"LogAnalyzer - Threat Report ({start_date_str} to {end_date_str})", styles['Title']))
         elements.append(Spacer(1, 20))
         
         # Create table data
