@@ -219,9 +219,20 @@ def api_user_delete(request, user_id):
         if user == request.user:
             return JsonResponse({'error': 'Cannot delete your own account'}, status=400)
         
-        # Delete the user
+        # Store username before deletion
         username = user.username
-        user.delete()
+        
+        # Use raw SQL to delete the user directly, bypassing Django's cascade deletion
+        from django.db import connection
+        with connection.cursor() as cursor:
+            # Delete any auth_user_groups entries
+            cursor.execute("DELETE FROM auth_user_groups WHERE user_id = %s", [user_id])
+            
+            # Delete any auth_user_user_permissions entries
+            cursor.execute("DELETE FROM auth_user_user_permissions WHERE user_id = %s", [user_id])
+            
+            # Finally delete the user
+            cursor.execute("DELETE FROM auth_user WHERE id = %s", [user_id])
         
         return JsonResponse({
             'success': True, 
@@ -229,6 +240,7 @@ def api_user_delete(request, user_id):
         })
     
     except Exception as e:
+        logger.error(f"Error in user deletion: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
 
 #ADMIN DASHBOARD
