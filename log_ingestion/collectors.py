@@ -1,128 +1,227 @@
 import os
 import time
-import glob
+import logging
+from kafka import KafkaProducer, KafkaConsumer
+import json
+import threading
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from django.utils import timezone
 from django.conf import settings
 from .models import LogSource, LogFilePosition, RawLog
-from .parsers import LogParserFactory
+from .parsers import LogParserFactory, ApacheLogParser, MySQLLogParser
+from .models import ParsedLog
+from .filebeat_integration import FilebeatManager
 
-class LogFileHandler(FileSystemEventHandler):
-    """Handler for monitoring log file changes"""
-    
-    def __init__(self, log_source):
-        self.log_source = log_source
-        self.parser = LogParserFactory.get_parser(log_source.source_type)
-    
-    def on_modified(self, event):
-        if not event.is_directory and event.src_path == self.log_source.file_path:
-            self._process_log_file(event.src_path)
-    
-    def _process_log_file(self, file_path):
-        """Process new lines in the log file"""
-        # Get file position from database or start from beginning
-        position = self._get_last_position(file_path)
+logger = logging.getLogger(__name__)
+
+class LogEventHandler(FileSystemEventHandler):
+    def __init__(self, file_path, producer):
+        self.file_path = file_path
+        self.producer = producer
+        self.last_position = self._get_file_size()
         
-        try:
-            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
-                f.seek(position)
-                batch = []
-                
-                for line in f:
-                    line = line.strip()
-                    if line:
-                        # Create raw log entry
-                        raw_log = RawLog(
-                            source=self.log_source,
-                            content=line,
-                            timestamp=timezone.now()
-                        )
-                        batch.append(raw_log)
-                
-                # Bulk create raw logs
-                if batch:
-                    RawLog.objects.bulk_create(batch)
-                    
-                    # Parse all created logs
-                    for log in batch:
-                        self.parser.parse(log)
-                
-                # Save new position
-                self._save_position(file_path, f.tell())
-                
-        except (IOError, PermissionError) as e:
-            print(f"Error reading log file {file_path}: {str(e)}")
-    
-    def _get_last_position(self, file_path):
-        """Get the last read position for this file"""
-        try:
-            position_obj = LogFilePosition.objects.get(
-                source=self.log_source, 
-                file_path=file_path
-            )
-            return position_obj.position
-        except LogFilePosition.DoesNotExist:
-            return 0
-    
-    def _save_position(self, file_path, position):
-        """Save the current read position"""
-        LogFilePosition.objects.update_or_create(
-            source=self.log_source,
-            file_path=file_path,
-            defaults={'position': position, 'last_updated': timezone.now()}
+    def _get_file_size(self):
+        return os.path.getsize(self.file_path) if os.path.exists(self.file_path) else 0
+        
+    def on_modified(self, event):
+        if event.src_path == self.file_path:
+            current_size = self._get_file_size()
+            if current_size > self.last_position:
+                with open(self.file_path, 'r') as f:
+                    f.seek(self.last_position)
+                    new_content = f.read()
+                    for line in new_content.splitlines():
+                        if line.strip():
+                            # Send new log lines to Kafka topic
+                            self.producer.send('raw_logs', {
+                                'source': os.path.basename(self.file_path),
+                                'content': line
+                            })
+                self.last_position = current_size
+
+class LogFileHandler:
+    def __init__(self, log_path, log_type):
+        self.log_path = log_path
+        self.log_type = log_type
+        
+        # Fix: Ensure directory exists before monitoring
+        log_dir = os.path.dirname(self.log_path)
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir, exist_ok=True)
+            
+        # Fix: Print paths for debugging
+        print(f"Monitoring log file: {self.log_path}")
+        print(f"Directory: {log_dir}")
+        
+        self.producer = KafkaProducer(
+            bootstrap_servers='localhost:9092',
+            value_serializer=lambda v: json.dumps(v).encode('utf-8')
         )
+        
+    def start_monitoring(self):
+        import os
+        print(f"Monitoring file: {self.log_path}")
+        print(f"Directory exists: {os.path.exists(os.path.dirname(self.log_path))}")
+        print(f"File exists: {os.path.exists(self.log_path)}")
+        
+        # Make sure directory exists
+        os.makedirs(os.path.dirname(self.log_path), exist_ok=True)
+        
+        # Create an empty file if it doesn't exist
+        if not os.path.exists(self.log_path):
+            with open(self.log_path, 'w') as f:
+                pass
+        
+        event_handler = LogEventHandler(self.log_path, self.producer)
+        observer = Observer()
+        observer.schedule(event_handler, path=os.path.dirname(self.log_path), recursive=False)
+        observer.start()
+        return observer
+        
+    def __del__(self):
+        if hasattr(self, 'producer'):
+            self.producer.close()
+
+class LogConsumer:
+    def __init__(self):
+        # Add retries and error handling for Kafka connection
+        retry_count = 0
+        max_retries = 3
+        while retry_count < max_retries:
+            try:
+                self.consumer = KafkaConsumer(
+                    'raw_logs',
+                    bootstrap_servers='localhost:9092',
+                    value_deserializer=lambda m: json.loads(m.decode('utf-8')),
+                    auto_offset_reset='latest',
+                    group_id='log_parser_group',
+                    # Add connection timeout - don't wait too long
+                    request_timeout_ms=5000,
+                    # Add retry settings
+                    retry_backoff_ms=1000,
+                    reconnect_backoff_ms=1000
+                )
+                print("Successfully connected to Kafka")
+                break
+            except Exception as e:
+                retry_count += 1
+                print(f"Failed to connect to Kafka (attempt {retry_count}/{max_retries}): {e}")
+                if retry_count >= max_retries:
+                    print("Could not connect to Kafka, continuing without Kafka functionality")
+                    self.consumer = None
+                time.sleep(2)  # Wait before retrying
+
+        self.parsers = {
+            'apache': ApacheLogParser(),
+            'mysql': MySQLLogParser()
+        }
+        
+    def start_consuming(self):
+        thread = threading.Thread(target=self._consume_logs)
+        thread.daemon = True
+        thread.start()
+        return thread
+        
+    def _consume_logs(self):
+        for message in self.consumer:
+            log_data = message.value
+            source = log_data['source']
+            content = log_data['content']
+            
+            # Determine the parser based on the source filename
+            parser_type = 'apache' if 'apache' in source.lower() else 'mysql' if 'mysql' in source.lower() else None
+            
+            if parser_type and parser_type in self.parsers:
+                parser = self.parsers[parser_type]
+                try:
+                    parsed_log = parser.parse(content)
+                    if parsed_log:
+                        # Save parsed log to database
+                        ParsedLog.objects.create(
+                            log_type=parser_type,
+                            source_ip=parsed_log.get('source_ip', ''),
+                            timestamp=parsed_log.get('timestamp'),
+                            http_method=parsed_log.get('http_method', ''),
+                            path=parsed_log.get('path', ''),
+                            status_code=parsed_log.get('status_code'),
+                            user_agent=parsed_log.get('user_agent', ''),
+                            raw_log=content
+                        )
+                except Exception as e:
+                    logger.error(f"Error parsing log: {e}")
 
 class LogCollectionManager:
-    """Manager for log collection processes"""
-    
-    def __init__(self):
-        self.observer = None
-        self.handlers = {}
-    
+    def __init__(self, config):
+        self.config = config
+        self.handlers = []
+        self.observers = []
+        self.consumer = LogConsumer()
+        
     def start_monitoring(self):
-        """Start monitoring all enabled log sources"""
-        if self.observer and self.observer.is_alive():
-            return False
-            
-        self.observer = Observer()
+        # Start log file watchers
+        for log_config in self.config:
+            handler = LogFileHandler(log_config['path'], log_config['type'])
+            observer = handler.start_monitoring()
+            self.handlers.append(handler)
+            self.observers.append(observer)
         
-        # Get all enabled log sources
-        log_sources = LogSource.objects.filter(enabled=True)
+        # Start log consumer
+        consumer_thread = self.consumer.start_consuming()
         
-        for source in log_sources:
-            if not os.path.exists(source.file_path):
-                print(f"Warning: Log file {source.file_path} does not exist. Skipping.")
-                continue
-                
-            # Create and register handler
-            handler = LogFileHandler(source)
-            self.handlers[source.id] = handler
-            
-            # Watch directory containing the file
-            directory = os.path.dirname(source.file_path)
-            self.observer.schedule(handler, directory, recursive=False)
-            
-            # Process existing content
-            handler._process_log_file(source.file_path)
-        
-        self.observer.start()
-        return True
+        return self.observers, consumer_thread
     
     def stop_monitoring(self):
-        """Stop the log monitoring"""
-        if self.observer and self.observer.is_alive():
-            self.observer.stop()
-            self.observer.join()
-            self.observer = None
-            self.handlers = {}
-            return True
-        return False
-    
-    def reload_sources(self):
-        """Reload log sources (stop and restart monitoring)"""
-        self.stop_monitoring()
-        return self.start_monitoring()
+        for observer in self.observers:
+            observer.stop()
+        
+        for observer in self.observers:
+            observer.join()
 
-# Create a singleton instance
-log_manager = LogCollectionManager()
+class EnhancedLogCollectionManager:
+    """Enhanced version that supports both file monitoring and Filebeat"""
+    def __init__(self, config):
+        self.config = config
+        self.handlers = []
+        self.observers = []
+        self.consumer = LogConsumer()
+        
+        # Initialize Filebeat if config specifies it
+        self.use_filebeat = config.get('use_filebeat', False)
+        if self.use_filebeat:
+            from .filebeat_integration import FilebeatManager
+            self.filebeat_manager = FilebeatManager(config.get('filebeat_config', 'config/filebeat.yml'))
+        
+    def start_monitoring(self):
+        threads = []
+        
+        # Start Filebeat if configured
+        if self.use_filebeat:
+            self.filebeat_manager.start_filebeat()
+            filebeat_consumer_thread = self.filebeat_manager.start_kafka_consumer()
+            threads.append(filebeat_consumer_thread)
+        
+        # Also start traditional file monitoring for backward compatibility
+        for log_config in self.config.get('log_files', []):
+            handler = LogFileHandler(log_config['path'], log_config['type'])
+            observer = handler.start_monitoring()
+            self.handlers.append(handler)
+            self.observers.append(observer)
+        
+        # Start log consumer
+        consumer_thread = self.consumer.start_consuming()
+        threads.append(consumer_thread)
+        
+        return self.observers, threads
+    
+    def stop_monitoring(self):
+        # Stop file observers
+        for observer in self.observers:
+            observer.stop()
+        
+        for observer in self.observers:
+            observer.join()
+            
+        # Stop Filebeat if used
+        if self.use_filebeat:
+            self.filebeat_manager.stop_filebeat()

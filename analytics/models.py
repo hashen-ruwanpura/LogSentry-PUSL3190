@@ -1,34 +1,30 @@
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
 
 class LogReport(models.Model):
-    """Model to store parsed and analyzed logs for reporting"""
-    LOG_TYPE_CHOICES = [
-        ('apache', 'Apache'),
-        ('mysql', 'MySQL'),
-    ]
-    
+    """Model to store processed log reports/threats for the reporting system"""
     SEVERITY_CHOICES = [
-        ('high', 'High'),
-        ('medium', 'Medium'),
         ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
     ]
     
     STATUS_CHOICES = [
-        ('open', 'Open'),
-        ('in_progress', 'In Progress'),
-        ('resolved', 'Resolved'),
+        ('Open', 'Open'),
+        ('In Progress', 'In Progress'),
+        ('Resolved', 'Resolved'),
     ]
     
-    timestamp = models.DateTimeField()
-    log_type = models.CharField(max_length=20, choices=LOG_TYPE_CHOICES)
-    source_ip = models.GenericIPAddressField()
-    country_code = models.CharField(max_length=2, null=True, blank=True)
-    country_name = models.CharField(max_length=100, null=True, blank=True)
-    threat_type = models.CharField(max_length=100)
-    severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='open')
-    raw_log = models.TextField()
+    timestamp = models.DateTimeField(default=timezone.now)
+    log_type = models.CharField(max_length=50, blank=True, null=True)  # 'apache', 'mysql', etc.
+    source_ip = models.CharField(max_length=50, blank=True, null=True)
+    country = models.CharField(max_length=100, blank=True, null=True)
+    threat_type = models.CharField(max_length=100, blank=True, null=True)
+    severity = models.CharField(max_length=20, choices=SEVERITY_CHOICES, default='low')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Open')
+    raw_log_id = models.IntegerField(blank=True, null=True)  # Reference to original raw log if available
+    description = models.TextField(blank=True, null=True)
     
     # Apache specific fields
     request_method = models.CharField(max_length=10, null=True, blank=True)
@@ -49,14 +45,13 @@ class LogReport(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
+        ordering = ['-timestamp']
         indexes = [
             models.Index(fields=['timestamp']),
-            models.Index(fields=['log_type']),
             models.Index(fields=['severity']),
-            models.Index(fields=['status']),
             models.Index(fields=['source_ip']),
+            models.Index(fields=['log_type']),
         ]
-        ordering = ['-timestamp']
     
     def __str__(self):
-        return f"{self.log_type} - {self.threat_type} - {self.timestamp}"
+        return f"{self.timestamp} - {self.threat_type} ({self.severity})"

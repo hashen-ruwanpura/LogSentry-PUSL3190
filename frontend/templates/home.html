@@ -495,7 +495,7 @@
         function checkReportsAccess(event) {
             event.preventDefault();
             if (isLoggedIn) {
-                window.location.href = "/reports/";
+                window.location.href = "{% url 'reports' %}";
             } else {
                 document.getElementById('loginModal').style.display = "block";
             }

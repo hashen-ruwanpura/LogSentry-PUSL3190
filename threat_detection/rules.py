@@ -1,274 +1,161 @@
 import re
-import json
-import ipaddress
-from abc import ABC, abstractmethod
+from datetime import timedelta
 from django.utils import timezone
-from django.conf import settings
-from log_ingestion.models import ParsedLog
-from .models import DetectionRule, Threat, BlacklistedIP
+from log_ingestion.models import ParsedLog, Threat
+import logging
+from django.db.models import Count
+from django.core.cache import cache
 
-class BaseRule(ABC):
-    """Base class for all detection rules"""
+logger = logging.getLogger(__name__)
+
+class Rule:
+    def __init__(self, name, description, severity):
+        self.name = name
+        self.description = description
+        self.severity = severity
     
-    def __init__(self, rule_config):
-        self.rule_config = rule_config
-        self.name = rule_config.name
-        self.description = rule_config.description
-        self.severity = rule_config.severity
-        self.mitre_technique = rule_config.mitre_technique
-    
-    @abstractmethod
-    def matches(self, parsed_log):
-        """Check if the rule matches this log entry"""
-        pass
-    
-    def is_false_positive(self, parsed_log):
-        """Check if this is likely a false positive"""
-        # Check against whitelisted IPs
-        if parsed_log.source_ip:
-            whitelist = getattr(settings, 'WHITELISTED_IPS', [])
-            if parsed_log.source_ip in whitelist:
-                return True
-        return False
-    
-    def get_description(self, parsed_log):
-        """Get a description of the threat"""
-        return f"Detected {self.name} in log from {parsed_log.source_ip or 'unknown source'}"
-    
-    def create_threat(self, parsed_log):
-        """Create a threat entry for this rule match"""
-        # Don't create if it's a false positive
-        if self.is_false_positive(parsed_log):
-            return None
-            
-        # Create the threat
-        threat = Threat.objects.create(
-            rule=self.rule_config,
-            parsed_log=parsed_log,
-            severity=self.severity,
-            description=self.get_description(parsed_log),
-            source_ip=parsed_log.source_ip,
-            user_id=parsed_log.user_id,
-            mitre_technique=self.mitre_technique
+    def evaluate(self, log_entry):
+        """Evaluate if the log entry matches the rule's criteria"""
+        raise NotImplementedError("Subclasses must implement this method")
+
+class SQLInjectionRule(Rule):
+    def __init__(self):
+        super().__init__(
+            "SQL Injection Attempt", 
+            "Detected potential SQL injection pattern in request", 
+            "high"
         )
-        
-        # Update parsed log status
-        parsed_log.status = 'suspicious' if self.severity in ['low', 'medium'] else 'attack'
-        parsed_log.save(update_fields=['status'])
-        
-        # Take actions for this threat
-        self.take_action(parsed_log, threat)
-        
-        return threat
+        self.patterns = [
+            r"(\b|'|\")(SELECT|INSERT|UPDATE|DELETE|DROP|UNION)\b.*(FROM|INTO|WHERE|TABLE)",
+            r"(\b|'|\")(--).*",
+            r"(\b|'|\")(/\*.*\*/)",
+        ]
     
-    def take_action(self, parsed_log, threat):
-        """Take actions based on the detection (e.g., blacklist IP)"""
-        # For high severity threats, consider blacklisting the IP
-        if self.severity in ['high', 'critical'] and parsed_log.source_ip:
-            # Check if already blacklisted
-            existing = BlacklistedIP.objects.filter(
-                ip_address=parsed_log.source_ip, 
-                active=True
-            ).exists()
-            
-            if not existing:
-                # Create blacklist entry with expiry of 24 hours
-                BlacklistedIP.objects.create(
-                    ip_address=parsed_log.source_ip,
-                    reason=f"Automatic blacklist due to {self.name}",
-                    threat=threat,
-                    expires_at=timezone.now() + timezone.timedelta(hours=24)
-                )
-
-class SQLInjectionRule(BaseRule):
-    """Rule to detect SQL injection attempts"""
-    
-    # SQL injection patterns
-    PATTERNS = [
-        r'(\b|\'|\")?(OR|AND)(\s+|\+)1(\s+|\+)?=(\s+|\+)?1(\b|\'|\")?',
-        r'(\b|\'|\")?(UNION|SELECT|INSERT|UPDATE|DELETE|DROP|ALTER)(\s+|\+)',
-        r'--(\s+|\+)?$',
-        r';(\s+|\+)?(--|\#|\/\*)',
-        r'\/\*.*\*\/',
-    ]
-    
-    def matches(self, parsed_log):
-        if not parsed_log.request_path and not parsed_log.query:
+    def evaluate(self, log_entry):
+        if not log_entry.path:
             return False
             
-        content_to_check = ""
-        if parsed_log.request_path:
-            content_to_check += parsed_log.request_path
-        if parsed_log.query:
-            content_to_check += parsed_log.query
-            
-        # Check each pattern
-        for pattern in self.PATTERNS:
-            if re.search(pattern, content_to_check, re.IGNORECASE):
+        for pattern in self.patterns:
+            if re.search(pattern, log_entry.path, re.IGNORECASE):
                 return True
-                
         return False
 
-class XSSAttackRule(BaseRule):
-    """Rule to detect Cross-Site Scripting (XSS) attempts"""
+class BruteForceRule(Rule):
+    def __init__(self):
+        super().__init__(
+            "Brute Force Attempt", 
+            "Multiple failed login attempts detected from same IP", 
+            "high"
+        )
+        self.threshold = 5  # Number of failed attempts
+        self.timeframe = 5  # Minutes
     
-    # XSS patterns
-    PATTERNS = [
-        r'<script.*?>',
-        r'javascript:',
-        r'onerror\s*=',
-        r'onload\s*=',
-        r'eval\s*\(',
-        r'document\.cookie',
-        r'alert\s*\(',
-    ]
-    
-    def matches(self, parsed_log):
-        if not parsed_log.request_path and not parsed_log.normalized_data:
+    def evaluate(self, log_entry):
+        # Only check login URLs
+        if not log_entry.path or 'login' not in log_entry.path.lower():
             return False
             
-        content_to_check = ""
-        if parsed_log.request_path:
-            content_to_check += parsed_log.request_path
+        # Only consider failed login attempts (status codes 401, 403)
+        if log_entry.status_code not in [401, 403]:
+            return False
             
-        # Also check query params and POST data if available
-        normalized_data = parsed_log.normalized_data
-        if 'query_string' in normalized_data:
-            content_to_check += normalized_data['query_string']
-            
-        # Check each pattern
-        for pattern in self.PATTERNS:
-            if re.search(pattern, content_to_check, re.IGNORECASE):
-                return True
-                
-        return False
-
-class BruteForceRule(BaseRule):
-    """Rule to detect brute force login attempts"""
-    
-    def matches(self, parsed_log):
-        # This requires some state tracking and can't just check a single log
-        # We'll implement a simplified version that checks for 401/403 errors
+        # Use cache for faster lookups of recent failed attempts
+        cache_key = f"bruteforce_{log_entry.source_ip}"
+        failed_attempts = cache.get(cache_key, 0)
         
-        if not parsed_log.status_code:
-            return False
+        # Increment the counter
+        failed_attempts += 1
+        cache.set(cache_key, failed_attempts, 60*self.timeframe)
+        
+        # Check if threshold is exceeded
+        if failed_attempts >= self.threshold:
+            return True
             
-        # Match failed authentication attempts
-        if parsed_log.status_code in [401, 403]:
-            # Check if this IP has had multiple failures recently
-            recent_failures = ParsedLog.objects.filter(
-                source_ip=parsed_log.source_ip,
-                status_code__in=[401, 403],
-                timestamp__gte=timezone.now() - timezone.timedelta(minutes=10)
-            ).count()
-            
-            # Threshold of 5 failures in 10 minutes
-            return recent_failures >= 5
-                
-        return False
-
-class MaliciousRequestRule(BaseRule):
-    """Rule to detect malicious or suspicious requests"""
-    
-    # Suspicious patterns in URLs
-    PATTERNS = [
-        r'\/etc\/passwd',
-        r'\.\.\/\.\.\/\.\.', # Path traversal
-        r'cmd\.exe',
-        r'\.php\.suspected',
-        r'wp-config\.php',
-        r'\/\.git\/',
-        r'\/\.env',
-    ]
-    
-    def matches(self, parsed_log):
-        if not parsed_log.request_path:
-            return False
-            
-        # Check each pattern against the request path
-        for pattern in self.PATTERNS:
-            if re.search(pattern, parsed_log.request_path):
-                return True
-                
-        return False
-
-class ErrorRateRule(BaseRule):
-    """Rule to detect abnormal error rates"""
-    
-    def matches(self, parsed_log):
-        # This is a rate-based rule that requires checking multiple logs
-        if not parsed_log.status_code or parsed_log.status_code < 500:
-            return False
-            
-        # Check if there are many 5xx errors in the last few minutes
-        recent_errors = ParsedLog.objects.filter(
-            status_code__gte=500,
-            timestamp__gte=timezone.now() - timezone.timedelta(minutes=5)
+        # As a backup, also check the database
+        time_threshold = timezone.now() - timedelta(minutes=self.timeframe)
+        count = ParsedLog.objects.filter(
+            source_ip=log_entry.source_ip,
+            timestamp__gte=time_threshold,
+            path__icontains='login',
+            status_code__in=[401, 403]
         ).count()
         
-        # Threshold of 10 server errors in 5 minutes
-        return recent_errors >= 10
+        return count >= self.threshold
 
-class SlowQueryRule(BaseRule):
-    """Rule to detect abnormally slow database queries"""
+class RateLimitRule(Rule):
+    def __init__(self):
+        super().__init__(
+            "Rate Limit Exceeded", 
+            "Too many requests from the same IP in a short time period", 
+            "medium"
+        )
+        self.threshold = 100  # Number of requests
+        self.timeframe = 1    # Minutes
     
-    def matches(self, parsed_log):
-        # Check execution time threshold for MySQL queries
-        if 'mysql' not in parsed_log.normalized_data.get('log_type', ''):
-            return False
+    def evaluate(self, log_entry):
+        # Use cache for faster lookups
+        cache_key = f"ratelimit_{log_entry.source_ip}"
+        request_count = cache.get(cache_key, 0)
+        
+        # Increment the counter
+        request_count += 1
+        cache.set(cache_key, request_count, 60*self.timeframe)
+        
+        # Check if threshold is exceeded
+        if request_count >= self.threshold:
+            return True
             
-        execution_time = parsed_log.execution_time
-        if not execution_time:
-            return False
-            
-        # Threshold: 10 seconds is very slow for a query
-        return execution_time > 10.0
+        # As a backup, also check the database
+        time_threshold = timezone.now() - timedelta(minutes=self.timeframe)
+        count = ParsedLog.objects.filter(
+            source_ip=log_entry.source_ip,
+            timestamp__gte=time_threshold
+        ).count()
+        
+        return count >= self.threshold
 
 class RuleEngine:
-    """Engine that applies all active rules to logs"""
-    
     def __init__(self):
-        self.rules = {}
-        self.load_rules()
+        self.rules = [
+            SQLInjectionRule(),
+            BruteForceRule(),
+            RateLimitRule(),
+        ]
     
-    def load_rules(self):
-        """Load all active rules from the database"""
-        self.rules = {}
+    def analyze_log(self, log_entry):
+        """
+        Analyze a single log entry against all rules.
+        Returns a list of detected threats.
+        """
+        detected_threats = []
         
-        # Get all active rules from the database
-        db_rules = DetectionRule.objects.filter(active=True)
-        
-        for rule_config in db_rules:
+        for rule in self.rules:
             try:
-                # Create the appropriate rule instance based on type
-                if rule_config.rule_type == 'sql_injection':
-                    self.rules[rule_config.id] = SQLInjectionRule(rule_config)
-                elif rule_config.rule_type == 'xss':
-                    self.rules[rule_config.id] = XSSAttackRule(rule_config)
-                elif rule_config.rule_type == 'brute_force':
-                    self.rules[rule_config.id] = BruteForceRule(rule_config)
-                elif rule_config.rule_type == 'malicious_request':
-                    self.rules[rule_config.id] = MaliciousRequestRule(rule_config)
-                elif rule_config.rule_type == 'error_rate':
-                    self.rules[rule_config.id] = ErrorRateRule(rule_config)
-                elif rule_config.rule_type == 'slow_query':
-                    self.rules[rule_config.id] = SlowQueryRule(rule_config)
+                if rule.evaluate(log_entry):
+                    # Create a threat record
+                    threat = Threat.objects.create(
+                        rule_name=rule.name,
+                        description=rule.description,
+                        severity=rule.severity,
+                        source_ip=log_entry.source_ip,
+                        log_entry=log_entry
+                    )
+                    detected_threats.append(threat)
+                    logger.warning(
+                        f"Threat detected: {rule.name} from IP {log_entry.source_ip}"
+                    )
             except Exception as e:
-                print(f"Error loading rule {rule_config.name}: {str(e)}")
+                logger.error(f"Error evaluating rule {rule.name}: {e}")
+                
+        return detected_threats
     
-    def analyze_log(self, parsed_log):
-        """Analyze a parsed log against all active rules"""
-        matched_rules = []
-        threats = []
-        
-        for rule_id, rule in self.rules.items():
-            try:
-                if rule.matches(parsed_log):
-                    matched_rules.append(rule)
-                    threat = rule.create_threat(parsed_log)
-                    if threat:
-                        threats.append(threat)
-            except Exception as e:
-                print(f"Error applying rule {rule.name}: {str(e)}")
-        
-        return threats, matched_rules
+    def analyze_logs_batch(self, logs):
+        """
+        Analyze a batch of logs against all rules.
+        This is used for historical analysis.
+        """
+        all_threats = []
+        for log_entry in logs:
+            threats = self.analyze_log(log_entry)
+            all_threats.extend(threats)
+        return all_threats

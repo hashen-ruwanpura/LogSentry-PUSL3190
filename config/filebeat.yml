@@ -1,0 +1,17 @@
+filebeat.inputs:
+
+- type: log
+  enabled: true
+  paths:
+    - C:/Users/MSii/Desktop/Threat-Detection-and-Notification-Platform-by-Analyzing-Logs-of-Apache-and-MySQL-servers-/test_logs/*.log
+  fields:
+    log_type: apache
+    source: filebeat
+
+output.kafka:
+  hosts: ["localhost:9092"]
+  topic: "raw_logs"
+  codec.json:
+    pretty: false
+  
+logging.level: info

@@ -1,0 +1,1309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log Detection Platform - Reports</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css">
+    <style>
+        :root {
+            --primary-color: #17a2b8;
+            --primary-dark: #138496;
+            --secondary-color: #343a40;
+            --secondary-light: #495057;
+            --light-bg: #f8f9fa;
+            --border-color: #dee2e6;
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+            --info-color: #0dcaf0;
+            --text-muted: #6c757d;
+            --sidebar-width: 250px;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--light-bg);
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        /* Header styles */
+        header {
+            background-color: var(--secondary-color);
+            color: white;
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .header-content {
+            display: flex;
+            align-items: center;
+        }
+        
+        .header-actions {
+            display: flex;
+            align-items: center;
+        }
+        
+        .username {
+            margin-right: 15px;
+        }
+        
+        .logout-btn {
+            background-color: var(--danger-color);
+            color: white;
+            border: none;
+            padding: 0.3rem 0.7rem;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        
+        /* Main content layout */
+        .main-content {
+            display: flex;
+            margin-top: 4rem;
+            min-height: calc(100vh - 4rem);
+        }
+        
+        /* Sidebar styles */
+        .sidebar {
+            width: var(--sidebar-width);
+            background-color: var(--secondary-color);
+            color: white;
+            padding: 1rem 0;
+            position: fixed;
+            height: calc(100vh - 4rem);
+            overflow-y: auto;
+        }
+        
+        .sidebar-nav ul {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .sidebar-nav li {
+            margin-bottom: 0.5rem;
+        }
+        
+        .sidebar-nav a {
+            display: block;
+            padding: 0.8rem 1rem;
+            color: rgba(255,255,255,0.8);
+            text-decoration: none;
+            transition: all 0.3s;
+            border-left: 3px solid transparent;
+        }
+        
+        .sidebar-nav a:hover {
+            background-color: rgba(255,255,255,0.1);
+            color: white;
+        }
+        
+        .sidebar-nav li.active a {
+            background-color: rgba(255,255,255,0.1);
+            color: white;
+            border-left: 3px solid var(--primary-color);
+        }
+        
+        .sidebar-nav i {
+            margin-right: 10px;
+            width: 20px;
+            text-align: center;
+        }
+        
+        /* Content area */
+        .content {
+            flex: 1;
+            margin-left: var(--sidebar-width);
+            padding: 1.5rem;
+        }
+        
+        /* Page header */
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+        
+        .actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        /* Button styles */
+        .btn {
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            border: none;
+        }
+        
+        .btn i {
+            margin-right: 6px;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--primary-dark);
+        }
+        
+        .btn-secondary {
+            background-color: var(--secondary-light);
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background-color: var(--secondary-color);
+        }
+        
+        .btn-outline {
+            background-color: transparent;
+            color: var(--primary-color);
+            border: 1px solid var(--primary-color);
+        }
+        
+        .btn-outline:hover {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        /* Filter section */
+        .filters {
+            background-color: white;
+            padding: 1.2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 1.5rem;
+        }
+        
+        .filters-row {
+            display: flex;
+            flex-wrap: wrap;
+            margin: 0 -10px;
+        }
+        
+        .filter-group {
+            padding: 0 10px;
+            margin-bottom: 1rem;
+            flex: 1;
+            min-width: 200px;
+        }
+        
+        .filter-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+        
+        .filter-group select,
+        .filter-group input {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background-color: white;
+        }
+        
+        .filter-actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 1rem;
+            gap: 10px;
+        }
+        
+        /* Card styles */
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 1.5rem;
+        }
+        
+        .card-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            font-weight: 500;
+            font-size: 1.1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .card-body {
+            padding: 1.5rem;
+        }
+        
+        /* Chart container */
+        .chart-container {
+            height: 300px;
+            position: relative;
+            margin-bottom: 1.5rem;
+        }
+        
+        /* Stats cards */
+        .stats-row {
+            display: flex;
+            flex-wrap: wrap;
+            margin: 0 -10px;
+            margin-bottom: 1.5rem;
+        }
+        
+        .stat-card {
+            flex: 1;
+            min-width: 200px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 1.2rem;
+            margin: 0 10px 1rem;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .stat-icon {
+            position: absolute;
+            right: 1.2rem;
+            top: 1.2rem;
+            font-size: 1.8rem;
+            opacity: 0.2;
+        }
+        
+        .stat-title {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: 500;
+            margin-bottom: 0.3rem;
+        }
+        
+        .stat-change {
+            font-size: 0.8rem;
+        }
+        
+        .text-success {
+            color: var(--success-color);
+        }
+        
+        .text-danger {
+            color: var(--danger-color);
+        }
+        
+        /* Table styles */
+        .reports-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .reports-table th,
+        .reports-table td {
+            padding: 0.8rem 1rem;
+            border-bottom: 1px solid var(--border-color);
+            text-align: left;
+        }
+        
+        .reports-table th {
+            background-color: var(--light-bg);
+            font-weight: 500;
+        }
+        
+        .reports-table tr:hover {
+            background-color: var(--light-bg);
+        }
+        
+        /* Severity badges */
+        .severity-high {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            background-color: rgba(220, 53, 69, 0.1);
+            color: var(--danger-color);
+            border-radius: 4px;
+            font-weight: 500;
+        }
+        
+        .severity-medium {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            background-color: rgba(255, 193, 7, 0.1);
+            color: var(--warning-color);
+            border-radius: 4px;
+            font-weight: 500;
+        }
+        
+        .severity-low {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            background-color: rgba(13, 202, 240, 0.1);
+            color: var(--info-color);
+            border-radius: 4px;
+            font-weight: 500;
+        }
+        
+        /* Status badges */
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-weight: 500;
+            font-size: 0.75rem;
+        }
+        
+        .badge-success {
+            background-color: var(--success-color);
+            color: white;
+        }
+        
+        .badge-warning {
+            background-color: var(--warning-color);
+            color: #212529;
+        }
+        
+        .badge-danger {
+            background-color: var(--danger-color);
+            color: white;
+        }
+        
+        /* Responsive design */
+        @media (max-width: 992px) {
+            .sidebar {
+                width: 60px;
+                overflow: visible;
+            }
+            
+            .sidebar-nav span {
+                display: none;
+            }
+            
+            .sidebar-nav i {
+                margin-right: 0;
+                font-size: 1.2rem;
+            }
+            
+            .content {
+                margin-left: 60px;
+            }
+            
+            .sidebar-nav a {
+                text-align: center;
+                padding: 1rem 0.5rem;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .stats-row {
+                flex-direction: column;
+            }
+            
+            .stat-card {
+                width: calc(100% - 20px);
+            }
+            
+            .content {
+                padding: 1rem;
+            }
+        }
+        
+        /* Loading overlay */
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255,255,255,0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header>
+        <div class="header-content">
+            <div class="logo">
+                <h1>Log Detection Platform</h1>
+            </div>
+        </div>
+        <div class="header-actions">
+            <span class="username">{{ user.username }}</span>
+            <a href="{% url 'logout' %}" class="logout-btn">Logout</a>
+        </div>
+    </header>
+
+    <div class="main-content">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <nav class="sidebar-nav">
+                <ul>
+                    <li><a href="/dashboard/"><i class="fas fa-chart-line"></i> <span>Dashboard</span></a></li>
+                    <li><a href="/events/"><i class="fas fa-calendar-alt"></i> <span>Events</span></a></li>
+                    <li><a href="/apache-logs/"><i class="fas fa-server"></i> <span>Apache Logs</span></a></li>
+                    <li><a href="/mysql-logs/"><i class="fas fa-database"></i> <span>MySQL Logs</span></a></li>
+                    <li class="active"><a href="/reports/"><i class="fas fa-file-alt"></i> <span>AI Reports</span></a></li>
+                    <li><a href="/settings/"><i class="fas fa-cog"></i> <span>Settings</span></a></li>
+                    <li><a href="/explore-agent/"><i class="fas fa-robot"></i> <span>AI Assistant</span></a></li>
+                </ul>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="content">
+            <div class="page-header">
+                <h2>Security Reports</h2>
+                <div class="actions">
+                    <button id="refresh-btn" class="btn btn-outline"><i class="fas fa-sync-alt"></i> Refresh</button>
+                    <div class="dropdown">
+                        <button class="btn btn-primary" id="export-btn">
+                            <i class="fas fa-file-export"></i> Export Report
+                        </button>
+                        <div class="dropdown-menu" id="export-menu">
+                            <a href="#" data-format="pdf" class="export-option"><i class="far fa-file-pdf"></i> PDF</a>
+                            <a href="#" data-format="xlsx" class="export-option"><i class="far fa-file-excel"></i> Excel</a>
+                            <a href="#" data-format="csv" class="export-option"><i class="far fa-file-csv"></i> CSV</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="filters">
+                <form id="report-filters">
+                    <div class="filters-row">
+                        <div class="filter-group">
+                            <label for="dateRange">Date Range</label>
+                            <input type="text" id="dateRange" name="dateRange">
+                        </div>
+                        <div class="filter-group">
+                            <label for="logType">Log Type</label>
+                            <select id="logType" name="logType">
+                                <option value="all" selected>All Types</option>
+                                <option value="apache">Apache</option>
+                                <option value="mysql">MySQL</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="severityFilter">Severity</label>
+                            <select id="severityFilter" name="severity">
+                                <option value="all" selected>All Severities</option>
+                                <option value="high">High</option>
+                                <option value="medium">Medium</option>
+                                <option value="low">Low</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="filter-actions">
+                        <button type="button" id="reset-filters" class="btn btn-secondary">
+                            <i class="fas fa-undo"></i> Reset
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-filter"></i> Apply Filters
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Stats Overview -->
+            <div class="stats-row">
+                <div class="stat-card">
+                    <div class="stat-icon text-danger">
+                        <i class="fas fa-shield-virus"></i>
+                    </div>
+                    <div class="stat-title">Total Threats</div>
+                    <div class="stat-value" id="totalThreats">{{ stats.total_threats|default:"--" }}</div>
+                    <div class="stat-change text-success" id="threatChange">{{ stats.threat_change|default:"--" }}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon text-warning">
+                        <i class="fas fa-user-ninja"></i>
+                    </div>
+                    <div class="stat-title">Intrusion Attempts</div>
+                    <div class="stat-value" id="intrusionAttempts">{{ stats.intrusion_attempts|default:"--" }}</div>
+                    <div class="stat-change text-danger" id="intrusionChange">{{ stats.intrusion_change|default:"--" }}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon text-primary">
+                        <i class="fas fa-bug"></i>
+                    </div>
+                    <div class="stat-title">System Errors</div>
+                    <div class="stat-value" id="systemErrors">{{ stats.system_errors|default:"--" }}</div>
+                    <div class="stat-change text-success" id="errorChange">{{ stats.error_change|default:"--" }}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon text-success">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <div class="stat-title">Blocked Attacks</div>
+                    <div class="stat-value" id="blockedAttacks">{{ stats.blocked_attacks|default:"--" }}</div>
+                    <div class="stat-change text-success" id="blockedChange">{{ stats.blocked_change|default:"--" }}</div>
+                </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="row">
+                <!-- Threat Trend Chart -->
+                <div class="card">
+                    <div class="card-header">
+                        <span>Threat Trend</span>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-outline" data-period="day" id="dailyBtn">Daily</button>
+                            <button type="button" class="btn btn-outline" data-period="week" id="weeklyBtn">Weekly</button>
+                            <button type="button" class="btn btn-outline" data-period="month" id="monthlyBtn">Monthly</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="threatTrendChart"></canvas>
+                            <div class="loading-overlay" id="trend-loading" style="display: none;">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <!-- Severity Distribution -->
+                <div class="card">
+                    <div class="card-header">Severity Distribution</div>
+                    <div class="card-body">
+                        <div class="chart-container" style="height: 250px;">
+                            <canvas id="severityDistChart"></canvas>
+                            <div class="loading-overlay" id="severity-loading" style="display: none;">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row text-center" style="margin-top: 1rem;">
+                            <div class="col">
+                                <div class="severity-high"><i class="fas fa-exclamation-circle"></i> High</div>
+                                <strong id="highSeverityCount">{{ severity.high|default:"--" }}</strong>
+                            </div>
+                            <div class="col">
+                                <div class="severity-medium"><i class="fas fa-exclamation-triangle"></i> Medium</div>
+                                <strong id="mediumSeverityCount">{{ severity.medium|default:"--" }}</strong>
+                            </div>
+                            <div class="col">
+                                <div class="severity-low"><i class="fas fa-info-circle"></i> Low</div>
+                                <strong id="lowSeverityCount">{{ severity.low|default:"--" }}</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Threats Table -->
+            <div class="card">
+                <div class="card-header">
+                    <span>Recent Security Events</span>
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-outline" id="tableExportBtn">
+                            <i class="fas fa-download"></i> Export
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="reports-table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Source IP</th>
+                                    <th>Log Type</th>
+                                    <th>Threat Type</th>
+                                    <th>Severity</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recentThreatsTable">
+                                {% if recent_threats %}
+                                    {% for threat in recent_threats %}
+                                    <tr>
+                                        <td>{{ threat.timestamp }}</td>
+                                        <td>{{ threat.source_ip }}</td>
+                                        <td>{{ threat.log_type }}</td>
+                                        <td>{{ threat.threat_type }}</td>
+                                        <td class="severity-{{ threat.severity|lower }}">{{ threat.severity }}</td>
+                                        <td>
+                                            <span class="badge badge-{% if threat.status == 'Resolved' %}success{% elif threat.status == 'In Progress' %}warning{% else %}danger{% endif %}">
+                                                {{ threat.status }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-primary view-details" data-id="{{ threat.id }}">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="7" class="text-center">No threats found</td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Threat Detail Modal -->
+    <div class="modal fade" id="threatDetailModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Threat Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Basic Information</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <th width="40%">Timestamp</th>
+                                    <td id="modal-timestamp"></td>
+                                </tr>
+                                <tr>
+                                    <th>Source IP</th>
+                                    <td id="modal-source"></td>
+                                </tr>
+                                <tr>
+                                    <th>Country</th>
+                                    <td id="modal-country"></td>
+                                </tr>
+                                <tr>
+                                    <th>Threat Type</th>
+                                    <td id="modal-threat-type"></td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Additional Details</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <th width="40%">Log Type</th>
+                                    <td id="modal-log-type"></td>
+                                </tr>
+                                <tr>
+                                    <th>Severity</th>
+                                    <td id="modal-severity"></td>
+                                </tr>
+                                <tr>
+                                    <th>Status</th>
+                                    <td id="modal-status"></td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <h6>Raw Log</h6>
+                        <pre id="modal-raw-log" class="p-3 bg-light" style="max-height: 200px; overflow-y: auto;"></pre>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/momentjs/latest/moment.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log("Document loaded, initializing reports dashboard...");
+            
+            // Initialize date range picker
+            $('#dateRange').daterangepicker({
+                ranges: {
+                   'Today': [moment(), moment()],
+                   'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+                   'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+                   'Last 30 Days': [moment().subtract(29, 'days'), moment()],
+                   'This Month': [moment().startOf('month'), moment().endOf('month')],
+                   'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+                },
+                startDate: moment().subtract(30, 'days'),
+                endDate: moment(),
+                maxDate: moment(),
+                locale: {
+                    format: 'YYYY-MM-DD'
+                }
+            });
+            
+            // Initialize charts with existing data if available
+            initializeCharts();
+            
+            // Set up event listeners
+            document.getElementById('report-filters').addEventListener('submit', function(e) {
+                e.preventDefault();
+                loadDashboardData();
+            });
+            
+            document.getElementById('reset-filters').addEventListener('click', function() {
+                resetFilters();
+            });
+            
+            document.getElementById('refresh-btn').addEventListener('click', function() {
+                loadDashboardData();
+            });
+            
+            // Set up period buttons for threat trend chart
+            document.querySelectorAll('[data-period]').forEach(button => {
+                button.addEventListener('click', function() {
+                    // Remove active class from all buttons
+                    document.querySelectorAll('[data-period]').forEach(btn => {
+                        btn.classList.remove('active');
+                    });
+                    
+                    // Add active class to clicked button
+                    this.classList.add('active');
+                    
+                    const period = this.getAttribute('data-period');
+                    updateThreatChart(period);
+                });
+            });
+            
+            // Add default active class to daily button
+            document.getElementById('dailyBtn').classList.add('active');
+            
+            // Export button functionality
+            document.getElementById('export-btn').addEventListener('click', function() {
+                const menu = document.getElementById('export-menu');
+                menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+            });
+            
+            // Export options
+            document.querySelectorAll('.export-option').forEach(option => {
+                option.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const format = this.getAttribute('data-format');
+                    exportReport(format);
+                });
+            });
+            
+            // View details buttons
+            document.querySelectorAll('.view-details').forEach(button => {
+                button.addEventListener('click', function() {
+                    const threatId = this.getAttribute('data-id');
+                    showThreatDetails(threatId);
+                });
+            });
+            
+            // Table export button
+            document.getElementById('tableExportBtn').addEventListener('click', function() {
+                exportTableData();
+            });
+        });
+        
+        function initializeCharts() {
+            // Initialize threat trend chart with dummy data
+            const trendCtx = document.getElementById('threatTrendChart').getContext('2d');
+            window.threatTrendChart = new Chart(trendCtx, {
+                type: 'line',
+                data: {
+                    labels: ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Day 6', 'Day 7'],
+                    datasets: [
+                        {
+                            label: 'High',
+                            data: [3, 5, 2, 6, 4, 7, 3],
+                            borderColor: 'rgba(220, 53, 69, 1)',
+                            backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.4,
+                            fill: true
+                        },
+                        {
+                            label: 'Medium',
+                            data: [5, 7, 4, 8, 6, 9, 5],
+                            borderColor: 'rgba(255, 193, 7, 1)',
+                            backgroundColor: 'rgba(255, 193, 7, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.4,
+                            fill: true
+                        },
+                        {
+                            label: 'Low',
+                            data: [7, 9, 6, 10, 8, 11, 7],
+                            borderColor: 'rgba(13, 110, 253, 1)',
+                            backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.4,
+                            fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Initialize severity distribution chart
+            const severityCtx = document.getElementById('severityDistChart').getContext('2d');
+            window.severityDistChart = new Chart(severityCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['High', 'Medium', 'Low'],
+                    datasets: [{
+                        data: [15, 25, 60],
+                        backgroundColor: [
+                            'rgba(220, 53, 69, 0.8)',
+                            'rgba(255, 193, 7, 0.8)',
+                            'rgba(13, 110, 253, 0.8)'
+                        ],
+                        borderColor: [
+                            'rgba(220, 53, 69, 1)',
+                            'rgba(255, 193, 7, 1)',
+                            'rgba(13, 110, 253, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+            
+            // Load real data after initialization
+            loadDashboardData();
+        }
+        
+        // Get filter values
+        function getFilters() {
+            const dateRange = $('#dateRange').data('daterangepicker');
+            
+            // Default dates if daterangepicker is not initialized yet
+            let startDate = moment().subtract(30, 'days').format('YYYY-MM-DD');
+            let endDate = moment().format('YYYY-MM-DD');
+            
+            // If daterangepicker is initialized, use its values
+            if (dateRange) {
+                startDate = dateRange.startDate.format('YYYY-MM-DD');
+                endDate = dateRange.endDate.format('YYYY-MM-DD');
+            }
+            
+            const logType = document.getElementById('logType').value || 'all';
+            const severity = document.getElementById('severityFilter').value || 'all';
+            
+            return {
+                startDate: startDate,
+                endDate: endDate,
+                logType: logType,
+                severity: severity
+            };
+        }
+        
+        // Load dashboard data from API
+        function loadDashboardData() {
+            showLoaders();
+            
+            const filters = getFilters();
+            
+            fetch('/api/reports/dashboard/', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify(filters)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Server responded with ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                updateDashboard(data);
+                hideLoaders();
+            })
+            .catch(error => {
+                console.error('Error loading dashboard data:', error);
+                hideLoaders();
+                alert('Error loading dashboard data: ' + error.message);
+            });
+        }
+        
+        // Update dashboard with data
+        function updateDashboard(data) {
+            // Update stats
+            document.getElementById('totalThreats').textContent = data.stats.totalThreats;
+            document.getElementById('intrusionAttempts').textContent = data.stats.intrusionAttempts;
+            document.getElementById('systemErrors').textContent = data.stats.systemErrors;
+            document.getElementById('blockedAttacks').textContent = data.stats.blockedAttacks;
+            
+            document.getElementById('threatChange').textContent = `${data.stats.threatChange}% vs. previous period`;
+            document.getElementById('threatChange').className = data.stats.threatChange < 0 ? 'stat-change text-success' : 'stat-change text-danger';
+            
+            document.getElementById('intrusionChange').textContent = `${data.stats.intrusionChange}% vs. previous period`;
+            document.getElementById('intrusionChange').className = data.stats.intrusionChange < 0 ? 'stat-change text-success' : 'stat-change text-danger';
+            
+            document.getElementById('errorChange').textContent = `${data.stats.errorChange}% vs. previous period`;
+            document.getElementById('errorChange').className = data.stats.errorChange < 0 ? 'stat-change text-success' : 'stat-change text-danger';
+            
+            document.getElementById('blockedChange').textContent = `${data.stats.blockedChange}% vs. previous period`;
+            document.getElementById('blockedChange').className = data.stats.blockedChange < 0 ? 'stat-change text-danger' : 'stat-change text-success';
+            
+            // Update severity counts
+            document.getElementById('highSeverityCount').textContent = data.severity.high;
+            document.getElementById('mediumSeverityCount').textContent = data.severity.medium;
+            document.getElementById('lowSeverityCount').textContent = data.severity.low;
+            
+            // Update charts
+            updateThreatTrendChart(data.threatTrend);
+            updateSeverityDistChart(data.severity);
+            
+            // Update recent threats table
+            updateRecentThreatsTable(data.recentThreats);
+        }
+        
+        // Update threat trend chart
+        function updateThreatTrendChart(trendData) {
+            if (window.threatTrendChart) {
+                window.threatTrendChart.data.labels = trendData.labels;
+                window.threatTrendChart.data.datasets[0].data = trendData.high;
+                window.threatTrendChart.data.datasets[1].data = trendData.medium;
+                window.threatTrendChart.data.datasets[2].data = trendData.low;
+                window.threatTrendChart.update();
+            }
+        }
+        
+        // Update severity distribution chart
+        function updateSeverityDistChart(severityData) {
+            if (window.severityDistChart) {
+                window.severityDistChart.data.datasets[0].data = [
+                    severityData.high,
+                    severityData.medium,
+                    severityData.low
+                ];
+                window.severityDistChart.update();
+            }
+        }
+        
+        // Update recent threats table
+        function updateRecentThreatsTable(threats) {
+            const tableBody = document.getElementById('recentThreatsTable');
+            tableBody.innerHTML = '';
+            
+            if (threats.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="7" class="text-center">No threats found</td></tr>';
+                return;
+            }
+            
+            threats.forEach(threat => {
+                const tr = document.createElement('tr');
+                
+                const formattedDate = new Date(threat.timestamp).toLocaleString();
+                
+                // Severity class
+                let severityClass = '';
+                if (threat.severity === 'High') {
+                    severityClass = 'severity-high';
+                } else if (threat.severity === 'Medium') {
+                    severityClass = 'severity-medium';
+                } else {
+                    severityClass = 'severity-low';
+                }
+                
+                // Status badge
+                let statusBadge = '';
+                if (threat.status === 'Resolved') {
+                    statusBadge = '<span class="badge badge-success">Resolved</span>';
+                } else if (threat.status === 'In Progress') {
+                    statusBadge = '<span class="badge badge-warning">In Progress</span>';
+                } else {
+                    statusBadge = '<span class="badge badge-danger">Open</span>';
+                }
+                
+                tr.innerHTML = `
+                    <td>${formattedDate}</td>
+                    <td>${threat.sourceIp}</td>
+                    <td>${threat.logType}</td>
+                    <td>${threat.threatType}</td>
+                    <td class="${severityClass}">${threat.severity}</td>
+                    <td>${statusBadge}</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary view-details" data-id="${threat.id}">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </td>
+                `;
+                
+                tableBody.appendChild(tr);
+            });
+            
+            // Add event listeners to view details buttons
+            document.querySelectorAll('.view-details').forEach(button => {
+                button.addEventListener('click', function() {
+                    const threatId = this.getAttribute('data-id');
+                    showThreatDetails(threatId);
+                });
+            });
+        }
+        
+        // Show threat details in modal
+        function showThreatDetails(threatId) {
+            fetch(`/api/reports/threat-details/${threatId}/`, {
+                method: 'GET',
+                credentials: 'same-origin'
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Server responded with ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Populate modal with data
+                document.getElementById('modal-timestamp').textContent = new Date(data.timestamp).toLocaleString();
+                document.getElementById('modal-source').textContent = data.sourceIp;
+                document.getElementById('modal-country').textContent = data.country || 'Unknown';
+                document.getElementById('modal-threat-type').textContent = data.threatType;
+                document.getElementById('modal-log-type').textContent = data.logType;
+                document.getElementById('modal-severity').textContent = data.severity;
+                document.getElementById('modal-status').textContent = data.status;
+                document.getElementById('modal-raw-log').textContent = data.rawLog;
+                
+                // Show modal
+                const modal = new bootstrap.Modal(document.getElementById('threatDetailModal'));
+                modal.show();
+            })
+            .catch(error => {
+                console.error('Error fetching threat details:', error);
+                alert('Failed to load threat details. Please try again.');
+            });
+        }
+        
+        // Update threat trend chart based on period
+        function updateThreatChart(period) {
+            const filters = getFilters();
+            filters.groupBy = period;
+            
+            document.getElementById('trend-loading').style.display = 'flex';
+            
+            fetch('/api/reports/threat-trend/', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify(filters)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Server responded with ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                updateThreatTrendChart(data);
+                document.getElementById('trend-loading').style.display = 'none';
+            })
+            .catch(error => {
+                console.error('Error updating threat chart:', error);
+                document.getElementById('trend-loading').style.display = 'none';
+                alert('Failed to update chart. Please try again later.');
+            });
+        }
+        
+        // Export report
+        function exportReport(format) {
+            const filters = getFilters();
+            
+            // Create form for POST request
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/api/reports/export/';
+            form.target = '_blank';
+            
+            // Add CSRF token
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrfmiddlewaretoken';
+            csrfInput.value = getCsrfToken();
+            form.appendChild(csrfInput);
+            
+            // Add filters
+            const startDateInput = document.createElement('input');
+            startDateInput.type = 'hidden';
+            startDateInput.name = 'startDate';
+            startDateInput.value = filters.startDate;
+            form.appendChild(startDateInput);
+            
+            const endDateInput = document.createElement('input');
+            endDateInput.type = 'hidden';
+            endDateInput.name = 'endDate';
+            endDateInput.value = filters.endDate;
+            form.appendChild(endDateInput);
+            
+            const logTypeInput = document.createElement('input');
+            logTypeInput.type = 'hidden';
+            logTypeInput.name = 'logType';
+            logTypeInput.value = filters.logType;
+            form.appendChild(logTypeInput);
+            
+            const severityInput = document.createElement('input');
+            severityInput.type = 'hidden';
+            severityInput.name = 'severity';
+            severityInput.value = filters.severity;
+            form.appendChild(severityInput);
+            
+            // Add format
+            const formatInput = document.createElement('input');
+            formatInput.type = 'hidden';
+            formatInput.name = 'format';
+            formatInput.value = format;
+            form.appendChild(formatInput);
+            
+            // Submit form
+            document.body.appendChild(form);
+            form.submit();
+            document.body.removeChild(form);
+        }
+        
+        // Export table data
+        function exportTableData() {
+            const filters = getFilters();
+            filters.tableOnly = true;
+            
+            // Create form for POST request
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/api/reports/export-table/';
+            form.target = '_blank';
+            
+            // Add CSRF token
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrfmiddlewaretoken';
+            csrfInput.value = getCsrfToken();
+            form.appendChild(csrfInput);
+            
+            // Add filters
+            const filtersInput = document.createElement('input');
+            filtersInput.type = 'hidden';
+            filtersInput.name = 'filters';
+            filtersInput.value = JSON.stringify(filters);
+            form.appendChild(filtersInput);
+            
+            // Submit form
+            document.body.appendChild(form);
+            form.submit();
+            document.body.removeChild(form);
+        }
+        
+        // Reset filters
+        function resetFilters() {
+            // Reset date range picker
+            const dateRange = $('#dateRange').data('daterangepicker');
+            dateRange.setStartDate(moment().subtract(30, 'days'));
+            dateRange.setEndDate(moment());
+            
+            // Reset select inputs
+            document.getElementById('logType').value = 'all';
+            document.getElementById('severityFilter').value = 'all';
+            
+            // Load data with default filters
+            loadDashboardData();
+        }
+        
+        // Show loaders
+        function showLoaders() {
+            document.getElementById('trend-loading').style.display = 'flex';
+            document.getElementById('severity-loading').style.display = 'flex';
+            
+            document.getElementById('recentThreatsTable').innerHTML = `
+                <tr>
+                    <td colspan="7" class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }
+        
+        // Hide loaders
+        function hideLoaders() {
+            document.getElementById('trend-loading').style.display = 'none';
+            document.getElementById('severity-loading').style.display = 'none';
+        }
+        
+        // Helper function to get CSRF token
+        function getCsrfToken() {
+            return document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+                   document.cookie.replace(/(?:(?:^|.*;\s*)csrftoken\s*\=\s*([^;]*).*$)|^.*$/, "$1");
+        }
+    </script>
+</body>
+</html>

@@ -241,7 +241,7 @@ def mysql_logs_view(request):
 @login_required
 def reports_view(request):
     """View for AI reports page"""
-    return render(request, 'authentication/reports.html')
+    return render(request, 'frontend/templates/reports.html')
 
 @login_required
 def settings_view(request):

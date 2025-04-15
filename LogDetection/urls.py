@@ -30,6 +30,7 @@ from authentication import views_admin_settings
 from analytics import views as analytics_views
 from django.shortcuts import redirect
 from authentication import views_admin
+from authentication import views_reports  # Import the new views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -112,6 +113,15 @@ urlpatterns = [
     path('api/admin/export-report/', views_admin.export_report, name='export_report'),
     
     path('', home),  # Add this line to handle the root URL
+
+    # User Reports View
+    path('reports/', views_reports.reports_view, name='reports'),
+    # Reports API Endpoints
+    path('api/reports/dashboard/', views_reports.reports_dashboard_data, name='reports_dashboard_data'),
+    path('api/reports/threat-trend/', views_reports.threat_trend_data, name='threat_trend_data'),
+    path('api/reports/threat-details/<int:threat_id>/', views_reports.threat_details, name='threat_details'),
+    path('api/reports/export/', views_reports.export_report, name='export_report'),
+    path('api/reports/export-table/', views_reports.export_table_data, name='export_table_data'),
 ]
 
 if settings.DEBUG:
