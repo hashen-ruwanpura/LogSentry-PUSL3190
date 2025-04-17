@@ -155,3 +155,11 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = ''  
 EMAIL_HOST_PASSWORD = ''
+
+
+# Threat Intelligence API keys - replace with your actual API keys
+# ABUSEIPDB_API_KEY = 'your-api-key'
+# VIRUSTOTAL_API_KEY = 'your-api-key'
+
+# Mock data for testing without API keys
+USE_MOCK_THREAT_INTELLIGENCE = True

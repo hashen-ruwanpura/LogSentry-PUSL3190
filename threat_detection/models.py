@@ -1,52 +1,111 @@
 from django.db import models
 from django.utils import timezone
-from log_ingestion.models import ParsedLog
+from django.contrib.auth.models import User
+import logging
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 class DetectionRule(models.Model):
-    """Rule for detecting threats in logs"""
+    """Model for detection rules"""
     SEVERITY_CHOICES = [
-        ('low', 'Low'),
-        ('medium', 'Medium'),
-        ('high', 'High'),
         ('critical', 'Critical'),
+        ('high', 'High'),
+        ('medium', 'Medium'),
+        ('low', 'Low'),
     ]
     
     name = models.CharField(max_length=100)
     description = models.TextField()
-    rule_type = models.CharField(max_length=50)  # sql_injection, brute_force, etc.
-    pattern = models.TextField(blank=True, null=True)  # Regex pattern or other criteria
+    rule_type = models.CharField(max_length=50, db_index=True)
+    pattern = models.TextField(blank=True, null=True)
     severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES, default='medium')
-    mitre_technique = models.CharField(max_length=20, blank=True, null=True)  # MITRE ATT&CK technique ID
-    active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    enabled = models.BooleanField(default=True)
+    
+    # Added fields for MITRE ATT&CK integration
+    mitre_technique_id = models.CharField(max_length=20, blank=True, null=True)
+    mitre_tactic = models.CharField(max_length=50, blank=True, null=True)
+    
+    # Recommendation field - consolidate instead of creating a separate table
+    recommendation_template = models.TextField(blank=True, null=True, 
+                                              help_text="Template with {placeholders} for dynamic recommendations")
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['rule_type']),
+            models.Index(fields=['severity']),
+        ]
     
     def __str__(self):
-        return f"{self.name} ({self.severity})"
+        return f"{self.name} ({self.rule_type})"
+
 
 class Threat(models.Model):
-    """Detected threat based on a rule"""
+    """Model for detected threats"""
     STATUS_CHOICES = [
         ('new', 'New'),
         ('investigating', 'Investigating'),
-        ('confirmed', 'Confirmed'),
-        ('false_positive', 'False Positive'),
         ('resolved', 'Resolved'),
+        ('false_positive', 'False Positive'),
+        ('ignored', 'Ignored'),
     ]
     
-    rule = models.ForeignKey(DetectionRule, on_delete=models.CASCADE)
-    parsed_log = models.ForeignKey(ParsedLog, on_delete=models.CASCADE)
-    severity = models.CharField(max_length=10, choices=DetectionRule.SEVERITY_CHOICES)
-    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='new')
-    description = models.TextField()
-    source_ip = models.GenericIPAddressField(blank=True, null=True)
-    user_id = models.CharField(max_length=255, blank=True, null=True)
-    mitre_technique = models.CharField(max_length=20, blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    rule = models.ForeignKey(DetectionRule, on_delete=models.SET_NULL, null=True, related_name='threats')
+    parsed_log = models.ForeignKey('log_ingestion.ParsedLog', on_delete=models.SET_NULL, null=True)
     
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    severity = models.CharField(max_length=10, choices=DetectionRule.SEVERITY_CHOICES, db_index=True)
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='new', db_index=True)
+    
+    description = models.TextField()
+    source_ip = models.GenericIPAddressField(blank=True, null=True, db_index=True)
+    user_id = models.CharField(max_length=100, blank=True, null=True)
+    affected_system = models.CharField(max_length=100, blank=True, null=True)
+    
+    # Fields for MITRE ATT&CK
+    mitre_technique = models.CharField(max_length=20, blank=True, null=True)
+    mitre_tactic = models.CharField(max_length=50, blank=True, null=True)
+    
+    # Analysis and intelligence data
+    analysis_data = models.JSONField(blank=True, null=True)
+    
+    # For efficiency, include the recommendation directly
+    recommendation = models.TextField(blank=True, null=True)
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['created_at']),
+            models.Index(fields=['severity', 'status']),
+            models.Index(fields=['source_ip']),
+        ]
+        
     def __str__(self):
-        return f"{self.rule.name} - {self.created_at}"
+        return f"Threat {self.id}: {self.description[:50]}"
+    
+    def get_recommendation(self):
+        """Get or generate recommendation"""
+        if self.recommendation:
+            return self.recommendation
+            
+        if self.rule and self.rule.recommendation_template:
+            # Replace placeholders with context
+            recommendation = self.rule.recommendation_template
+            context = {
+                'ip': self.source_ip or 'unknown',
+                'user': self.user_id or 'unknown',
+                'path': self.parsed_log.request_path if self.parsed_log else 'unknown',
+                'pattern': self.rule.pattern or 'unknown',
+                'timestamp': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            }
+            
+            for key, value in context.items():
+                recommendation = recommendation.replace(f"{{{key}}}", str(value))
+            
+            return recommendation
+        
+        return "No specific recommendation available."
+
 
 class Incident(models.Model):
     """Security incident composed of multiple related threats"""
@@ -74,6 +133,7 @@ class Incident(models.Model):
     
     def __str__(self):
         return f"{self.name} ({self.status})"
+
 
 class BlacklistedIP(models.Model):
     """IPs blacklisted due to malicious activity"""

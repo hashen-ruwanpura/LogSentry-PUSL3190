@@ -3,16 +3,34 @@ from .models import DetectionRule, Threat, Incident, BlacklistedIP
 
 @admin.register(DetectionRule)
 class DetectionRuleAdmin(admin.ModelAdmin):
-    list_display = ('name', 'rule_type', 'severity', 'active', 'created_at')
-    list_filter = ('rule_type', 'severity', 'active')
-    search_fields = ('name', 'description')
+    list_display = ['name', 'rule_type', 'severity', 'enabled']  # Changed 'active' to 'enabled' and removed 'created_at'
+    list_filter = ['severity', 'rule_type', 'enabled']  # Changed 'active' to 'enabled'
+    search_fields = ['name', 'description', 'pattern']
 
 @admin.register(Threat)
 class ThreatAdmin(admin.ModelAdmin):
-    list_display = ('rule', 'source_ip', 'severity', 'status', 'created_at')
-    list_filter = ('severity', 'status', 'rule')
-    search_fields = ('source_ip', 'user_id', 'description')
-    readonly_fields = ('parsed_log', 'created_at')
+    list_display = ['id', 'rule', 'severity', 'status', 'source_ip', 'created_at']
+    list_filter = ['severity', 'status', 'created_at']
+    search_fields = ['description', 'source_ip', 'user_id']
+    readonly_fields = ['created_at', 'updated_at']
+    
+    fieldsets = [
+        ('Basic Information', {
+            'fields': ['rule', 'severity', 'status', 'description']
+        }),
+        ('Source Details', {
+            'fields': ['source_ip', 'user_id', 'affected_system']
+        }),
+        ('MITRE ATT&CK', {
+            'fields': ['mitre_technique', 'mitre_tactic']
+        }),
+        ('Analysis', {
+            'fields': ['analysis_data', 'recommendation']
+        }),
+        ('Timestamps', {
+            'fields': ['created_at', 'updated_at']
+        }),
+    ]
 
 @admin.register(Incident)
 class IncidentAdmin(admin.ModelAdmin):
