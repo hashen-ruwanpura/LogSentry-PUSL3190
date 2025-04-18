@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Alert Details{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Alert Details</h2>
+        <div>
+            <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header bg-{{ alert.severity }}{% if alert.severity == 'low' %} text-dark{% else %} text-white{% endif %}">
+            <h4>{{ alert.description }}</h4>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>Alert Information</h5>
+                    <table class="table">
+                        <tr>
+                            <th>Severity</th>
+                            <td>
+                                <span class="badge bg-{{ alert.severity }}{% if alert.severity == 'low' %} text-dark{% endif %}">
+                                    {{ alert.severity|upper }}
+                                </span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Created At</th>
+                            <td>{{ alert.created_at }}</td>
+                        </tr>
+                        <tr>
+                            <th>Status</th>
+                            <td>
+                                <span class="badge bg-{% if alert.status == 'new' %}primary{% elif alert.status == 'investigating' %}warning{% else %}success{% endif %}">
+                                    {{ alert.status|upper }}
+                                </span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Source IP</th>
+                            <td>{{ alert.source_ip }}</td>
+                        </tr>
+                        <tr>
+                            <th>User ID</th>
+                            <td>{{ alert.user_id|default:"N/A" }}</td>
+                        </tr>
+                        <tr>
+                            <th>Affected System</th>
+                            <td>{{ alert.affected_system }}</td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <div class="col-md-6">
+                    <h5>MITRE ATT&CK Information</h5>
+                    <table class="table">
+                        <tr>
+                            <th>Tactic</th>
+                            <td>{{ alert.mitre_tactic }}</td>
+                        </tr>
+                        <tr>
+                            <th>Technique</th>
+                            <td>{{ alert.mitre_technique }}</td>
+                        </tr>
+                        <tr>
+                            <th>Rule</th>
+                            <td>{{ alert.rule.name }}</td>
+                        </tr>
+                        <tr>
+                            <th>Rule Description</th>
+                            <td>{{ alert.rule.description }}</td>
+                        </tr>
+                    </table>
+                    
+                    <h5 class="mt-4">Recommendation</h5>
+                    <div class="alert alert-info">
+                        {{ alert.recommendation }}
+                    </div>
+                </div>
+            </div>
+            
+            {% if log_info %}
+            <div class="row mt-4">
+                <div class="col-12">
+                    <h5>Associated Log Information</h5>
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <tr>
+                                <th>Timestamp</th>
+                                <td>{{ log_info.timestamp }}</td>
+                                <th>Source IP</th>
+                                <td>{{ log_info.source_ip }}</td>
+                            </tr>
+                            
+                            {% if log_info.source_type == 'apache' %}
+                            <tr>
+                                <th>Request Method</th>
+                                <td>{{ log_info.request_method }}</td>
+                                <th>Path</th>
+                                <td>{{ log_info.request_path }}</td>
+                            </tr>
+                            <tr>
+                                <th>Status Code</th>
+                                <td>{{ log_info.status_code }}</td>
+                                <th>User Agent</th>
+                                <td>{{ log_info.user_agent }}</td>
+                            </tr>
+                            {% elif log_info.source_type == 'mysql' %}
+                            <tr>
+                                <th>Query</th>
+                                <td colspan="3">{{ log_info.query }}</td>
+                            </tr>
+                            <tr>
+                                <th>Execution Time</th>
+                                <td>{{ log_info.execution_time }} seconds</td>
+                                <th></th>
+                                <td></td>
+                            </tr>
+                            {% endif %}
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

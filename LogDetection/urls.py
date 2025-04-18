@@ -43,9 +43,11 @@ urlpatterns = [
     ), name='logout'),
     path('profile/', views.profile_view, name='profile'),
     path('contact/', views.contact_view, name='contact'),
-    path('api-auth/', include('rest_framework.urls')),
-    path('api/dashboard/', include('dashboard.urls')),
+
     path('dashboard/', views.dashboard_view, name='dashboard'),
+    path('explore_logs/', views.explore_logs, name='explore_logs'),
+    path('generate_report/', views.generate_report, name='generate_report'),
+    path('alert/<int:alert_id>/', views.alert_detail, name='alert_detail'),
 
     path('events/', views.events_view, name='events'),
     path('events/export/', views.export_events, name='export_events'),

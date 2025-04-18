@@ -41,7 +41,6 @@ INSTALLED_APPS = [
     'threat_detection',
     'incident_detection',
     'alerts',
-    'dashboard',
     'reports',
     'authentication',
     'smtp_integration',

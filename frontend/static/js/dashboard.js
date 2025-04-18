@@ -26,44 +26,36 @@ document.addEventListener('DOMContentLoaded', function() {
             // Add spinning animation to refresh icon
             this.querySelector('i').classList.add('fa-spin');
             
-            // Simulate refresh delay
+            // Reload the page to get fresh data
             setTimeout(() => {
-                // Reload the page or fetch new data via AJAX
                 window.location.reload();
-            }, 1000);
+            }, 800);
         });
     }
     
-    // Initialize charts if they exist
-    initCharts();
+    // Initialize charts based on data from backend
+    initChartsWithBackendData();
 });
 
-function initCharts() {
-    // Alerts Chart
+function initChartsWithBackendData() {
+    // Alert Evolution Chart - using data from backend
     const alertsChartEl = document.getElementById('alerts-chart');
     if (alertsChartEl) {
+        // Get data from template variables injected by Django
+        const chartLabels = JSON.parse(document.getElementById('chart-labels-data').textContent);
+        const alertsData = JSON.parse(document.getElementById('alerts-data').textContent);
+        
         new Chart(alertsChartEl, {
             type: 'line',
             data: {
-                labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                labels: chartLabels,
                 datasets: [{
-                    label: 'Server1',
-                    data: [65, 59, 80, 81, 56, 55],
+                    label: 'Security Alerts',
+                    data: alertsData,
                     borderColor: '#3f51b5',
-                    tension: 0.1,
-                    fill: false
-                }, {
-                    label: 'Server2',
-                    data: [28, 48, 40, 19, 86, 27],
-                    borderColor: '#f50057',
-                    tension: 0.1,
-                    fill: false
-                }, {
-                    label: 'Server3',
-                    data: [33, 25, 35, 51, 54, 76],
-                    borderColor: '#4caf50',
-                    tension: 0.1,
-                    fill: false
+                    backgroundColor: 'rgba(63, 81, 181, 0.1)',
+                    tension: 0.3,
+                    fill: true
                 }]
             },
             options: {
@@ -78,29 +70,28 @@ function initCharts() {
         });
     }
     
-    // MITRE Chart
+    // MITRE ATT&CK Tactics Chart - using data from backend
     const mitreChartEl = document.getElementById('mitre-chart');
     if (mitreChartEl) {
+        // Get data from template variables injected by Django
+        const mitreLabels = JSON.parse(document.getElementById('mitre-labels-data').textContent);
+        const mitreData = JSON.parse(document.getElementById('mitre-data').textContent);
+        
         new Chart(mitreChartEl, {
-            type: 'bar',
+            type: 'doughnut',
             data: {
-                labels: ['Initial Access', 'Execution', 'Persistence', 'Privilege Escalation', 'Defense Evasion'],
+                labels: mitreLabels,
                 datasets: [{
-                    label: 'Frequency',
-                    data: [12, 19, 8, 5, 2],
+                    data: mitreData,
                     backgroundColor: [
-                        'rgba(255, 99, 132, 0.2)',
-                        'rgba(54, 162, 235, 0.2)',
-                        'rgba(255, 206, 86, 0.2)',
-                        'rgba(75, 192, 192, 0.2)',
-                        'rgba(153, 102, 255, 0.2)'
-                    ],
-                    borderColor: [
-                        'rgba(255, 99, 132, 1)',
-                        'rgba(54, 162, 235, 1)',
-                        'rgba(255, 206, 86, 1)',
-                        'rgba(75, 192, 192, 1)',
-                        'rgba(153, 102, 255, 1)'
+                        'rgba(255, 99, 132, 0.7)',
+                        'rgba(54, 162, 235, 0.7)',
+                        'rgba(255, 206, 86, 0.7)',
+                        'rgba(75, 192, 192, 0.7)',
+                        'rgba(153, 102, 255, 0.7)',
+                        'rgba(255, 159, 64, 0.7)',
+                        'rgba(199, 199, 199, 0.7)',
+                        'rgba(83, 102, 255, 0.7)'
                     ],
                     borderWidth: 1
                 }]
@@ -108,12 +99,21 @@ function initCharts() {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        beginAtZero: true
+                plugins: {
+                    legend: {
+                        position: 'right'
                     }
                 }
             }
         });
     }
+}
+
+function updateTimeframe(days) {
+    window.location.href = `/dashboard/?days=${days}`;
+}
+
+function viewAlertDetails(alertId) {
+    // Redirect to alert details page or show a modal with details
+    window.location.href = `/alerts/details/${alertId}/`;
 }

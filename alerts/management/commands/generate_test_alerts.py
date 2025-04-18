@@ -11,9 +11,13 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('--count', type=int, default=20, help='Number of alerts to generate')
+        # Add the severity parameter
+        parser.add_argument('--severity', type=str, choices=['low', 'medium', 'high', 'critical'], 
+                           help='Generate alerts with a specific severity')
 
     def handle(self, *args, **options):
         count = options['count']
+        specific_severity = options.get('severity')
         
         # Get or create an admin user for notes
         admin_user, _ = User.objects.get_or_create(
@@ -82,12 +86,16 @@ class Command(BaseCommand):
 
         # Generate random alerts
         generated_count = 0
-        self.stdout.write('Generating test alerts...')
+        self.stdout.write(f"Generating {count} test alerts...")
         
         for _ in range(count):
             # Pick random values
             alert_type = random.choice([k for k, v in Alert.TYPE_CHOICES])
-            severity = random.choice([k for k, v in Alert.SEVERITY_CHOICES])
+            # Use specific severity if provided, otherwise random
+            if specific_severity:
+                severity = specific_severity
+            else:
+                severity = random.choice([k for k, v in Alert.SEVERITY_CHOICES])
             source = random.choice(alert_sources)
             status = random.choice(['new', 'investigating'] if severity in ['critical', 'high'] else 
                                   [k for k, v in Alert.STATUS_CHOICES])
