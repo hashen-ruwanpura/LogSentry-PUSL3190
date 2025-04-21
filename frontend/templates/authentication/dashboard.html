@@ -5,61 +5,52 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Log Detection Platform - Dashboard</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         :root {
-            --primary-color: #17a2b8;
-            --primary-dark: #138496;
-            --secondary-color: #343a40;
-            --secondary-light: #495057;
-            --light-bg: #f8f9fa;
-            --border-color: #dee2e6;
+            --primary-color: #3f51b5;
+            --secondary-color: #6c757d;
             --success-color: #28a745;
-            --warning-color: #ffc107;
             --danger-color: #dc3545;
-            --info-color: #0dcaf0;
-            --text-muted: #6c757d;
+            --warning-color: #ffc107;
+            --info-color: #17a2b8;
+            --text-primary: #212529;
+            --text-secondary: #6c757d;
+            --card-bg: #ffffff;
+            --border-color: #dee2e6;
             --sidebar-width: 250px;
-        }
-        
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
+            --sidebar-collapsed-width: 70px;
+            --header-height: 60px;
         }
         
         body {
-            font-family: Arial, sans-serif;
-            background-color: #f5f5f5;
-            color: #333;
-            line-height: 1.6;
-            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f7fa;
+            margin: 0;
+            padding: 0;
+            color: var(--text-primary);
         }
         
-        a {
-            text-decoration: none;
-            color: inherit;
-        }
-        
-        /* Dashboard Layout */
         .dashboard-container {
             display: flex;
             flex-direction: column;
-            min-height: 100vh;
+            height: 100vh;
+            overflow: hidden;
         }
         
+        /* Header styles */
         .main-header {
-            background-color: var(--secondary-color);
-            color: #fff;
+            background-color: #fff;
+            border-bottom: 1px solid var(--border-color);
+            height: var(--header-height);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0.8rem 1.5rem;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            position: fixed;
+            padding: 0 1.5rem;
+            position: sticky;
             top: 0;
-            left: 0;
-            right: 0;
             z-index: 100;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
         }
         
         .logo-section {
@@ -68,102 +59,110 @@
         }
         
         .logo-section h1 {
-            font-size: 1.2rem;
-            margin-left: 1rem;
+            font-size: 1.25rem;
+            margin: 0 0 0 1rem;
             font-weight: 500;
         }
         
         .sidebar-toggle {
             background: none;
             border: none;
-            color: #fff;
-            font-size: 1.2rem;
+            color: var(--text-primary);
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0.5rem;
-        }
-        
-        .sidebar-toggle:hover {
-            color: var(--primary-color);
+            font-size: 1.25rem;
+            padding: 0.25rem;
         }
         
         .header-actions {
             display: flex;
             align-items: center;
+            gap: 1rem;
         }
         
         .username {
-            margin-right: 1rem;
+            color: var(--text-secondary);
             font-weight: 500;
         }
         
         .logout-btn {
-            background-color: var(--primary-color);
-            color: #fff;
-            padding: 0.4rem 0.8rem;
-            border-radius: 3px;
-            font-size: 0.9rem;
-            transition: background-color 0.2s ease;
+            color: var(--danger-color);
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
         }
         
-        .logout-btn:hover {
-            background-color: var(--primary-dark);
-        }
-        
+        /* Main content container */
         .main-content {
             display: flex;
-            margin-top: 60px;
-            min-height: calc(100vh - 60px);
+            flex: 1;
+            overflow: hidden;
         }
         
+        /* Sidebar styles */
         .sidebar {
             width: var(--sidebar-width);
-            background-color: var(--secondary-color);
-            color: #fff;
-            position: fixed;
-            top: 60px;
-            left: 0;
-            bottom: 0;
+            background-color: #fff;
+            border-right: 1px solid var(--border-color);
+            transition: width 0.3s ease;
             overflow-y: auto;
-            transition: transform 0.3s ease;
-            z-index: 90;
+            box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
+        }
+        
+        .sidebar.collapsed {
+            width: var(--sidebar-collapsed-width);
         }
         
         .sidebar-nav ul {
             list-style: none;
             padding: 0;
+            margin: 0;
         }
         
         .sidebar-nav li {
-            padding: 0.8rem 1.5rem;
-            transition: background-color 0.2s ease;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
         }
         
         .sidebar-nav li a {
             display: flex;
             align-items: center;
+            padding: 1rem 1.5rem;
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.2s;
         }
         
-        .sidebar-nav li i {
-            margin-right: 0.8rem;
-            width: 20px;
+        .sidebar-nav li a i {
+            margin-right: 1rem;
+            min-width: 20px;
             text-align: center;
         }
         
-        .sidebar-nav li.active {
-            background-color: var(--primary-color);
+        .sidebar-nav li a:hover {
+            background-color: rgba(0, 0, 0, 0.03);
+            color: var(--primary-color);
         }
         
-        .sidebar-nav li:hover:not(.active) {
-            background-color: var(--secondary-light);
+        .sidebar-nav li.active a {
+            background-color: rgba(63, 81, 181, 0.1);
+            color: var(--primary-color);
+            font-weight: 500;
+            border-left: 4px solid var(--primary-color);
         }
         
+        .sidebar.collapsed .sidebar-nav li a span {
+            display: none;
+        }
+        
+        /* Content area styles */
         .content {
             flex: 1;
-            margin-left: var(--sidebar-width);
             padding: 1.5rem;
+            overflow-y: auto;
+            transition: margin-left 0.3s ease;
+        }
+        
+        .content.expanded {
+            margin-left: calc(var(--sidebar-collapsed-width) - var(--sidebar-width));
         }
         
         .page-header {
@@ -174,274 +173,215 @@
         }
         
         .page-header h2 {
-            font-size: 1.8rem;
-            font-weight: 600;
-            color: var(--secondary-color);
+            font-size: 1.5rem;
+            font-weight: 500;
+            margin: 0;
         }
         
         .actions {
             display: flex;
-            gap: 0.8rem;
-        }
-        
-        .btn {
-            display: inline-block;
-            padding: 0.5rem 1rem;
-            border-radius: 4px;
-            border: none;
-            cursor: pointer;
-            font-size: 0.9rem;
-            font-weight: 500;
-            transition: all 0.2s ease;
-            display: flex;
-            align-items: center;
-        }
-        
-        .btn i {
-            margin-right: 0.5rem;
-        }
-        
-        .btn-primary {
-            background-color: var(--primary-color);
-            color: #fff;
-        }
-        
-        .btn-primary:hover {
-            background-color: var(--primary-dark);
-        }
-        
-        .btn-secondary {
-            background-color: var(--secondary-color);
-            color: #fff;
-        }
-        
-        .btn-secondary:hover {
-            background-color: var(--secondary-light);
+            gap: 0.75rem;
         }
         
         .btn-outline {
-            background-color: transparent;
             border: 1px solid var(--border-color);
+            color: var(--text-secondary);
         }
         
-        .btn-outline:hover {
-            background-color: #f0f0f0;
-        }
-        
-        /* Filters */
-        .filters {
-            display: flex;
-            align-items: center;
-            margin-bottom: 1.5rem;
-            padding: 1rem;
-            background-color: #fff;
-            border-radius: 5px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-        
-        .filter-group {
-            display: flex;
-            align-items: center;
-            margin-right: 1.5rem;
-        }
-        
-        .filter-group label {
-            margin-right: 0.5rem;
-            font-weight: 500;
-            color: var(--text-muted);
-        }
-        
-        .filter-group input, .filter-group select {
-            padding: 0.5rem;
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            font-size: 0.9rem;
-        }
-        
-        .filter-group input {
-            width: 250px;
-        }
-        
-        /* Metrics Overview */
-        .metrics-overview {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-        }
-        
+        /* Card and metrics styles */
         .metric-card {
-            background-color: #fff;
-            border-left: 4px solid var(--primary-color);
-            border-radius: 4px;
-            padding: 1.2rem;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            transition: transform 0.2s ease;
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            transition: transform 0.2s, box-shadow 0.2s;
         }
         
         .metric-card:hover {
             transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
         }
         
-        .metric-card h3 {
+        .metric-title {
+            color: var(--text-secondary);
             font-size: 0.9rem;
-            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
             margin-bottom: 0.5rem;
         }
         
-        .metric-card .metric-value {
+        .metric-value {
             font-size: 2rem;
             font-weight: 600;
-            color: var(--secondary-color);
+            margin-bottom: 0.75rem;
+            color: var(--text-primary);
         }
         
-        .metric-card.danger {
-            border-left-color: var(--danger-color);
+        .metric-trend {
+            display: flex;
+            align-items: center;
+            font-size: 0.85rem;
         }
         
-        .metric-card.success {
-            border-left-color: var(--success-color);
+        .metric-trend.positive {
+            color: var(--success-color);
         }
         
-        .metric-card.warning {
-            border-left-color: var(--warning-color);
+        .metric-trend.negative {
+            color: var(--danger-color);
         }
         
-        /* Charts Container */
-        .charts-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 1.5rem;
+        .metric-icon {
+            background-color: rgba(0, 94, 184, 0.1);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 1rem;
         }
         
-        .chart-card {
-            background-color: #fff;
-            border-radius: 5px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        .metric-icon i {
+            font-size: 1.5rem;
+            color: var(--primary-color);
+        }
+        
+        .chart-container {
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
             padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            position: relative;
         }
         
-        .chart-header {
+        .chart-title {
+            font-size: 1.1rem;
+            font-weight: 500;
+            margin-bottom: 1.5rem;
+            color: var(--text-primary);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1rem;
         }
         
-        .chart-header h3 {
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: var(--secondary-color);
+        .chart-title .timeframe-selector {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
         }
         
-        .expand-btn {
-            color: var(--text-muted);
-            font-size: 1rem;
-            transition: color 0.2s ease;
+        .timeframe-btn {
+            background-color: transparent;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 0.25rem 0.75rem;
+            cursor: pointer;
+            color: var(--text-secondary);
+            transition: all 0.2s;
         }
         
-        .expand-btn:hover {
-            color: var(--secondary-color);
+        .timeframe-btn:hover {
+            background-color: rgba(0, 0, 0, 0.05);
         }
         
-        .chart {
-            height: 300px;
+        .timeframe-btn.active {
+            background-color: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
         }
         
-        /* Tables */
-        .security-alerts {
-            background-color: #fff;
-            border-radius: 5px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-            overflow-x: auto;
+        .alert-table {
+            font-size: 0.9rem;
         }
         
-        .security-alerts h3 {
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: var(--secondary-color);
-            margin-bottom: 1rem;
+        .alert-table th {
+            background-color: rgba(0, 0, 0, 0.03);
+            font-weight: 500;
         }
         
-        .alerts-table {
-            width: 100%;
-            border-collapse: collapse;
+        .severity-critical {
+            color: #dc3545;
+            font-weight: bold;
         }
         
-        .alerts-table th, .alerts-table td {
-            padding: 0.8rem;
-            text-align: left;
-            border-bottom: 1px solid var(--border-color);
+        .severity-high {
+            color: #fd7e14;
+            font-weight: bold;
         }
         
-        .alerts-table th {
-            background-color: var(--light-bg);
-            font-weight: 600;
-            color: var(--text-muted);
-            white-space: nowrap;
+        .severity-medium {
+            color: #ffc107;
         }
         
-        .alerts-table tr:hover {
-            background-color: #f5f5f5;
+        .severity-low {
+            color: #0dcaf0;
         }
         
-        /* Responsive */
+        /* Status badges */
+        .status-badge {
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .loading-spinner {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            display: none;
+        }
+        
+        /* Responsive styles */
         @media (max-width: 992px) {
-            .sidebar {
-                transform: translateX(-100%);
-            }
-            
-            .content {
-                margin-left: 0;
-            }
-            
-            .sidebar.active {
-                transform: translateX(0);
-            }
-            
-            .charts-container {
-                grid-template-columns: 1fr;
+            .metrics-overview .col-md-3 {
+                flex: 0 0 50%;
+                max-width: 50%;
             }
         }
         
         @media (max-width: 768px) {
-            .page-header {
+            .sidebar {
+                position: fixed;
+                left: -250px;
+                top: var(--header-height);
+                height: calc(100vh - var(--header-height));
+                z-index: 99;
+                transition: left 0.3s ease;
+            }
+            
+            .sidebar.open {
+                left: 0;
+            }
+            
+            .content {
+                margin-left: 0 !important;
+            }
+            
+            .metrics-overview .col-md-3 {
+                flex: 0 0 100%;
+                max-width: 100%;
+            }
+            
+            .chart-title {
                 flex-direction: column;
                 align-items: flex-start;
-                gap: 1rem;
             }
             
-            .actions {
-                flex-direction: column;
-                width: 100%;
+            .chart-title .timeframe-selector {
+                margin-top: 0.5rem;
             }
-            
-            .filters {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 1rem;
-            }
-            
-            .filter-group {
-                width: 100%;
-                margin-right: 0;
-            }
-            
-            .metric-card {
-                padding: 1rem;
-            }
-            
-            .metric-card .metric-value {
-                font-size: 1.5rem;
-            }
-        }
-        
-        /* Sidebar Toggle */
-        .sidebar-open .content {
-            margin-left: 0;
         }
     </style>
 </head>
@@ -455,434 +395,596 @@
                 <h1>Log Detection Platform</h1>
             </div>
             <div class="header-actions">
-                <span class="username">{{ user.username }}</span>
+                <span class="username">{{ request.user.username }}</span>
                 <a href="{% url 'logout' %}" class="logout-btn">Logout</a>
             </div>
         </header>
 
         <div class="main-content">
+            <!-- Sidebar Navigation -->
             <aside class="sidebar">
                 <nav class="sidebar-nav">
                     <ul>
-                        <li class="active"><a href="/dashboard/"><i class="fas fa-chart-line"></i> Dashboard</a></li>
-                        <li><a href="/events/"><i class="fas fa-calendar-alt"></i> Events</a></li>
-                        <li><a href="/apache-logs/"><i class="fas fa-server"></i> Apache Logs</a></li>
-                        <li><a href="/mysql-logs/"><i class="fas fa-database"></i> MySQL Logs</a></li>
-                        <li><a href="/reports/"><i class="fas fa-file-alt"></i> AI Reports</a></li>
-                        <li><a href="/profile/"><i class="fas fa-user"></i> Profile</a></li>
-                        <li><a href="/settings/"><i class="fas fa-cog"></i> Settings</a></li>
-                        <li><a href="/contact/"><i class="fas fa-envelope"></i> Contact Us</a></li>
+                        <li class="active"><a href="{% url 'dashboard' %}"><i class="fas fa-chart-line"></i> Dashboard</a></li>
+                        <li><a href="{% url 'events' %}"><i class="fas fa-calendar-alt"></i> Events</a></li>
+                        <li><a href="{% url 'apache_logs' %}"><i class="fas fa-server"></i> Apache Logs</a></li>
+                        <li><a href="{% url 'mysql_logs' %}"><i class="fas fa-database"></i> MySQL Logs</a></li>
+                        <li><a href="{% url 'mitre_details' %}"><i class="fas fa-shield-alt"></i> MITRE ATT&CK</a></li>
+                        <li><a href="{% url 'reports' %}"><i class="fas fa-file-alt"></i> Reports</a></li>
+                        <li><a href="{% url 'explore_agent' %}"><i class="fas fa-robot"></i> AI Assistant</a></li>
+                        <li><a href="{% url 'settings' %}"><i class="fas fa-cog"></i> Settings</a></li>
                     </ul>
                 </nav>
             </aside>
 
+            <!-- Content Area -->
             <main class="content">
                 <div class="page-header">
-                    <h2>Dashboard</h2>
+                    <h2>Security Dashboard</h2>
                     <div class="actions">
-                        <!-- Replace the existing Explore Logs button with this -->
-                        <button class="btn btn-primary" type="button" data-toggle="collapse" data-target="#exploreLogsForm" aria-expanded="false" aria-controls="exploreLogsForm">
-                            Explore Logs
-                        </button>
-
-                        <!-- Add this form panel below -->
-                        <div class="collapse mt-3" id="exploreLogsForm">
-                            <div class="card card-body">
-                                <h4>Explore Logs</h4>
-                                <form action="{% url 'dashboard' %}" method="get">
-                                    <input type="hidden" name="view" value="search_logs">
-                                    
-                                    <div class="form-row">
-                                        <div class="form-group col-md-3">
-                                            <label for="sourceType">Source Type</label>
-                                            <select class="form-control" id="sourceType" name="source_type">
-                                                <option value="">All Sources</option>
-                                                <option value="apache">Apache</option>
-                                                <option value="mysql">MySQL</option>
-                                            </select>
-                                        </div>
-                                        
-                                        <div class="form-group col-md-3">
-                                            <label for="dateFrom">From Date</label>
-                                            <input type="date" class="form-control" id="dateFrom" name="date_from">
-                                        </div>
-                                        
-                                        <div class="form-group col-md-3">
-                                            <label for="dateTo">To Date</label>
-                                            <input type="date" class="form-control" id="dateTo" name="date_to">
-                                        </div>
-                                        
-                                        <div class="form-group col-md-3">
-                                            <label for="searchQuery">Search</label>
-                                            <input type="text" class="form-control" id="searchQuery" name="search" placeholder="IP, path, query...">
-                                        </div>
-                                    </div>
-                                    
-                                    <button type="submit" class="btn btn-primary">Search</button>
-                                </form>
-                            </div>
-                        </div>
-
-                        <div class="dropdown">
-                            <button class="btn btn-success dropdown-toggle" type="button" id="reportDropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                Generate Report
+                        <div class="dropdown timeframe-selector">
+                            <button class="btn btn-outline dropdown-toggle" id="timeframeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="far fa-clock"></i> {{ period_name }}
                             </button>
-                            <div class="dropdown-menu dropdown-menu-right" aria-labelledby="reportDropdown">
-                                <h6 class="dropdown-header">Log Reports</h6>
-                                <a class="dropdown-item" href="{% url 'dashboard' %}?export=all_logs&format=csv">All Logs ({{ days }} days)</a>
-                                <a class="dropdown-item" href="{% url 'dashboard' %}?export=apache_logs&format=csv">Apache Logs ({{ days }} days)</a>
-                                <a class="dropdown-item" href="{% url 'dashboard' %}?export=mysql_logs&format=csv">MySQL Logs ({{ days }} days)</a>
-                                <div class="dropdown-divider"></div>
-                                <h6 class="dropdown-header">Threat Reports</h6>
-                                <a class="dropdown-item" href="{% url 'dashboard' %}?export=threats&format=csv">All Threats ({{ days }} days)</a>
-                                <a class="dropdown-item" href="{% url 'dashboard' %}?export=threats&days=30&format=csv">All Threats (30 days)</a>
-                            </div>
+                            <ul class="dropdown-menu" aria-labelledby="timeframeDropdown">
+                                <li><a class="dropdown-item" href="?timeframe=1h">Last 1 Hour</a></li>
+                                <li><a class="dropdown-item" href="?timeframe=3h">Last 3 Hours</a></li>
+                                <li><a class="dropdown-item" href="?timeframe=12h">Last 12 Hours</a></li>
+                                <li><a class="dropdown-item" href="?timeframe=1d">Last 24 Hours</a></li>
+                                <li><a class="dropdown-item" href="?timeframe=7d">Last 7 Days</a></li>
+                                <li><a class="dropdown-item" href="?timeframe=30d">Last 30 Days</a></li>
+                            </ul>
                         </div>
+                        <button id="refresh-btn" class="btn btn-primary">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
                     </div>
                 </div>
-
-                <div class="filters">
-                    <div class="filter-group">
-                        <label for="search">Search:</label>
-                        <input type="text" id="search" name="search" placeholder="Search logs...">
-                    </div>
-                    <div class="filter-group">
-                        <label for="timeframe">Timeframe:</label>
-                        <select id="timeframe" name="timeframe" onchange="updateTimeframe(this.value)">
-                            <option value="1" {% if days == 1 %}selected{% endif %}>Last 24 hours</option>
-                            <option value="7" {% if days == 7 %}selected{% endif %}>Last 7 days</option>
-                            <option value="30" {% if days == 30 %}selected{% endif %}>Last 30 days</option>
-                        </select>
-                    </div>
-                    <button id="refresh-btn" class="btn btn-outline"><i class="fas fa-sync-alt"></i> Refresh</button>
-                </div>
-
-                <div class="metrics-overview">
-                    <div class="metric-card">
-                        <h3>Total Log Entries</h3>
-                        <p class="metric-value">{{ total_logs|default:"0" }}</p>
-                    </div>
-                    <div class="metric-card warning">
-                        <h3>High Severity Alerts</h3>
-                        <p class="metric-value">{{ high_level_alerts|default:"0" }}</p>
-                    </div>
-                    <div class="metric-card danger">
-                        <h3>Authentication Failures</h3>
-                        <p class="metric-value">{{ auth_failures|default:"0" }}</p>
-                    </div>
-                    <div class="metric-card success">
-                        <h3>Authentication Success</h3>
-                        <p class="metric-value">{{ auth_success|default:"0" }}</p>
-                    </div>
-                </div>
-
-                {% if viewing_logs %}
-                <div class="card mt-4">
-                  <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">{{ log_type }} Logs</h5>
-                    <a href="{% url 'dashboard' %}" class="btn btn-sm btn-outline-light">Back to Dashboard</a>
-                  </div>
-                  <div class="card-body p-0">
-                    <div class="table-responsive">
-                      <table class="table table-striped table-hover mb-0">
-                        <thead>
-                          <tr>
-                            <th>Timestamp</th>
-                            <th>Source IP</th>
-                            <th>Status</th>
-                            {% if log_type == 'Apache' %}
-                              <th>Method</th>
-                              <th>Path</th>
-                              <th>Status Code</th>
-                            {% elif log_type == 'MySQL' %}
-                              <th>Query</th>
-                              <th>Execution Time</th>
-                            {% endif %}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {% for log in logs %}
-                          <tr>
-                            <td>{{ log.timestamp|date:"Y-m-d H:i:s" }}</td>
-                            <td>{{ log.source_ip }}</td>
-                            <td>
-                              {% if log.status == 'normal' %}
-                                <span class="badge bg-success">NORMAL</span>
-                              {% elif log.status == 'authentication_failure' %}
-                                <span class="badge bg-danger">AUTH FAIL</span>
-                              {% elif log.status == 'error' %}
-                                <span class="badge bg-warning">ERROR</span>
-                              {% else %}
-                                <span class="badge bg-secondary">{{ log.status|upper }}</span>
-                              {% endif %}
-                            </td>
-                            {% if log_type == 'Apache' %}
-                              <td>{{ log.request_method }}</td>
-                              <td>{{ log.request_path }}</td>
-                              <td>
-                                {% if log.status_code < 400 %}
-                                  <span class="text-success">{{ log.status_code }}</span>
-                                {% elif log.status_code < 500 %}
-                                  <span class="text-warning">{{ log.status_code }}</span>
-                                {% else %}
-                                  <span class="text-danger">{{ log.status_code }}</span>
-                                {% endif %}
-                              </td>
-                            {% elif log_type == 'MySQL' %}
-                              <td><code>{{ log.query|truncatechars:80 }}</code></td>
-                              <td>
-                                {% if log.execution_time > 1.0 %}
-                                  <span class="text-danger">{{ log.execution_time }} sec</span>
-                                {% elif log.execution_time > 0.5 %}
-                                  <span class="text-warning">{{ log.execution_time }} sec</span>
-                                {% else %}
-                                  <span>{{ log.execution_time }} sec</span>
-                                {% endif %}
-                              </td>
-                            {% endif %}
-                          </tr>
-                          {% empty %}
-                          <tr>
-                            <td colspan="6" class="text-center py-4">No logs found for the selected period.</td>
-                          </tr>
-                          {% endfor %}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                  <div class="card-footer">
-                    <div class="d-flex justify-content-between align-items-center">
-                      <span>Showing up to 100 most recent logs</span>
-                      <a href="{% url 'dashboard' %}?export={{ log_type|lower }}_logs&format=csv" class="btn btn-sm btn-primary">
-                        Export All {{ log_type }} Logs
-                      </a>
-                    </div>
-                  </div>
-                </div>
-                {% endif %}
-
-                <div class="row mt-4">
-                    <div class="col-12">
-                        <h3 class="section-title">Apache & MySQL Log Analysis</h3>
-                    </div>
-                </div>
-
-                <div class="row">
-                    <!-- Apache Logs Panel -->
-                    <div class="col-md-6">
-                        <div class="card">
-                            <div class="card-header bg-primary text-white">
-                                <h5>Apache Logs</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between mb-3">
-                                    <div class="info-box">
-                                        <h6>Total Logs</h6>
-                                        <span class="h3">{{ apache_count }}</span>
-                                    </div>
-                                    <div class="info-box text-warning">
-                                        <h6>4xx Errors</h6>
-                                        <span class="h3">{{ apache_4xx }}</span>
-                                    </div>
-                                    <div class="info-box text-danger">
-                                        <h6>5xx Errors</h6>
-                                        <span class="h3">{{ apache_5xx }}</span>
-                                    </div>
-                                </div>
-                                <a href="{% url 'dashboard' %}?view=apache_logs" class="btn btn-primary btn-block">View All Apache Logs</a>
-                                <a href="{% url 'dashboard' %}?export=apache_logs&format=csv" class="btn btn-secondary btn-block">Export</a>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- MySQL Logs Panel -->
-                    <div class="col-md-6">
-                        <div class="card">
-                            <div class="card-header bg-info text-white">
-                                <h5>MySQL Logs</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between mb-3">
-                                    <div class="info-box">
-                                        <h6>Total Logs</h6>
-                                        <span class="h3">{{ mysql_count }}</span>
-                                    </div>
-                                    <div class="info-box text-warning">
-                                        <h6>Slow Queries</h6>
-                                        <span class="h3">{{ mysql_slow }}</span>
-                                    </div>
-                                </div>
-                                <a href="{% url 'dashboard' %}?view=mysql_logs" class="btn btn-info btn-block">View All MySQL Logs</a>
-                                <a href="{% url 'dashboard' %}?export=mysql_logs&format=csv" class="btn btn-secondary btn-block">Export</a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="charts-container">
-                    <div class="chart-card">
-                        <div class="chart-header">
-                            <h3>Alerts Evolution</h3>
-                            <a href="#" class="expand-btn"><i class="fas fa-expand"></i></a>
-                        </div>
-                        <div class="chart">
-                            <canvas id="alerts-chart"></canvas>
-                        </div>
-                    </div>
-                    <div class="chart-card">
-                        <div class="chart-header">
-                            <h3>Top MITRE ATT&CK Tactics</h3>
-                            <a href="#" class="expand-btn"><i class="fas fa-expand"></i></a>
-                        </div>
-                        <div class="chart">
-                            <canvas id="mitre-chart"></canvas>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="security-alerts">
-                    <h3>Recent Security Alerts</h3>
-                    <table class="alerts-table">
-                        <thead>
-                            <tr>
-                                <th>Time</th>
-                                <th>Source</th>
-                                <th>MITRE ID</th>
-                                <th>Tactic</th>
-                                <th>Description</th>
-                                <th>Severity</th>
-                                <th>Rule ID</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% if security_alerts %}
-                                {% for alert in security_alerts %}
-                                <tr>
-                                    <td>{{ alert.timestamp|date:"Y-m-d H:i" }}</td>
-                                    <td>{{ alert.source_ip|default:"-" }}</td>
-                                    <td>{{ alert.mitre_technique|default:"-" }}</td>
-                                    <td>{{ alert.mitre_tactic|default:"-" }}</td>
-                                    <td title="{{ alert.description }}">{{ alert.description|truncatechars:50 }}</td>
-                                    <td><span class="badge bg-{{ alert.severity }}">{{ alert.severity|upper }}</span></td>
-                                    <td>{{ alert.id }}</td>
-                                    <td>
-                                        <button class="btn btn-sm btn-primary" onclick="viewAlertDetails({{ alert.id }})">View</button>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            {% else %}
-                                <tr>
-                                    <td colspan="8" class="text-center py-3">No security alerts found for the selected time period.</td>
-                                </tr>
-                            {% endif %}
-                        </tbody>
-                    </table>
-                </div>
-
                 
-                <div id="chart-labels-data" style="display: none;">{{ chart_labels|safe }}</div>
-                <div id="alerts-data" style="display: none;">{{ alerts_data|safe }}</div>
-                <div id="mitre-labels-data" style="display: none;">{{ mitre_labels|safe }}</div>
-                <div id="mitre-data" style="display: none;">{{ mitre_data|safe }}</div>
+                <!-- Metrics Overview -->
+                <div class="metrics-overview">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="metric-card">
+                                <div class="d-flex align-items-center">
+                                    <div class="metric-icon">
+                                        <i class="fas fa-clipboard-list"></i>
+                                    </div>
+                                    <div>
+                                        <div class="metric-title">Total Logs</div>
+                                        <div class="metric-value">{{ total_logs }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="metric-card">
+                                <div class="d-flex align-items-center">
+                                    <div class="metric-icon">
+                                        <i class="fas fa-exclamation-triangle"></i>
+                                    </div>
+                                    <div>
+                                        <div class="metric-title">High Alerts</div>
+                                        <div class="metric-value">{{ high_level_alerts }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="metric-card">
+                                <div class="d-flex align-items-center">
+                                    <div class="metric-icon">
+                                        <i class="fas fa-ban"></i>
+                                    </div>
+                                    <div>
+                                        <div class="metric-title">Auth Failures</div>
+                                        <div class="metric-value">{{ auth_failures }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="metric-card">
+                                <div class="d-flex align-items-center">
+                                    <div class="metric-icon">
+                                        <i class="fas fa-check-circle"></i>
+                                    </div>
+                                    <div>
+                                        <div class="metric-title">Auth Success</div>
+                                        <div class="metric-value">{{ auth_success }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts and Data Section -->
+                <div class="row">
+                    <div class="col-lg-8">
+                        <div class="chart-container">
+                            <div class="chart-title">
+                                <span>Security Alerts Evolution</span>
+                                <div class="timeframe-selector">
+                                    <button class="timeframe-btn active" data-timeframe="1d">24H</button>
+                                    <button class="timeframe-btn" data-timeframe="7d">7D</button>
+                                    <button class="timeframe-btn" data-timeframe="30d">30D</button>
+                                </div>
+                            </div>
+                            <div style="position: relative; height: 250px;">
+                                <canvas id="alerts-chart"></canvas>
+                                <div class="loading-spinner" id="alerts-chart-loader">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-4">
+                        <div class="chart-container">
+                            <div class="chart-title">
+                                <span>MITRE ATT&CK Tactics</span>
+                            </div>
+                            <div style="position: relative; height: 250px;">
+                                <canvas id="mitre-chart"></canvas>
+                                <div class="loading-spinner" id="mitre-chart-loader">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Server Performance Section -->
+                <div class="row">
+                    <div class="col-lg-6">
+                        <div class="chart-container">
+                            <div class="chart-title">
+                                <span>Apache Server Status</span>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="metric-title">Total Requests</div>
+                                    <div class="metric-value">{{ apache_count }}</div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="metric-title">Client Errors (4xx)</div>
+                                    <div class="metric-value">{{ apache_4xx }}</div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="metric-title">Server Errors (5xx)</div>
+                                    <div class="metric-value">{{ apache_5xx }}</div>
+                                </div>
+                            </div>
+                            <div class="mt-3">
+                                <div class="progress" style="height: 30px;">
+                                    <div class="progress-bar bg-success" role="progressbar" 
+                                         style="width: {{ apache_success_percentage|floatformat:1 }}%" 
+                                         aria-valuenow="{{ apache_success_percentage }}" aria-valuemin="0" aria-valuemax="100">
+                                        {{ apache_success_percentage|floatformat:1 }}%
+                                    </div>
+                                    <div class="progress-bar bg-warning" role="progressbar" 
+                                         style="width: {{ apache_4xx_percentage|floatformat:1 }}%" 
+                                         aria-valuenow="{{ apache_4xx_percentage }}" aria-valuemin="0" aria-valuemax="100">
+                                        {{ apache_4xx_percentage|floatformat:1 }}%
+                                    </div>
+                                    <div class="progress-bar bg-danger" role="progressbar" 
+                                         style="width: {{ apache_5xx_percentage|floatformat:1 }}%" 
+                                         aria-valuenow="{{ apache_5xx_percentage }}" aria-valuemin="0" aria-valuemax="100">
+                                        {{ apache_5xx_percentage|floatformat:1 }}%
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-6">
+                        <div class="chart-container">
+                            <div class="chart-title">
+                                <span>MySQL Server Status</span>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="metric-title">Total Queries</div>
+                                    <div class="metric-value">{{ mysql_count }}</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="metric-title">Slow Queries</div>
+                                    <div class="metric-value">{{ mysql_slow }}</div>
+                                </div>
+                            </div>
+                            <div class="mt-3">
+                                <div class="progress" style="height: 30px;">
+                                    <div class="progress-bar bg-success" role="progressbar" 
+                                         style="width: {{ mysql_fast_percentage|floatformat:1 }}%" 
+                                         aria-valuenow="{{ mysql_fast_percentage }}" aria-valuemin="0" aria-valuemax="100">
+                                        Optimal ({{ mysql_fast_percentage|floatformat:1 }}%)
+                                    </div>
+                                    <div class="progress-bar bg-danger" role="progressbar" 
+                                         style="width: {{ mysql_slow_percentage|floatformat:1 }}%" 
+                                         aria-valuenow="{{ mysql_slow_percentage }}" aria-valuemin="0" aria-valuemax="100">
+                                        Slow ({{ mysql_slow_percentage|floatformat:1 }}%)
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Security Alerts -->
+                <div class="chart-container">
+                    <div class="chart-title">
+                        <span>Recent Security Alerts</span>
+                        <a href="{% url 'alerts_details' %}" class="btn btn-sm btn-outline">View All</a>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover alert-table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Source IP</th>
+                                    <th>Severity</th>
+                                    <th>MITRE Tactic</th>
+                                    <th>Description</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if security_alerts %}
+                                    {% for alert in security_alerts %}
+                                    <tr>
+                                        <td>{{ alert.created_at|date:"M d, H:i" }}</td>
+                                        <td>{{ alert.source_ip|default:"Unknown" }}</td>
+                                        <td class="severity-{{ alert.severity }}">{{ alert.severity|title }}</td>
+                                        <td>{{ alert.mitre_tactic|default:"Unclassified" }}</td>
+                                        <td>{{ alert.description|truncatechars:70 }}</td>
+                                        <td>
+                                            <a href="{% url 'alert_detail' alert.id %}" class="btn btn-sm btn-outline-primary">
+                                                <i class="fas fa-eye"></i> Details
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="6" class="text-center py-4">No security alerts in the selected time period.</td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </main>
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <!-- Hidden data for charts -->
+    <div style="display: none;" id="chart-labels-data">{{ chart_labels|safe }}</div>
+    <div style="display: none;" id="alerts-data">{{ alerts_data|safe }}</div>
+    <div style="display: none;" id="mitre-labels-data">{{ mitre_labels|safe }}</div>
+    <div style="display: none;" id="mitre-data">{{ mitre_data|safe }}</div>
+    <div style="display: none;" id="current-timeframe">{{ timeframe }}</div>
+
+    <!-- Scripts -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
-        // Toggle sidebar
-        document.getElementById('sidebar-toggle').addEventListener('click', function() {
-            document.querySelector('.sidebar').classList.toggle('active');
-            document.querySelector('.content').classList.toggle('sidebar-open');
-        });
-        
-        // Charts
         document.addEventListener('DOMContentLoaded', function() {
-            // Alert Evolution Chart
-            const alertsChartCtx = document.getElementById('alerts-chart').getContext('2d');
-            const alertsChart = new Chart(alertsChartCtx, {
-                type: 'line',
-                data: {
-                    labels: {{ chart_labels|safe|default:"[]" }},
-                    datasets: [{
-                        label: 'Alerts',
-                        data: {{ alerts_data|safe|default:"[]" }},
-                        borderColor: '#17a2b8',
-                        backgroundColor: 'rgba(23, 162, 184, 0.1)',
-                        borderWidth: 2,
-                        tension: 0.3,
-                        fill: true
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: true,
-                            position: 'top',
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    }
-                }
+            // Initialize charts based on data from backend
+            initChartsWithBackendData();
+
+            // Setup timeframe buttons
+            document.querySelectorAll('.timeframe-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const timeframe = this.getAttribute('data-timeframe');
+                    window.location.href = `?timeframe=${timeframe}`;
+                });
             });
-            
-            // MITRE Tactics Chart
-            const mitreChartCtx = document.getElementById('mitre-chart').getContext('2d');
-            const mitreChart = new Chart(mitreChartCtx, {
-                type: 'doughnut',
-                data: {
-                    labels: {{ mitre_labels|safe|default:"['No Data']" }},
-                    datasets: [{
-                        data: {{ mitre_data|safe|default:"[100]" }},
-                        backgroundColor: [
-                            '#17a2b8',
-                            '#28a745',
-                            '#ffc107',
-                            '#dc3545',
-                            '#6c757d',
-                            '#fd7e14',
-                            '#20c997',
-                            '#6610f2'
-                        ],
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'right',
-                        }
-                    }
-                }
-            });
-            
+
             // Refresh button functionality
             document.getElementById('refresh-btn').addEventListener('click', function() {
-                location.reload();
+                this.querySelector('i').classList.add('fa-spin');
+                updateDashboardData();
             });
+
+            // Sidebar toggle
+            const sidebarToggle = document.getElementById('sidebar-toggle');
+            const sidebar = document.querySelector('.sidebar');
+            const content = document.querySelector('.content');
             
-            // Search functionality
-            document.getElementById('search').addEventListener('keyup', function(e) {
-                if (e.key === 'Enter') {
-                    const searchTerm = this.value.toLowerCase();
-                    filterTable(searchTerm);
-                }
-            });
-            
-            function filterTable(searchTerm) {
-                const rows = document.querySelectorAll('.alerts-table tbody tr');
+            if (sidebarToggle) {
+                sidebarToggle.addEventListener('click', function() {
+                    sidebar.classList.toggle('collapsed');
+                    content.classList.toggle('expanded');
+                    
+                    // Handle mobile view
+                    if (window.innerWidth <= 768) {
+                        sidebar.classList.toggle('open');
+                    }
+                });
+            }
+
+            // Function to initialize charts with data from backend
+            function initChartsWithBackendData() {
+                // Get data from hidden div elements
+                const chartLabels = JSON.parse(document.getElementById('chart-labels-data').textContent || '[]');
+                const alertsData = JSON.parse(document.getElementById('alerts-data').textContent || '[]');
+                const mitreLabels = JSON.parse(document.getElementById('mitre-labels-data').textContent || '[]');
+                const mitreData = JSON.parse(document.getElementById('mitre-data').textContent || '[]');
                 
-                rows.forEach(row => {
-                    const text = row.textContent.toLowerCase();
-                    row.style.display = text.includes(searchTerm) ? '' : 'none';
+                // Alert Evolution Chart
+                const alertsChartEl = document.getElementById('alerts-chart');
+                if (alertsChartEl) {
+                    window.alertsChart = new Chart(alertsChartEl, {
+                        type: 'line',
+                        data: {
+                            labels: chartLabels,
+                            datasets: [{
+                                label: 'Security Alerts',
+                                data: alertsData,
+                                borderColor: '#3f51b5',
+                                backgroundColor: 'rgba(63, 81, 181, 0.1)',
+                                tension: 0.3,
+                                fill: true
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    display: false
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        precision: 0
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+                
+                // MITRE ATT&CK Tactics Chart
+                const mitreChartEl = document.getElementById('mitre-chart');
+                if (mitreChartEl) {
+                    window.mitreChart = new Chart(mitreChartEl, {
+                        type: 'doughnut',
+                        data: {
+                            labels: mitreLabels,
+                            datasets: [{
+                                data: mitreData,
+                                backgroundColor: [
+                                    'rgba(255, 99, 132, 0.7)',
+                                    'rgba(54, 162, 235, 0.7)',
+                                    'rgba(255, 206, 86, 0.7)',
+                                    'rgba(75, 192, 192, 0.7)',
+                                    'rgba(153, 102, 255, 0.7)',
+                                    'rgba(255, 159, 64, 0.7)',
+                                    'rgba(199, 199, 199, 0.7)',
+                                    'rgba(83, 102, 255, 0.7)'
+                                ],
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    position: 'right',
+                                    labels: {
+                                        boxWidth: 12,
+                                        font: {
+                                            size: 10
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+
+            // Function to update dashboard data via AJAX
+            function updateDashboardData() {
+                // Show loading spinners
+                document.getElementById('alerts-chart-loader').style.display = 'flex';
+                document.getElementById('mitre-chart-loader').style.display = 'flex';
+                
+                const timeframe = document.getElementById('current-timeframe').textContent;
+                
+                fetch(`/dashboard-data-api/?timeframe=${timeframe}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log('Dashboard data updated:', data);
+                        
+                        // Update metrics
+                        updateMetrics(data.metrics);
+                        
+                        // Update charts
+                        updateCharts(data.charts);
+                        
+                        // Update alerts table
+                        updateAlertsTable(data.alerts);
+                        
+                        // Hide loading spinners
+                        document.getElementById('alerts-chart-loader').style.display = 'none';
+                        document.getElementById('mitre-chart-loader').style.display = 'none';
+                        
+                        // Reset refresh button
+                        const refreshBtn = document.getElementById('refresh-btn');
+                        refreshBtn.querySelector('i').classList.remove('fa-spin');
+                    })
+                    .catch(error => {
+                        console.error('Error updating dashboard data:', error);
+                        
+                        // Hide loading spinners
+                        document.getElementById('alerts-chart-loader').style.display = 'none';
+                        document.getElementById('mitre-chart-loader').style.display = 'none';
+                        
+                        // Reset refresh button
+                        const refreshBtn = document.getElementById('refresh-btn');
+                        refreshBtn.querySelector('i').classList.remove('fa-spin');
+                        
+                        // Show error message
+                        alert('Error updating dashboard data. Please try again.');
+                    });
+            }
+
+            // Function to update metrics
+            function updateMetrics(metrics) {
+                // Update key metrics
+                const metricValues = document.querySelectorAll('.metrics-overview .metric-value');
+                if (metricValues[0]) metricValues[0].textContent = metrics.total_logs;
+                if (metricValues[1]) metricValues[1].textContent = metrics.high_level_alerts;
+                if (metricValues[2]) metricValues[2].textContent = metrics.auth_failures;
+                if (metricValues[3]) metricValues[3].textContent = metrics.auth_success;
+                
+                // Apache metrics
+                const apacheContainer = document.querySelector('.chart-container:nth-of-type(3)');
+                if (apacheContainer) {
+                    const apacheMetrics = apacheContainer.querySelectorAll('.metric-value');
+                    if (apacheMetrics[0]) apacheMetrics[0].textContent = metrics.apache_count;
+                    if (apacheMetrics[1]) apacheMetrics[1].textContent = metrics.apache_4xx;
+                    if (apacheMetrics[2]) apacheMetrics[2].textContent = metrics.apache_5xx;
+                
+                    // Update progress bars
+                    updateApacheProgressBars(metrics);
+                }
+                
+                // MySQL metrics
+                const mysqlContainer = document.querySelector('.chart-container:nth-of-type(4)');
+                if (mysqlContainer) {
+                    const mysqlMetrics = mysqlContainer.querySelectorAll('.metric-value');
+                    if (mysqlMetrics[0]) mysqlMetrics[0].textContent = metrics.mysql_count;
+                    if (mysqlMetrics[1]) mysqlMetrics[1].textContent = metrics.mysql_slow;
+                
+                    // Update progress bars
+                    updateMySQLProgressBars(metrics);
+                }
+            }
+
+            // Function to update Apache progress bars
+            function updateApacheProgressBars(metrics) {
+                if (!metrics || !metrics.apache_count) return;
+                
+                const apacheContainer = document.querySelector('.chart-container:nth-of-type(3)');
+                if (!apacheContainer) return;
+                
+                const progressBars = apacheContainer.querySelectorAll('.progress-bar');
+                if (!progressBars || progressBars.length < 3) return;
+                
+                // Calculate percentages
+                const apacheTotal = metrics.apache_count || 0;
+                const apache4xx = metrics.apache_4xx || 0;
+                const apache5xx = metrics.apache_5xx || 0;
+                const apacheSuccess = apacheTotal - apache4xx - apache5xx;
+                
+                const successPercentage = apacheTotal > 0 ? (apacheSuccess / apacheTotal * 100) : 0;
+                const error4xxPercentage = apacheTotal > 0 ? (apache4xx / apacheTotal * 100) : 0;
+                const error5xxPercentage = apacheTotal > 0 ? (apache5xx / apacheTotal * 100) : 0;
+                
+                // Update progress bars
+                progressBars[0].style.width = `${successPercentage}%`;
+                progressBars[0].textContent = `${successPercentage.toFixed(1)}%`;
+                progressBars[0].setAttribute('aria-valuenow', successPercentage);
+                
+                progressBars[1].style.width = `${error4xxPercentage}%`;
+                progressBars[1].textContent = `${error4xxPercentage.toFixed(1)}%`;
+                progressBars[1].setAttribute('aria-valuenow', error4xxPercentage);
+                
+                progressBars[2].style.width = `${error5xxPercentage}%`;
+                progressBars[2].textContent = `${error5xxPercentage.toFixed(1)}%`;
+                progressBars[2].setAttribute('aria-valuenow', error5xxPercentage);
+            }
+
+            // Function to update MySQL progress bars
+            function updateMySQLProgressBars(metrics) {
+                if (!metrics || !metrics.mysql_count) return;
+                
+                const mysqlContainer = document.querySelector('.chart-container:nth-of-type(4)');
+                if (!mysqlContainer) return;
+                
+                const progressBars = mysqlContainer.querySelectorAll('.progress-bar');
+                if (!progressBars || progressBars.length < 2) return;
+                
+                // Calculate percentages
+                const mysqlTotal = metrics.mysql_count || 0;
+                const mysqlSlow = metrics.mysql_slow || 0;
+                const mysqlFast = mysqlTotal - mysqlSlow;
+                
+                const fastPercentage = mysqlTotal > 0 ? (mysqlFast / mysqlTotal * 100) : 0;
+                const slowPercentage = mysqlTotal > 0 ? (mysqlSlow / mysqlTotal * 100) : 0;
+                
+                // Update progress bars
+                progressBars[0].style.width = `${fastPercentage}%`;
+                progressBars[0].textContent = `Optimal (${fastPercentage.toFixed(1)}%)`;
+                progressBars[0].setAttribute('aria-valuenow', fastPercentage);
+                
+                progressBars[1].style.width = `${slowPercentage}%`;
+                progressBars[1].textContent = `Slow (${slowPercentage.toFixed(1)}%)`;
+                progressBars[1].setAttribute('aria-valuenow', slowPercentage);
+            }
+
+            // Function to update charts
+            function updateCharts(charts) {
+                if (!charts) return;
+                
+                // Update alerts chart
+                if (window.alertsChart && charts.alerts) {
+                    window.alertsChart.data.labels = charts.alerts.labels;
+                    window.alertsChart.data.datasets[0].data = charts.alerts.data;
+                    window.alertsChart.update();
+                }
+                
+                // Update MITRE chart
+                if (window.mitreChart && charts.mitre) {
+                    window.mitreChart.data.labels = charts.mitre.labels;
+                    window.mitreChart.data.datasets[0].data = charts.mitre.data;
+                    window.mitreChart.update();
+                }
+            }
+
+            // Function to update alerts table
+            function updateAlertsTable(alerts) {
+                if (!alerts) return;
+                
+                const tableBody = document.querySelector('.alert-table tbody');
+                if (!tableBody) return;
+                
+                if (!alerts.length) {
+                    tableBody.innerHTML = `
+                        <tr>
+                            <td colspan="6" class="text-center py-4">No security alerts in the selected time period.</td>
+                        </tr>
+                    `;
+                    return;
+                }
+                
+                tableBody.innerHTML = '';
+                
+                alerts.forEach(alert => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${alert.timestamp}</td>
+                        <td>${alert.source_ip || 'Unknown'}</td>
+                        <td class="severity-${alert.severity}">${alert.severity.charAt(0).toUpperCase() + alert.severity.slice(1)}</td>
+                        <td>${alert.mitre_tactic || 'Unclassified'}</td>
+                        <td>${alert.description.length > 70 ? alert.description.substring(0, 70) + '...' : alert.description}</td>
+                        <td>
+                            <a href="/alert/${alert.id}/" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-eye"></i> Details
+                            </a>
+                        </td>
+                    `;
+                    tableBody.appendChild(row);
                 });
             }
         });

@@ -53,10 +53,10 @@ urlpatterns = [
     path('events/export/', views.export_events, name='export_events'),
     path('apache-logs/', views.apache_logs_view, name='apache_logs'),
     path('mysql-logs/', views.mysql_logs_view, name='mysql_logs'),
-    path('reports/', views.reports_view, name='reports'),
+    path('reports/', views.generate_report, name='reports'),
     path('settings/', views.settings_view, name='settings'),
     path('explore-agent/', views.explore_agent_view, name='explore_agent'),
-    path('generate-report/', views.generate_report_view, name='generate_report'),
+    path('generate-report/', views.generate_report, name='generate_report'),
     path('alerts-details/', views.alerts_details_view, name='alerts_details'),
     path('mitre-details/', views.mitre_details_view, name='mitre_details'),
     
@@ -114,6 +114,9 @@ urlpatterns = [
     path('api/admin/run-log-analysis/', views_admin.run_log_analysis, name='run_log_analysis'),
     path('api/admin/export-report/', views_admin.export_report, name='export_report'),
     
+    # Add to your urlpatterns
+    path('api/dashboard-data/', views.dashboard_data_api, name='dashboard_data_api'),
+
     path('', home),  # Add this line to handle the root URL
 
     # User Reports View

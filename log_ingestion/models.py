@@ -42,7 +42,7 @@ class RawLog(models.Model):
     """Raw log entries before parsing"""
     source = models.ForeignKey(LogSource, on_delete=models.CASCADE)
     content = models.TextField()
-    timestamp = models.DateTimeField(default=timezone.now)
+    timestamp = models.DateTimeField(default=timezone.now)  # Add default
     is_parsed = models.BooleanField(default=False)
     # New field for real-time processing
     processing_status = models.CharField(max_length=20, 
@@ -74,7 +74,7 @@ class ParsedLog(models.Model):
     # Make raw_log field optional to support streaming logs that don't have RawLog entries
     raw_log = models.OneToOneField(RawLog, on_delete=models.CASCADE, related_name='parsed',
                                    null=True, blank=True)
-    timestamp = models.DateTimeField(db_index=True)  # Add index for faster timestamp-based lookups
+    timestamp = models.DateTimeField(default=timezone.now, db_index=True)  # Add default
     log_level = models.CharField(max_length=20, blank=True, null=True)
     source_ip = models.GenericIPAddressField(blank=True, null=True, db_index=True)  # Add index for IP lookups
     user_agent = models.TextField(blank=True, null=True)

@@ -1,0 +1,753 @@
+.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log Explorer - Log Detection Platform</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #3f51b5;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --warning-color: #ffc107;
+            --info-color: #17a2b8;
+            --text-primary: #212529;
+            --text-secondary: #6c757d;
+            --card-bg: #ffffff;
+            --border-color: #dee2e6;
+            --sidebar-width: 250px;
+            --sidebar-collapsed-width: 70px;
+            --header-height: 60px;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f7fa;
+            margin: 0;
+            padding: 0;
+            color: var(--text-primary);
+        }
+        
+        .dashboard-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        /* Header styles */
+        .main-header {
+            background-color: #fff;
+            border-bottom: 1px solid var(--border-color);
+            height: var(--header-height);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 1.5rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        
+        .logo-section {
+            display: flex;
+            align-items: center;
+        }
+        
+        .logo-section h1 {
+            font-size: 1.25rem;
+            margin: 0 0 0 1rem;
+            font-weight: 500;
+        }
+        
+        .sidebar-toggle {
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 1.25rem;
+            padding: 0.25rem;
+        }
+        
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .username {
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+        
+        .logout-btn {
+            color: var(--danger-color);
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        
+        /* Main content container */
+        .main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        /* Sidebar styles */
+        .sidebar {
+            width: var(--sidebar-width);
+            background-color: #fff;
+            border-right: 1px solid var(--border-color);
+            transition: width 0.3s ease;
+            overflow-y: auto;
+            box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
+        }
+        
+        .sidebar.collapsed {
+            width: var(--sidebar-collapsed-width);
+        }
+        
+        .sidebar-nav ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .sidebar-nav li {
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        }
+        
+        .sidebar-nav li a {
+            display: flex;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+        
+        .sidebar-nav li a i {
+            margin-right: 1rem;
+            min-width: 20px;
+            text-align: center;
+        }
+        
+        .sidebar-nav li a:hover {
+            background-color: rgba(0, 0, 0, 0.03);
+            color: var(--primary-color);
+        }
+        
+        .sidebar-nav li.active a {
+            background-color: rgba(63, 81, 181, 0.1);
+            color: var(--primary-color);
+            font-weight: 500;
+            border-left: 4px solid var(--primary-color);
+        }
+        
+        .sidebar.collapsed .sidebar-nav li a span {
+            display: none;
+        }
+        
+        /* Content area */
+        .content {
+            flex: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+        
+        /* Filter and search section */
+        .filters-section {
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .filter-form {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            align-items: flex-end;
+        }
+        
+        .filter-group {
+            flex: 1;
+            min-width: 150px;
+        }
+        
+        .filter-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        /* Stats cards */
+        .stats-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .stat-card {
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .stat-card .stat-title {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .stat-card .stat-value {
+            font-size: 1.75rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-card .stat-subtitle {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+        
+        /* Logs table */
+        .logs-section {
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .logs-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .logs-table th {
+            background-color: rgba(0, 0, 0, 0.02);
+            font-weight: 500;
+            text-align: left;
+            padding: 0.75rem 1rem;
+        }
+        
+        .logs-table td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: middle;
+        }
+        
+        .logs-table tbody tr:hover {
+            background-color: rgba(0, 0, 0, 0.02);
+        }
+        
+        .logs-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .message-cell {
+            max-width: 500px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        /* Source type badges */
+        .source-badge {
+            display: inline-block;
+            padding: 0.35rem 0.75rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .source-apache {
+            background-color: rgba(63, 81, 181, 0.15);
+            color: #3f51b5;
+        }
+        
+        .source-mysql {
+            background-color: rgba(255, 87, 34, 0.15);
+            color: #ff5722;
+        }
+        
+        .source-system {
+            background-color: rgba(76, 175, 80, 0.15);
+            color: #4caf50;
+        }
+        
+        /* Log level indicators */
+        .log-level {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .level-error {
+            background-color: rgba(220, 53, 69, 0.15);
+            color: #dc3545;
+        }
+        
+        .level-warning {
+            background-color: rgba(255, 193, 7, 0.15);
+            color: #ffc107;
+        }
+        
+        .level-info {
+            background-color: rgba(23, 162, 184, 0.15);
+            color: #17a2b8;
+        }
+        
+        .level-debug {
+            background-color: rgba(108, 117, 125, 0.15);
+            color: #6c757d;
+        }
+        
+        /* Pagination */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            margin-top: 1.5rem;
+        }
+        
+        .page-link {
+            padding: 0.375rem 0.75rem;
+        }
+        
+        /* Log detail modal */
+        .log-content {
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            padding: 1rem;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .log-detail-row {
+            display: flex;
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.5rem 0;
+        }
+        
+        .log-detail-row:last-child {
+            border-bottom: none;
+        }
+        
+        .log-detail-label {
+            width: 150px;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+        
+        .log-detail-value {
+            flex: 1;
+        }
+        
+        /* Responsive styles */
+        @media (max-width: 992px) {
+            .stats-container {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                left: -250px;
+                top: var(--header-height);
+                height: calc(100vh - var(--header-height));
+                z-index: 99;
+                transition: left 0.3s ease;
+            }
+            
+            .sidebar.open {
+                left: 0;
+            }
+            
+            .stats-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .filter-form {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            
+            .filter-group {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <header class="main-header">
+            <div class="logo-section">
+                <button id="sidebar-toggle" class="sidebar-toggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <h1>Log Detection Platform</h1>
+            </div>
+            <div class="header-actions">
+                <span class="username">{{ request.user.username }}</span>
+                <a href="{% url 'logout' %}" class="logout-btn">Logout</a>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <!-- Sidebar Navigation -->
+            <aside class="sidebar">
+                <nav class="sidebar-nav">
+                    <ul>
+                        <li><a href="{% url 'dashboard' %}"><i class="fas fa-chart-line"></i> Dashboard</a></li>
+                        <li><a href="{% url 'events' %}"><i class="fas fa-calendar-alt"></i> Events</a></li>
+                        <li><a href="{% url 'apache_logs' %}"><i class="fas fa-server"></i> Apache Logs</a></li>
+                        <li><a href="{% url 'mysql_logs' %}"><i class="fas fa-database"></i> MySQL Logs</a></li>
+                        <li><a href="{% url 'mitre_details' %}"><i class="fas fa-shield-alt"></i> MITRE ATT&CK</a></li>
+                        <li><a href="{% url 'reports' %}"><i class="fas fa-file-alt"></i> Reports</a></li>
+                        <li class="active"><a href="{% url 'explore_logs' %}"><i class="fas fa-search"></i> Explore Logs</a></li>
+                        <li><a href="{% url 'explore_agent' %}"><i class="fas fa-robot"></i> AI Assistant</a></li>
+                        <li><a href="{% url 'settings' %}"><i class="fas fa-cog"></i> Settings</a></li>
+                    </ul>
+                </nav>
+            </aside>
+
+            <!-- Content Area -->
+            <main class="content">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2>Log Explorer</h2>
+                    <div class="d-flex">
+                        <div class="dropdown me-2">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fas fa-download"></i> Export
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="?{{ request.GET.urlencode }}&export=csv">Export to CSV</a></li>
+                                <li><a class="dropdown-item" href="?{{ request.GET.urlencode }}&export=json">Export to JSON</a></li>
+                            </ul>
+                        </div>
+                        <button id="refresh-btn" class="btn btn-sm btn-primary">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filters Section -->
+                <div class="filters-section">
+                    <form class="filter-form" method="get" action="{% url 'explore_logs' %}">
+                        <div class="filter-group">
+                            <label for="source_type" class="form-label">Source Type</label>
+                            <select id="source_type" name="source_type" class="form-select">
+                                <option value="all" {% if source_type == 'all' %}selected{% endif %}>All Sources</option>
+                                <option value="apache" {% if source_type == 'apache' %}selected{% endif %}>Apache</option>
+                                <option value="mysql" {% if source_type == 'mysql' %}selected{% endif %}>MySQL</option>
+                                <option value="system" {% if source_type == 'system' %}selected{% endif %}>System</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="log_level" class="form-label">Log Level</label>
+                            <select id="log_level" name="log_level" class="form-select">
+                                <option value="all" {% if log_level == 'all' %}selected{% endif %}>All Levels</option>
+                                <option value="error" {% if log_level == 'error' %}selected{% endif %}>Error</option>
+                                <option value="warning" {% if log_level == 'warning' %}selected{% endif %}>Warning</option>
+                                <option value="info" {% if log_level == 'info' %}selected{% endif %}>Info</option>
+                                <option value="debug" {% if log_level == 'debug' %}selected{% endif %}>Debug</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="time_range" class="form-label">Time Range</label>
+                            <select id="time_range" name="time_range" class="form-select">
+                                <option value="1h" {% if time_range == '1h' %}selected{% endif %}>Last Hour</option>
+                                <option value="12h" {% if time_range == '12h' %}selected{% endif %}>Last 12 Hours</option>
+                                <option value="24h" {% if time_range == '24h' %}selected{% endif %}>Last 24 Hours</option>
+                                <option value="7d" {% if time_range == '7d' %}selected{% endif %}>Last 7 Days</option>
+                                <option value="30d" {% if time_range == '30d' %}selected{% endif %}>Last 30 Days</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="search" class="form-label">Search</label>
+                            <input type="text" id="search" name="search" class="form-control" placeholder="Search in log content" value="{{ search_query }}">
+                        </div>
+                        <div class="filter-actions">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-filter"></i> Apply Filters
+                            </button>
+                            <a href="{% url 'explore_logs' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-undo"></i> Reset
+                            </a>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Statistics Cards -->
+                <div class="stats-container">
+                    <div class="stat-card">
+                        <div class="stat-title">Total Logs</div>
+                        <div class="stat-value">{{ total_logs }}</div>
+                        <div class="stat-subtitle">Matching current filters</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">Apache Logs</div>
+                        <div class="stat-value">{{ apache_count }}</div>
+                        <div class="stat-subtitle">
+                            {{ apache_count|floatformat:1 }}% of total logs
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">MySQL Logs</div>
+                        <div class="stat-value">{{ mysql_count }}</div>
+                        <div class="stat-subtitle">
+                            {{ mysql_count|floatformat:1 }}% of total logs
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Logs Table -->
+                <div class="logs-section">
+                    <h3 class="mb-3">Log Entries</h3>
+                    {% if logs %}
+                    <div class="table-responsive">
+                        <table class="logs-table">
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Source</th>
+                                    <th>Level</th>
+                                    <th>Message</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for log in logs %}
+                                <tr>
+                                    <td>{{ log.timestamp|date:"Y-m-d H:i:s" }}</td>
+                                    <td>
+                                        {% if log.source.source_type == 'apache' %}
+                                        <span class="source-badge source-apache">Apache</span>
+                                        {% elif log.source.source_type == 'mysql' %}
+                                        <span class="source-badge source-mysql">MySQL</span>
+                                        {% else %}
+                                        <span class="source-badge source-system">System</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if log.level == 'error' %}
+                                        <span class="log-level level-error">Error</span>
+                                        {% elif log.level == 'warning' %}
+                                        <span class="log-level level-warning">Warning</span>
+                                        {% elif log.level == 'info' %}
+                                        <span class="log-level level-info">Info</span>
+                                        {% else %}
+                                        <span class="log-level level-debug">Debug</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="message-cell" title="{{ log.content }}">
+                                        {{ log.content|truncatechars:100 }}
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#logModal{{ log.id }}">
+                                            <i class="fas fa-eye"></i> View
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Pagination -->
+                    {% if total_pages > 1 %}
+                    <nav aria-label="Logs pagination">
+                        <ul class="pagination justify-content-center">
+                            {% if has_prev %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ prev_page }}&source_type={{ source_type }}&log_level={{ log_level }}&time_range={{ time_range }}&search={{ search_query }}" aria-label="Previous">
+                                    <span aria-hidden="true">&laquo;</span>
+                                </a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled">
+                                <a class="page-link" href="#" aria-label="Previous">
+                                    <span aria-hidden="true">&laquo;</span>
+                                </a>
+                            </li>
+                            {% endif %}
+                            
+                            {% for p in page_range %}
+                                {% if p == '...' %}
+                                <li class="page-item disabled">
+                                    <a class="page-link" href="#">...</a>
+                                </li>
+                                {% else %}
+                                <li class="page-item {% if p == current_page %}active{% endif %}">
+                                    <a class="page-link" href="?page={{ p }}&source_type={{ source_type }}&log_level={{ log_level }}&time_range={{ time_range }}&search={{ search_query }}">{{ p }}</a>
+                                </li>
+                                {% endif %}
+                            {% endfor %}
+                            
+                            {% if has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ next_page }}&source_type={{ source_type }}&log_level={{ log_level }}&time_range={{ time_range }}&search={{ search_query }}" aria-label="Next">
+                                    <span aria-hidden="true">&raquo;</span>
+                                </a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled">
+                                <a class="page-link" href="#" aria-label="Next">
+                                    <span aria-hidden="true">&raquo;</span>
+                                </a>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+                    
+                    {% else %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> No logs found for the selected filters.
+                    </div>
+                    {% endif %}
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Log Detail Modals -->
+    {% for log in logs %}
+    <div class="modal fade" id="logModal{{ log.id }}" tabindex="-1" aria-labelledby="logModalLabel{{ log.id }}" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="logModalLabel{{ log.id }}">Log Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="log-detail-row">
+                        <div class="log-detail-label">Timestamp</div>
+                        <div class="log-detail-value">{{ log.timestamp|date:"Y-m-d H:i:s.u" }}</div>
+                    </div>
+                    <div class="log-detail-row">
+                        <div class="log-detail-label">Source</div>
+                        <div class="log-detail-value">{{ log.source.name }} ({{ log.source.source_type }})</div>
+                    </div>
+                    <div class="log-detail-row">
+                        <div class="log-detail-label">Level</div>
+                        <div class="log-detail-value">
+                            {% if log.level == 'error' %}
+                            <span class="log-level level-error">Error</span>
+                            {% elif log.level == 'warning' %}
+                            <span class="log-level level-warning">Warning</span>
+                            {% elif log.level == 'info' %}
+                            <span class="log-level level-info">Info</span>
+                            {% else %}
+                            <span class="log-level level-debug">Debug</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="log-detail-row">
+                        <div class="log-detail-label">Host</div>
+                        <div class="log-detail-value">{{ log.source.host|default:"Unknown" }}</div>
+                    </div>
+                    <div class="log-detail-row">
+                        <div class="log-detail-label">Log ID</div>
+                        <div class="log-detail-value">{{ log.id }}</div>
+                    </div>
+                    
+                    <h6 class="mt-4 mb-2">Log Content</h6>
+                    <div class="log-content">{{ log.content }}</div>
+                    
+                    {% if log.parsed_log %}
+                    <h6 class="mt-4 mb-2">Parsed Information</h6>
+                    <div class="log-detail-row">
+                        <div class="log-detail-label">Status Code</div>
+                        <div class="log-detail-value">{{ log.parsed_log.status_code|default:"N/A" }}</div>
+                    </div>
+                    <div class="log-detail-row">
+                        <div class="log-detail-label">Source IP</div>
+                        <div class="log-detail-value">{{ log.parsed_log.source_ip|default:"N/A" }}</div>
+                    </div>
+                    <div class="log-detail-row">
+                        <div class="log-detail-label">Request Path</div>
+                        <div class="log-detail-value">{{ log.parsed_log.request_path|default:"N/A" }}</div>
+                    </div>
+                    <div class="log-detail-row">
+                        <div class="log-detail-label">User Agent</div>
+                        <div class="log-detail-value">{{ log.parsed_log.user_agent|default:"N/A" }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <a href="{% url 'reports' %}?source={{ log.source.source_type }}&log_id={{ log.id }}" class="btn btn-primary">
+                        <i class="fas fa-file-alt"></i> Generate Report
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- Bootstrap JS & jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Sidebar toggle functionality
+            const sidebarToggle = document.getElementById('sidebar-toggle');
+            const sidebar = document.querySelector('.sidebar');
+            
+            if (sidebarToggle) {
+                sidebarToggle.addEventListener('click', function() {
+                    sidebar.classList.toggle('collapsed');
+                    
+                    // Handle mobile view
+                    if (window.innerWidth <= 768) {
+                        sidebar.classList.toggle('open');
+                    }
+                });
+            }
+            
+            // Refresh button functionality
+            const refreshBtn = document.getElementById('refresh-btn');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', function() {
+                    this.querySelector('i').classList.add('fa-spin');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 500);
+                });
+            }
+            
+            // Make message cells expandable on click
+            document.querySelectorAll('.message-cell').forEach(function(cell) {
+                cell.addEventListener('click', function() {
+                    this.classList.toggle('text-truncate');
+                    this.style.whiteSpace = this.style.whiteSpace === 'normal' ? 'nowrap' : 'normal';
+                    this.style.maxWidth = this.style.maxWidth === 'none' ? '500px' : 'none';
+                });
+            });
+        });
+    </script>
+</body>
+</html>

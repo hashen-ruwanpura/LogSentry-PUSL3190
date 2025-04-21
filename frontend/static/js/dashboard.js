@@ -110,10 +110,144 @@ function initChartsWithBackendData() {
 }
 
 function updateTimeframe(days) {
-    window.location.href = `/dashboard/?days=${days}`;
+    window.location.href = `/dashboard/?timeframe=${days}`;
 }
 
 function viewAlertDetails(alertId) {
     // Redirect to alert details page or show a modal with details
-    window.location.href = `/alerts/details/${alertId}/`;
+    window.location.href = `/alert-detail/${alertId}/`;
+}
+
+// Function to update charts with new data
+function updateCharts(chartData) {
+    // Update alerts chart
+    if (window.alertsChart && chartData.alerts) {
+        window.alertsChart.data.labels = chartData.alerts.labels;
+        window.alertsChart.data.datasets[0].data = chartData.alerts.data;
+        window.alertsChart.update();
+    }
+    
+    // Update MITRE chart
+    if (window.mitreChart && chartData.mitre) {
+        window.mitreChart.data.labels = chartData.mitre.labels;
+        window.mitreChart.data.datasets[0].data = chartData.mitre.data;
+        window.mitreChart.update();
+    }
+}
+
+// Function to refresh dashboard data via AJAX
+function refreshDashboardData(timeframe = '1d') {
+    // Show loading indicators
+    document.querySelectorAll('.loading-spinner').forEach(spinner => {
+        spinner.style.display = 'flex';
+    });
+    
+    fetch(`/dashboard-data-api/?timeframe=${timeframe}`)
+        .then(response => response.json())
+        .then(data => {
+            // Update metrics and charts with new data
+            updateMetrics(data.metrics);
+            updateCharts(data.charts);
+            updateAlertsTable(data.alerts);
+            
+            // Hide loading indicators
+            document.querySelectorAll('.loading-spinner').forEach(spinner => {
+                spinner.style.display = 'none';
+            });
+        })
+        .catch(error => {
+            console.error('Error refreshing dashboard data:', error);
+            
+            // Hide loading indicators
+            document.querySelectorAll('.loading-spinner').forEach(spinner => {
+                spinner.style.display = 'none';
+            });
+            
+            // Show error message
+            alert('Failed to refresh dashboard data. Please try again.');
+        });
+}
+
+// Function to update dashboard metrics
+function updateMetrics(metrics) {
+    if (!metrics) return;
+    
+    // Update the metrics on the page
+    updateMetricValue('total-logs', metrics.total_logs);
+    updateMetricValue('high-alerts', metrics.high_level_alerts);
+    updateMetricValue('auth-failures', metrics.auth_failures);
+    updateMetricValue('auth-success', metrics.auth_success);
+    updateMetricValue('apache-total', metrics.apache_count);
+    updateMetricValue('apache-4xx', metrics.apache_4xx);
+    updateMetricValue('apache-5xx', metrics.apache_5xx);
+    updateMetricValue('mysql-total', metrics.mysql_count);
+    updateMetricValue('mysql-slow', metrics.mysql_slow);
+}
+
+// Helper function to update a metric value
+function updateMetricValue(id, value) {
+    const element = document.getElementById(id);
+    if (element) {
+        element.textContent = value;
+    }
+}
+
+// Function to update alerts table
+function updateAlertsTable(alerts) {
+    if (!alerts || !Array.isArray(alerts)) return;
+    
+    const tbody = document.querySelector('.alert-table tbody');
+    if (!tbody) return;
+    
+    // Clear existing rows
+    tbody.innerHTML = '';
+    
+    if (alerts.length === 0) {
+        const row = document.createElement('tr');
+        row.innerHTML = `<td colspan="6" class="text-center">No security alerts in the selected time period</td>`;
+        tbody.appendChild(row);
+        return;
+    }
+    
+    // Add new rows
+    alerts.forEach(alert => {
+        const row = document.createElement('tr');
+        
+        let severityClass = '';
+        switch (alert.severity) {
+            case 'critical':
+                severityClass = 'severity-critical';
+                break;
+            case 'high':
+                severityClass = 'severity-high';
+                break;
+            case 'medium':
+                severityClass = 'severity-medium';
+                break;
+            default:
+                severityClass = 'severity-low';
+        }
+        
+        row.innerHTML = `
+            <td>${alert.timestamp}</td>
+            <td>${alert.source_ip || 'Unknown'}</td>
+            <td class="${severityClass}">${alert.severity.charAt(0).toUpperCase() + alert.severity.slice(1)}</td>
+            <td>${alert.mitre_tactic || 'Unclassified'}</td>
+            <td>${truncateText(alert.description, 70)}</td>
+            <td>
+                <button onclick="viewAlertDetails(${alert.id})" class="btn btn-sm btn-outline-primary">
+                    <i class="fas fa-eye"></i> Details
+                </button>
+            </td>
+        `;
+        
+        tbody.appendChild(row);
+    });
+}
+
+// Helper function to truncate text
+function truncateText(text, maxLength) {
+    if (!text) return '';
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
 }

@@ -529,12 +529,11 @@ events.html -->
                     <div class="event-filters">
                         <div class="filter-group">
                             <label for="event-type">Event Type:</label>
-                            <select id="event-type" name="event-type">
+                            <select id="event-type" name="event_type">
                                 <option value="all" {% if event_type == 'all' %}selected{% endif %}>All Events</option>
-                                <option value="security" {% if event_type == 'security' %}selected{% endif %}>Security</option>
-                                <option value="access" {% if event_type == 'access' %}selected{% endif %}>Access</option>
-                                <option value="error" {% if event_type == 'error' %}selected{% endif %}>Error</option>
-                                <option value="system" {% if event_type == 'system' %}selected{% endif %}>System</option>
+                                <option value="apache" {% if event_type == 'apache' %}selected{% endif %}>Apache</option>
+                                <option value="mysql" {% if event_type == 'mysql' %}selected{% endif %}>MySQL</option>
+                                <option value="threat" {% if event_type == 'threat' %}selected{% endif %}>Security Threats</option>
                             </select>
                         </div>
                         
@@ -542,6 +541,7 @@ events.html -->
                             <label for="severity">Severity:</label>
                             <select id="severity" name="severity">
                                 <option value="all" {% if severity == 'all' %}selected{% endif %}>All Levels</option>
+                                <option value="critical" {% if severity == 'critical' %}selected{% endif %}>Critical</option>
                                 <option value="high" {% if severity == 'high' %}selected{% endif %}>High</option>
                                 <option value="medium" {% if severity == 'medium' %}selected{% endif %}>Medium</option>
                                 <option value="low" {% if severity == 'low' %}selected{% endif %}>Low</option>
@@ -550,18 +550,18 @@ events.html -->
                         </div>
                         
                         <div class="filter-group">
-                            <label for="time-period">Time Period:</label>
-                            <select id="time-period" name="time-period">
-                                <option value="24h" {% if time_period == '24h' %}selected{% endif %}>Last 24 Hours</option>
-                                <option value="7d" {% if time_period == '7d' %}selected{% endif %}>Last 7 Days</option>
-                                <option value="30d" {% if time_period == '30d' %}selected{% endif %}>Last 30 Days</option>
-                                <option value="custom" {% if time_period == 'custom' %}selected{% endif %}>Custom Range</option>
+                            <label for="date-range">Time Period:</label>
+                            <select id="date-range" name="date_range">
+                                <option value="24h" {% if date_range == '24h' %}selected{% endif %}>Last 24 Hours</option>
+                                <option value="3d" {% if date_range == '3d' %}selected{% endif %}>Last 3 Days</option>
+                                <option value="7d" {% if date_range == '7d' %}selected{% endif %}>Last 7 Days</option>
+                                <option value="30d" {% if date_range == '30d' %}selected{% endif %}>Last 30 Days</option>
                             </select>
                         </div>
                         
                         <div class="filter-group">
                             <label for="search-events">Search:</label>
-                            <input type="text" id="search-events" name="search" placeholder="Search events..." value="{{ search }}">
+                            <input type="text" id="search-events" name="search" placeholder="Search events..." value="{{ search_term }}">
                         </div>
                         
                         <div class="filter-buttons">
@@ -571,7 +571,7 @@ events.html -->
                     </div>
                     
                     <div class="event-count">
-                        Showing {{ events|length }} of {{ total_events }} events
+                        Showing {{ events|length }} of {{ stats.total_events }} events
                     </div>
                     
                     <table class="events-table">
@@ -591,8 +591,8 @@ events.html -->
                                 <tr data-event-id="{{ event.id }}" class="event-row">
                                     <td>{{ event.timestamp|date:"Y-m-d H:i:s" }}</td>
                                     <td>
-                                        <span class="event-type type-{{ event.event_type|lower }}">
-                                            {{ event.event_type }}
+                                        <span class="event-type {% if event.type == 'threat' %}type-security{% elif event.source_type == 'apache' %}type-access{% elif event.source_type == 'mysql' %}type-system{% else %}type-error{% endif %}">
+                                            {{ event.type|upper }}
                                         </span>
                                     </td>
                                     <td>
@@ -600,53 +600,40 @@ events.html -->
                                         <i class="fas fa-server source-icon"></i>
                                         {% elif event.source_type == 'mysql' %}
                                         <i class="fas fa-database source-icon"></i>
-                                        {% elif event.source_type == 'system' %}
-                                        <i class="fas fa-desktop source-icon"></i>
+                                        {% elif event.source_type == 'threat' %}
+                                        <i class="fas fa-exclamation-triangle source-icon"></i>
                                         {% else %}
                                         <i class="fas fa-question-circle source-icon"></i>
                                         {% endif %}
                                         {{ event.source }}
                                     </td>
-                                    <td>{{ event.description|truncatechars:80 }}</td>
+                                    <td>{{ event.message|truncatechars:80 }}</td>
                                     <td>
-                                        <span class="severity-badge severity-{{ event.severity|lower }}">
-                                            {{ event.severity }}
+                                        <span class="severity-badge {% if event.status == 'critical' %}severity-high{% elif event.status == 'high' %}severity-high{% elif event.status == 'medium' %}severity-medium{% elif event.status == 'low' %}severity-low{% else %}severity-info{% endif %}">
+                                            {{ event.status|upper }}
                                         </span>
                                     </td>
                                     <td>
-                                        <button class="view-button" onclick="toggleEventDetails({{ event.id }})">
-                                            <i class="fas fa-eye"></i> View
-                                        </button>
+                                        {% if event.type == 'threat' %}
+                                            <a href="{% url 'alert_detail' event.id %}" class="view-button">
+                                                <i class="fas fa-eye"></i> View
+                                            </a>
+                                        {% else %}
+                                            <button class="view-button" onclick="toggleEventDetails({{ event.id }})">
+                                                <i class="fas fa-eye"></i> View
+                                            </button>
+                                        {% endif %}
                                     </td>
                                 </tr>
                                 <tr id="event-details-{{ event.id }}" class="expand-row" style="display: none;">
                                     <td colspan="6">
                                         <div class="event-detail">
-                                            <strong>Full Description:</strong> {{ event.description }}
+                                            <strong>Full Description:</strong> {{ event.message }}
                                             
-                                            {% if event.user %}
-                                            <br><strong>User:</strong> {{ event.user }}
-                                            {% endif %}
-                                            
-                                            {% if event.ip_address %}
-                                            <br><strong>IP Address:</strong> {{ event.ip_address }}
-                                            {% endif %}
-                                            
-                                            {% if event.status_code %}
-                                            <br><strong>Status Code:</strong> {{ event.status_code }}
-                                            {% endif %}
-                                            
-                                            {% if event.threat_type %}
-                                            <br><strong>Threat Type:</strong> {{ event.threat_type }}
-                                            {% endif %}
-                                            
-                                            {% if event.mitre_id %}
-                                            <br><strong>MITRE ATT&CK:</strong> {{ event.mitre_id }} - {{ event.mitre_tactic }}
-                                            {% endif %}
-                                            
-                                            {% if event.raw_content %}
-                                            <br><br><strong>Raw Log:</strong><br>{{ event.raw_content }}
-                                            {% endif %}
+                                            <br><strong>Source:</strong> {{ event.source }}
+                                            <br><strong>Source Type:</strong> {{ event.source_type }}
+                                            <br><strong>Status:</strong> {{ event.status }}
+                                            <br><strong>Timestamp:</strong> {{ event.timestamp|date:"Y-m-d H:i:s" }}
                                         </div>
                                     </td>
                                 </tr>
@@ -663,8 +650,8 @@ events.html -->
                     
                     <div class="pagination">
                         {% if events.has_previous %}
-                            <a href="?page=1&event_type={{ event_type }}&severity={{ severity }}&time_period={{ time_period }}&search={{ search }}"><i class="fas fa-angle-double-left"></i></a>
-                            <a href="?page={{ events.previous_page_number }}&event_type={{ event_type }}&severity={{ severity }}&time_period={{ time_period }}&search={{ search }}"><i class="fas fa-angle-left"></i></a>
+                            <a href="?page=1&event_type={{ event_type }}&severity={{ severity }}&date_range={{ date_range }}&search={{ search_term }}"><i class="fas fa-angle-double-left"></i></a>
+                            <a href="?page={{ events.previous_page_number }}&event_type={{ event_type }}&severity={{ severity }}&date_range={{ date_range }}&search={{ search_term }}"><i class="fas fa-angle-left"></i></a>
                         {% else %}
                             <a class="disabled"><i class="fas fa-angle-double-left"></i></a>
                             <a class="disabled"><i class="fas fa-angle-left"></i></a>
@@ -674,13 +661,13 @@ events.html -->
                             {% if events.number == i %}
                                 <a class="active">{{ i }}</a>
                             {% elif i > events.number|add:'-3' and i < events.number|add:'3' %}
-                                <a href="?page={{ i }}&event_type={{ event_type }}&severity={{ severity }}&time_period={{ time_period }}&search={{ search }}">{{ i }}</a>
+                                <a href="?page={{ i }}&event_type={{ event_type }}&severity={{ severity }}&date_range={{ date_range }}&search={{ search_term }}">{{ i }}</a>
                             {% endif %}
                         {% endfor %}
                         
                         {% if events.has_next %}
-                            <a href="?page={{ events.next_page_number }}&event_type={{ event_type }}&severity={{ severity }}&time_period={{ time_period }}&search={{ search }}"><i class="fas fa-angle-right"></i></a>
-                            <a href="?page={{ events.paginator.num_pages }}&event_type={{ event_type }}&severity={{ severity }}&time_period={{ time_period }}&search={{ search }}"><i class="fas fa-angle-double-right"></i></a>
+                            <a href="?page={{ events.next_page_number }}&event_type={{ event_type }}&severity={{ severity }}&date_range={{ date_range }}&search={{ search_term }}"><i class="fas fa-angle-right"></i></a>
+                            <a href="?page={{ events.paginator.num_pages }}&event_type={{ event_type }}&severity={{ severity }}&date_range={{ date_range }}&search={{ search_term }}"><i class="fas fa-angle-double-right"></i></a>
                         {% else %}
                             <a class="disabled"><i class="fas fa-angle-right"></i></a>
                             <a class="disabled"><i class="fas fa-angle-double-right"></i></a>
@@ -705,18 +692,6 @@ events.html -->
                     applyFilters();
                 }
             });
-            
-            // Set event handlers for select filters
-            ['event-type', 'severity', 'time-period'].forEach(function(filterId) {
-                document.getElementById(filterId).addEventListener('change', function() {
-                    // For time-period, check if custom was selected
-                    if (filterId === 'time-period' && this.value === 'custom') {
-                        // Implement custom date range popup or additional inputs
-                        console.log('Custom date range selected');
-                        // This would be expanded in a real implementation
-                    }
-                });
-            });
         });
         
         // Toggle event details row
@@ -733,13 +708,13 @@ events.html -->
         function applyFilters() {
             const eventType = document.getElementById('event-type').value;
             const severity = document.getElementById('severity').value;
-            const timePeriod = document.getElementById('time-period').value;
+            const dateRange = document.getElementById('date-range').value;
             const searchTerm = document.getElementById('search-events').value;
             
             const url = new URL(window.location.href);
             url.searchParams.set('event_type', eventType);
             url.searchParams.set('severity', severity);
-            url.searchParams.set('time_period', timePeriod);
+            url.searchParams.set('date_range', dateRange);
             url.searchParams.set('search', searchTerm);
             url.searchParams.set('page', 1); // Reset to first page with new filters
             
@@ -760,16 +735,41 @@ events.html -->
         function exportEvents() {
             const eventType = document.getElementById('event-type').value;
             const severity = document.getElementById('severity').value;
-            const timePeriod = document.getElementById('time-period').value;
+            const dateRange = document.getElementById('date-range').value;
             const searchTerm = document.getElementById('search-events').value;
             
-            const url = new URL(window.location.origin + '/events/export/');
-            url.searchParams.set('event_type', eventType);
+            const url = new URL(window.location.origin + '/generate_report/');
+            url.searchParams.set('log_type', eventType);
             url.searchParams.set('severity', severity);
-            url.searchParams.set('time_period', timePeriod);
-            url.searchParams.set('search', searchTerm);
+            url.searchParams.set('start_date', getDateFromRange(dateRange));
+            url.searchParams.set('search_query', searchTerm);
             
             window.open(url.toString(), '_blank');
+        }
+        
+        // Helper to convert date range to start date
+        function getDateFromRange(range) {
+            const today = new Date();
+            
+            if (range === '24h') {
+                const yesterday = new Date(today);
+                yesterday.setDate(today.getDate() - 1);
+                return yesterday.toISOString().split('T')[0];
+            } else if (range === '3d') {
+                const threeDays = new Date(today);
+                threeDays.setDate(today.getDate() - 3);
+                return threeDays.toISOString().split('T')[0];
+            } else if (range === '7d') {
+                const sevenDays = new Date(today);
+                sevenDays.setDate(today.getDate() - 7);
+                return sevenDays.toISOString().split('T')[0];
+            } else if (range === '30d') {
+                const thirtyDays = new Date(today);
+                thirtyDays.setDate(today.getDate() - 30);
+                return thirtyDays.toISOString().split('T')[0];
+            }
+            
+            return '';
         }
     </script>
 </body>

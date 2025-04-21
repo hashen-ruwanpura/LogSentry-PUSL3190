@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MITRE ATT&CK Framework - Log Detection Platform</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@1.2.0/dist/chartjs-chart-matrix.min.js"></script>
+    <!-- Add this right after loading the matrix plugin -->
+    <script>
+        // Ensure the matrix controller is registered (needed for some versions of Chart.js)
+        if (Chart && typeof Chart.register === 'function' && window.MatrixController) {
+            Chart.register(window.MatrixController);
+        }
+    </script>
+    <style>
+        :root {
+            --primary-color: #3f51b5;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --warning-color: #ffc107;
+            --info-color: #17a2b8;
+            --text-primary: #212529;
+            --text-secondary: #6c757d;
+            --card-bg: #ffffff;
+            --border-color: #dee2e6;
+            --sidebar-width: 250px;
+            --sidebar-collapsed-width: 70px;
+            --header-height: 60px;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f7fa;
+            margin: 0;
+            padding: 0;
+            color: var(--text-primary);
+        }
+        
+        .dashboard-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        /* Header styles */
+        .main-header {
+            background-color: #fff;
+            border-bottom: 1px solid var(--border-color);
+            height: var(--header-height);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 1.5rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        
+        .logo-section {
+            display: flex;
+            align-items: center;
+        }
+        
+        .logo-section h1 {
+            font-size: 1.25rem;
+            margin: 0 0 0 1rem;
+            font-weight: 500;
+        }
+        
+        .sidebar-toggle {
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 1.25rem;
+            padding: 0.25rem;
+        }
+        
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .username {
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+        
+        .logout-btn {
+            color: var(--danger-color);
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        
+        /* Main content container */
+        .main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        /* Sidebar styles */
+        .sidebar {
+            width: var(--sidebar-width);
+            background-color: #fff;
+            border-right: 1px solid var(--border-color);
+            transition: width 0.3s ease;
+            overflow-y: auto;
+            box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
+        }
+        
+        .sidebar.collapsed {
+            width: var(--sidebar-collapsed-width);
+        }
+        
+        .sidebar-nav ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .sidebar-nav li {
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        }
+        
+        .sidebar-nav li a {
+            display: flex;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+        
+        .sidebar-nav li a i {
+            margin-right: 1rem;
+            min-width: 20px;
+            text-align: center;
+        }
+        
+        .sidebar-nav li a:hover {
+            background-color: rgba(0, 0, 0, 0.03);
+            color: var(--primary-color);
+        }
+        
+        .sidebar-nav li.active a {
+            background-color: rgba(63, 81, 181, 0.1);
+            color: var(--primary-color);
+            font-weight: 500;
+            border-left: 4px solid var(--primary-color);
+        }
+        
+        .sidebar.collapsed .sidebar-nav li a span {
+            display: none;
+        }
+        
+        /* Content area */
+        .content {
+            flex: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+        
+        /* Filter and search section */
+        .filters-section {
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .filter-form {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            align-items: flex-end;
+        }
+        
+        .filter-group {
+            flex: 1;
+            min-width: 150px;
+        }
+        
+        .filter-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        /* Stats cards */
+        .stats-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .stat-card {
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .stat-card .stat-title {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .stat-card .stat-value {
+            font-size: 1.75rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-card .stat-subtitle {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+        
+        /* Chart sections */
+        .chart-section {
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .chart-container {
+            position: relative;
+            margin-top: 1rem;
+            height: 300px;
+        }
+        
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .chart-title {
+            font-size: 1.125rem;
+            font-weight: 500;
+            margin: 0;
+        }
+        
+        /* MITRE specific styles */
+        .mitre-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .mitre-table th {
+            background-color: rgba(0, 0, 0, 0.02);
+            font-weight: 500;
+            text-align: left;
+            padding: 0.75rem 1rem;
+        }
+        
+        .mitre-table td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: middle;
+        }
+        
+        .mitre-table tbody tr:hover {
+            background-color: rgba(0, 0, 0, 0.02);
+        }
+        
+        .mitre-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .technique-badge {
+            background-color: rgba(63, 81, 181, 0.1);
+            color: var(--primary-color);
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-right: 0.5rem;
+        }
+        
+        .severity-badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 50px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+        
+        .severity-critical {
+            background-color: rgba(220, 53, 69, 0.15);
+            color: #dc3545;
+        }
+        
+        .severity-high {
+            background-color: rgba(253, 126, 20, 0.15);
+            color: #fd7e14;
+        }
+        
+        .severity-medium {
+            background-color: rgba(255, 193, 7, 0.15);
+            color: #ffc107;
+        }
+        
+        .severity-low {
+            background-color: rgba(23, 162, 184, 0.15);
+            color: #17a2b8;
+        }
+        
+        .count-badge {
+            background-color: rgba(63, 81, 181, 0.1);
+            color: var(--primary-color);
+            padding: 0.15rem 0.5rem;
+            border-radius: 50px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .mitre-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+        
+        .mitre-item {
+            background-color: #fff;
+            border-radius: 6px;
+            padding: 1rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .mitre-name {
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+        }
+        
+        .mitre-count {
+            margin-top: auto;
+            align-self: flex-end;
+            background-color: rgba(63, 81, 181, 0.1);
+            color: var(--primary-color);
+            padding: 0.15rem 0.5rem;
+            border-radius: 50px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .tactic-link {
+            color: inherit;
+            text-decoration: none;
+        }
+        
+        .tactic-link:hover {
+            color: var(--primary-color);
+        }
+        
+        .heatmap-container {
+            overflow-x: auto;
+            margin-top: 1rem;
+        }
+        
+        /* Responsive styles */
+        @media (max-width: 992px) {
+            .stats-container {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                left: -250px;
+                top: var(--header-height);
+                height: calc(100vh - var(--header-height));
+                z-index: 99;
+                transition: left 0.3s ease;
+            }
+            
+            .sidebar.open {
+                left: 0;
+            }
+            
+            .stats-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .filter-form {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            
+            .filter-group {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <header class="main-header">
+            <div class="logo-section">
+                <button id="sidebar-toggle" class="sidebar-toggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <h1>Log Detection Platform</h1>
+            </div>
+            <div class="header-actions">
+                <span class="username">{{ request.user.username }}</span>
+                <a href="{% url 'logout' %}" class="logout-btn">Logout</a>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <!-- Sidebar Navigation -->
+            <aside class="sidebar">
+                <nav class="sidebar-nav">
+                    <ul>
+                        <li><a href="{% url 'dashboard' %}"><i class="fas fa-chart-line"></i> Dashboard</a></li>
+                        <li><a href="{% url 'events' %}"><i class="fas fa-calendar-alt"></i> Events</a></li>
+                        <li><a href="{% url 'apache_logs' %}"><i class="fas fa-server"></i> Apache Logs</a></li>
+                        <li><a href="{% url 'mysql_logs' %}"><i class="fas fa-database"></i> MySQL Logs</a></li>
+                        <li class="active"><a href="{% url 'mitre_details' %}"><i class="fas fa-shield-alt"></i> MITRE ATT&CK</a></li>
+                        <li><a href="{% url 'reports' %}"><i class="fas fa-file-alt"></i> Reports</a></li>
+                        <li><a href="{% url 'explore_agent' %}"><i class="fas fa-robot"></i> AI Assistant</a></li>
+                        <li><a href="{% url 'settings' %}"><i class="fas fa-cog"></i> Settings</a></li>
+                    </ul>
+                </nav>
+            </aside>
+
+            <!-- Content Area -->
+            <main class="content">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2>MITRE ATT&CK Framework Analysis</h2>
+                    <div class="d-flex">
+                        <div class="dropdown me-2">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fas fa-download"></i> Export
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="?{{ request.GET.urlencode }}&export=csv">Export to CSV</a></li>
+                                <li><a class="dropdown-item" href="?{{ request.GET.urlencode }}&export=json">Export to JSON</a></li>
+                            </ul>
+                        </div>
+                        <button id="refresh-btn" class="btn btn-sm btn-primary">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filters Section -->
+                <div class="filters-section">
+                    <form class="filter-form" method="get">
+                        <div class="filter-group">
+                            <label for="time_range" class="form-label">Time Range</label>
+                            <select id="time_range" name="time_range" class="form-select">
+                                <option value="7d" {% if time_range == '7d' %}selected{% endif %}>Last 7 Days</option>
+                                <option value="30d" {% if time_range == '30d' %}selected{% endif %}>Last 30 Days</option>
+                                <option value="90d" {% if time_range == '90d' %}selected{% endif %}>Last 90 Days</option>
+                                <option value="all" {% if time_range == 'all' %}selected{% endif %}>All Time</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="tactic" class="form-label">MITRE Tactic</label>
+                            <select id="tactic" name="tactic" class="form-select">
+                                <option value="all" {% if tactic == 'all' %}selected{% endif %}>All Tactics</option>
+                                {% for t in all_tactics %}
+                                <option value="{{ t }}" {% if tactic == t %}selected{% endif %}>{{ t }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="search" class="form-label">Search</label>
+                            <input type="text" id="search" name="search" class="form-control" placeholder="Tactic, technique or ID" value="{{ search_query }}">
+                        </div>
+                        <div class="filter-actions">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-filter"></i> Apply Filters
+                            </button>
+                            <a href="{% url 'mitre_details' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-undo"></i> Reset
+                            </a>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Statistics Cards -->
+                <div class="stats-container">
+                    <div class="stat-card">
+                        <div class="stat-title">Total Threats</div>
+                        <div class="stat-value">{{ total_threats }}</div>
+                        <div class="stat-subtitle">{{ period_name }}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">Threats with Tactics</div>
+                        <div class="stat-value">{{ threats_with_tactics }}</div>
+                        <div class="stat-subtitle">
+                            {{ threats_with_tactics|floatformat:1 }}% of all threats
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">Threats with Techniques</div>
+                        <div class="stat-value">{{ threats_with_techniques }}</div>
+                        <div class="stat-subtitle">
+                            {{ threats_with_techniques|floatformat:1 }}% of all threats
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">Unique Tactics</div>
+                        <div class="stat-value">{{ tactic_stats|length }}</div>
+                        <div class="stat-subtitle">Different attack patterns</div>
+                    </div>
+                </div>
+
+                <!-- MITRE ATT&CK Tactics Distribution -->
+                <div class="chart-section">
+                    <div class="chart-header">
+                        <h3 class="chart-title">MITRE ATT&CK Tactics</h3>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="chart-container">
+                                <canvas id="tacticsChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mitre-grid">
+                                {% for tactic in tactic_stats %}
+                                <div class="mitre-item">
+                                    <span class="mitre-name">
+                                        <a href="?tactic={{ tactic.mitre_tactic }}&time_range={{ time_range }}" class="tactic-link">
+                                            {{ tactic.mitre_tactic }}
+                                        </a>
+                                    </span>
+                                    <span class="mitre-count">{{ tactic.count }}</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MITRE ATT&CK Techniques Distribution -->
+                <div class="chart-section">
+                    <div class="chart-header">
+                        <h3 class="chart-title">MITRE ATT&CK Techniques</h3>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="chart-container">
+                                <canvas id="techniquesChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="table-responsive">
+                                <table class="mitre-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Technique</th>
+                                            <th>Count</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for technique in technique_stats %}
+                                        <tr>
+                                            <td>{{ technique.mitre_technique }}</td>
+                                            <td><span class="count-badge">{{ technique.count }}</span></td>
+                                        </tr>
+                                        {% endfor %}
+                                        {% if not technique_stats %}
+                                        <tr>
+                                            <td colspan="2" class="text-center">No technique data available</td>
+                                        </tr>
+                                        {% endif %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Tactics Heat Map -->
+                <div class="chart-section">
+                    <div class="chart-header">
+                        <h3 class="chart-title">Tactics Heat Map</h3>
+                    </div>
+                    <p class="text-muted">Distribution of tactics over time, showing attack pattern evolution</p>
+                    <div class="heatmap-container">
+                        <canvas id="heatmapChart" height="400"></canvas>
+                    </div>
+                </div>
+
+                <!-- Recent Threats Table -->
+                <div class="chart-section">
+                    <div class="chart-header">
+                        <h3 class="chart-title">Recent Threats with MITRE Classification</h3>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="mitre-table">
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Source IP</th>
+                                    <th>Severity</th>
+                                    <th>Tactic</th>
+                                    <th>Technique</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for threat in recent_threats %}
+                                <tr>
+                                    <td>{{ threat.created_at|date:"Y-m-d H:i" }}</td>
+                                    <td>{{ threat.source_ip|default:"Unknown" }}</td>
+                                    <td>
+                                        <span class="severity-badge severity-{{ threat.severity }}">
+                                            {{ threat.severity }}
+                                        </span>
+                                    </td>
+                                    <td>{{ threat.mitre_tactic }}</td>
+                                    <td>
+                                        {% if threat.mitre_technique %}
+                                        <span class="technique-badge">{{ threat.mitre_technique }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{% url 'alert_detail' threat.id %}" class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-eye"></i> Details
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                {% if not recent_threats %}
+                                <tr>
+                                    <td colspan="6" class="text-center py-4">No threats found matching the current filters</td>
+                                </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Add this right before your <script> tag -->
+    <script id="django-data" type="application/json">
+    {
+        "tacticStats": [
+            {% for tactic in tactic_stats %}
+                {
+                    "name": "{{ tactic.mitre_tactic }}",
+                    "count": {{ tactic.count }},
+                    "index": {{ forloop.counter }}
+                }{% if not forloop.last %},{% endif %}
+            {% endfor %}
+        ],
+        "techniqueStats": [
+            {% for technique in technique_stats %}
+                {
+                    "name": "{{ technique.mitre_technique }}",
+                    "count": {{ technique.count }},
+                    "index": {{ forloop.counter }}
+                }{% if not forloop.last %},{% endif %}
+            {% endfor %}
+        ]
+    }
+    </script>
+
+    <!-- Bootstrap JS & jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Sidebar toggle functionality
+            const sidebarToggle = document.getElementById('sidebar-toggle');
+            const sidebar = document.querySelector('.sidebar');
+            
+            if (sidebarToggle) {
+                sidebarToggle.addEventListener('click', function() {
+                    sidebar.classList.toggle('collapsed');
+                    
+                    // Handle mobile view
+                    if (window.innerWidth <= 768) {
+                        sidebar.classList.toggle('open');
+                    }
+                });
+            }
+            
+            // Refresh button functionality
+            const refreshBtn = document.getElementById('refresh-btn');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', function() {
+                    this.querySelector('i').classList.add('fa-spin');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 500);
+                });
+            }
+
+            // Add debug information button
+            const exportBtn = document.querySelector('.btn-outline-secondary');
+            if (exportBtn) {
+                const debugBtn = document.createElement('button');
+                debugBtn.className = 'btn btn-sm btn-outline-secondary ms-2';
+                debugBtn.innerHTML = '<i class="fas fa-bug"></i> Debug';
+                debugBtn.onclick = function() {
+                    console.log("Chart data:", {
+                        tacticLabels: window.tacticLabels || [],
+                        techniqueLabels: window.techniqueLabels || [],
+                        days: window.chartDays || [],
+                        tactics: window.chartTactics || []
+                    });
+                    alert("Chart debug information shown in browser console");
+                };
+                exportBtn.after(debugBtn);
+            }
+
+            // Parse Django data
+            let djangoData = {};
+            try {
+                djangoData = JSON.parse(document.getElementById('django-data').textContent);
+            } catch (e) {
+                console.error("Error parsing Django data:", e);
+                djangoData = { tacticStats: [], techniqueStats: [] };
+            }
+
+            // TACTICS CHART
+            const tacticLabels = [];
+            const tacticData = [];
+            const tacticBackgrounds = [];
+            
+            djangoData.tacticStats.forEach(tactic => {
+                tacticLabels.push(tactic.name);
+                tacticData.push(tactic.count);
+                
+                // Generate a color based on index
+                const tacticHue = (tactic.index * 25) % 360;
+                tacticBackgrounds.push(`hsla(${tacticHue}, 70%, 60%, 0.7)`);
+            });
+            
+            // Store in window for debugging
+            window.tacticLabels = tacticLabels;
+            
+            // Create tactics chart
+            if (tacticLabels.length > 0) {
+                const tacticsCtx = document.getElementById('tacticsChart');
+                if (tacticsCtx) {
+                    new Chart(tacticsCtx.getContext('2d'), {
+                        type: 'bar',
+                        data: {
+                            labels: tacticLabels,
+                            datasets: [{
+                                label: 'Count',
+                                data: tacticData,
+                                backgroundColor: tacticBackgrounds,
+                                borderColor: tacticBackgrounds.map(color => color.replace('0.7', '1')),
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    display: false
+                                },
+                                tooltip: {
+                                    callbacks: {
+                                        title: function(context) {
+                                            return context[0].label;
+                                        },
+                                        label: function(context) {
+                                            return `Count: ${context.raw}`;
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                x: {
+                                    ticks: {
+                                        maxRotation: 45,
+                                        minRotation: 45
+                                    }
+                                },
+                                y: {
+                                    beginAtZero: true
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+            
+            // TECHNIQUES CHART
+            const techniqueLabels = [];
+            const techniqueData = [];
+            const techniqueBackgrounds = [];
+            
+            djangoData.techniqueStats.forEach(technique => {
+                techniqueLabels.push(technique.name);
+                techniqueData.push(technique.count);
+                
+                // Generate a color based on index
+                const techniqueHue = (technique.index * 30) % 360;
+                techniqueBackgrounds.push(`hsla(${techniqueHue}, 70%, 60%, 0.7)`);
+            });
+            
+            // Store in window for debugging
+            window.techniqueLabels = techniqueLabels;
+            
+            // Create techniques chart
+            if (techniqueLabels.length > 0) {
+                const techniquesCtx = document.getElementById('techniquesChart');
+                if (techniquesCtx) {
+                    new Chart(techniquesCtx.getContext('2d'), {
+                        type: 'bar',
+                        data: {
+                            labels: techniqueLabels,
+                            datasets: [{
+                                label: 'Count',
+                                data: techniqueData,
+                                backgroundColor: techniqueBackgrounds,
+                                borderColor: techniqueBackgrounds.map(color => color.replace('0.7', '1')),
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    display: false
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+            
+            // HEATMAP CHART - Get data directly from context variables
+            const chartDays = {{ days|safe }};
+            const chartTactics = {{ tactics|safe }};
+            const heatmapData = {{ heatmap_data|safe }};
+            
+            // Store in window for debugging
+            window.chartDays = chartDays;
+            window.chartTactics = chartTactics;
+            
+            // Add this in your heatmap chart section before creating the Chart
+            if (!Chart.controllers.matrix) {
+                console.warn("Matrix chart type not available, falling back to heatmap");
+                // Create a simple fallback message
+                const fallbackMsg = document.createElement('div');
+                fallbackMsg.className = 'alert alert-warning';
+                fallbackMsg.innerHTML = '<i class="fas fa-exclamation-triangle"></i> The heatmap visualization requires the Chart.js Matrix plugin to be properly loaded. Please check the console for more information.';
+                heatmapContainer.appendChild(fallbackMsg);
+                
+                // Try alternative visualization if possible
+                // ...
+            }
+
+            // Create heatmap if data is available
+            if (chartDays && chartDays.length > 0 && chartTactics && chartTactics.length > 0) {
+                const heatmapCtx = document.getElementById('heatmapChart');
+                if (heatmapCtx) {
+                    // Create datasets for each tactic
+                    const datasets = [];
+                    for (let i = 0; i < chartTactics.length; i++) {
+                        const tacticsData = [];
+                        
+                        // Create data points for each day
+                        for (let j = 0; j < chartDays.length; j++) {
+                            tacticsData.push({
+                                x: chartDays[j],
+                                y: chartTactics[i],
+                                v: heatmapData[i][j]
+                            });
+                        }
+                        
+                        datasets.push({
+                            label: chartTactics[i],
+                            data: tacticsData,
+                            backgroundColor: function(context) {
+                                if (!context.dataset.data[context.dataIndex]) return 'rgba(0,0,0,0)';
+                                const value = context.dataset.data[context.dataIndex].v;
+                                const alpha = value === 0 ? 0 : Math.min(0.1 + (value / 10), 0.9);
+                                return `rgba(63, 81, 181, ${alpha})`;
+                            },
+                            borderWidth: 1,
+                            borderColor: 'rgba(255, 255, 255, 0.5)',
+                            width: 30,
+                            height: 30
+                        });
+                    }
+                    
+                    // Initialize the matrix chart
+                    new Chart(heatmapCtx.getContext('2d'), {
+                        type: 'matrix',
+                        data: {
+                            datasets: datasets
+                        },
+                        options: {
+                            maintainAspectRatio: false,
+                            scales: {
+                                x: {
+                                    type: 'category',
+                                    labels: chartDays,
+                                    ticks: {
+                                        maxRotation: 90,
+                                        minRotation: 90
+                                    }
+                                },
+                                y: {
+                                    type: 'category',
+                                    labels: chartTactics
+                                }
+                            },
+                            plugins: {
+                                tooltip: {
+                                    callbacks: {
+                                        title: function(context) {
+                                            if (!context[0] || !context[0].dataset || !context[0].dataIndex) return '';
+                                            const data = context[0].dataset.data[context[0].dataIndex];
+                                            return `${data.y} - ${data.x}`;
+                                        },
+                                        label: function(context) {
+                                            if (!context.dataset.data[context.dataIndex]) return '';
+                                            const value = context.dataset.data[context.dataIndex].v;
+                                            return `Count: ${value}`;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                } else {
+                    console.error("Heatmap canvas not found");
+                }
+            } else {
+                console.warn("No data available for heatmap chart", {days: chartDays, tactics: chartTactics});
+                
+                // Add fallback message if no data
+                const heatmapContainer = document.querySelector('.heatmap-container');
+                if (heatmapContainer) {
+                    const fallbackMsg = document.createElement('div');
+                    fallbackMsg.className = 'alert alert-info';
+                    fallbackMsg.innerHTML = '<i class="fas fa-info-circle"></i> No data available for the selected time period and filters.';
+                    heatmapContainer.appendChild(fallbackMsg);
+                }
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MySQL Logs - Log Detection Platform</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #3f51b5;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --warning-color: #ffc107;
+            --info-color: #17a2b8;
+            --text-primary: #212529;
+            --text-secondary: #6c757d;
+            --card-bg: #ffffff;
+            --border-color: #dee2e6;
+            --sidebar-width: 250px;
+            --sidebar-collapsed-width: 70px;
+            --header-height: 60px;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f7fa;
+            margin: 0;
+            padding: 0;
+            color: var(--text-primary);
+        }
+        
+        .dashboard-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        /* Header styles */
+        .main-header {
+            background-color: #fff;
+            border-bottom: 1px solid var(--border-color);
+            height: var(--header-height);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 1.5rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        
+        .logo-section {
+            display: flex;
+            align-items: center;
+        }
+        
+        .logo-section h1 {
+            font-size: 1.25rem;
+            margin: 0 0 0 1rem;
+            font-weight: 500;
+        }
+        
+        .sidebar-toggle {
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 1.25rem;
+            padding: 0.25rem;
+        }
+        
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .username {
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+        
+        .logout-btn {
+            color: var(--danger-color);
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        
+        /* Main content container */
+        .main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        /* Sidebar styles */
+        .sidebar {
+            width: var(--sidebar-width);
+            background-color: #fff;
+            border-right: 1px solid var(--border-color);
+            transition: width 0.3s ease;
+            overflow-y: auto;
+            box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
+        }
+        
+        .sidebar.collapsed {
+            width: var(--sidebar-collapsed-width);
+        }
+        
+        .sidebar-nav ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .sidebar-nav li {
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        }
+        
+        .sidebar-nav li a {
+            display: flex;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+        
+        .sidebar-nav li a i {
+            margin-right: 1rem;
+            min-width: 20px;
+            text-align: center;
+        }
+        
+        .sidebar-nav li a:hover {
+            background-color: rgba(0, 0, 0, 0.03);
+            color: var(--primary-color);
+        }
+        
+        .sidebar-nav li.active a {
+            background-color: rgba(63, 81, 181, 0.1);
+            color: var(--primary-color);
+            font-weight: 500;
+            border-left: 4px solid var(--primary-color);
+        }
+        
+        .sidebar.collapsed .sidebar-nav li a span {
+            display: none;
+        }
+        
+        /* Content area */
+        .content {
+            flex: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+        
+        /* Filter and search section */
+        .filters-section {
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .filter-form {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            align-items: flex-end;
+        }
+        
+        .filter-group {
+            flex: 1;
+            min-width: 150px;
+        }
+        
+        .filter-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        /* Stats cards */
+        .stats-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .stat-card {
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .stat-card .stat-title {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .stat-card .stat-value {
+            font-size: 1.75rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-card .stat-subtitle {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+        
+        /* Performance metrics section */
+        .performance-section {
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .performance-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+        
+        .performance-card h4 {
+            font-size: 1rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        /* Query type pills */
+        .query-type-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin: 1rem 0;
+        }
+        
+        .query-type-pill {
+            padding: 0.375rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .query-type-SELECT {
+            background-color: rgba(23, 162, 184, 0.15);
+            color: #17a2b8;
+        }
+        
+        .query-type-INSERT {
+            background-color: rgba(40, 167, 69, 0.15);
+            color: #28a745;
+        }
+        
+        .query-type-UPDATE {
+            background-color: rgba(255, 193, 7, 0.15);
+            color: #ffc107;
+        }
+        
+        .query-type-DELETE {
+            background-color: rgba(220, 53, 69, 0.15);
+            color: #dc3545;
+        }
+        
+        .query-type-other {
+            background-color: rgba(108, 117, 125, 0.15);
+            color: #6c757d;
+        }
+        
+        /* Top users list */
+        .top-users-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .top-users-list li {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        }
+        
+        .top-users-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .user-name {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .user-count {
+            background-color: rgba(63, 81, 181, 0.15);
+            color: var(--primary-color);
+            padding: 0.15rem 0.5rem;
+            border-radius: 50px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            margin-left: 0.5rem;
+        }
+        
+        /* Slow queries section */
+        .slow-queries-table {
+            width: 100%;
+            margin-top: 1rem;
+        }
+        
+        .slow-queries-table th {
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+        
+        .slow-queries-table td {
+            vertical-align: middle;
+        }
+        
+        .execution-time {
+            font-weight: 600;
+            color: #dc3545;
+        }
+        
+        .query-preview {
+            font-family: 'Courier New', monospace;
+            background-color: #f8f9fa;
+            padding: 0.375rem;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            overflow-x: auto;
+            max-width: 100%;
+            display: block;
+            color: #343a40;
+            font-size: 0.875rem;
+            white-space: nowrap;
+        }
+        
+        /* Logs table */
+        .logs-section {
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .logs-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .logs-table th {
+            background-color: rgba(0, 0, 0, 0.02);
+            font-weight: 500;
+            text-align: left;
+            padding: 0.75rem 1rem;
+        }
+        
+        .logs-table td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: middle;
+        }
+        
+        .logs-table tbody tr:hover {
+            background-color: rgba(0, 0, 0, 0.02);
+        }
+        
+        .logs-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .query-cell {
+            max-width: 400px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .time-cell {
+            white-space: nowrap;
+        }
+        
+        /* Pagination */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            margin-top: 1.5rem;
+        }
+        
+        .page-link {
+            padding: 0.375rem 0.75rem;
+        }
+        
+        /* Performance indicator */
+        .performance-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        
+        .performance-fast {
+            background-color: #28a745;
+        }
+        
+        .performance-medium {
+            background-color: #ffc107;
+        }
+        
+        .performance-slow {
+            background-color: #dc3545;
+        }
+        
+        /* Responsive styles */
+        @media (max-width: 992px) {
+            .stats-container {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .performance-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                left: -250px;
+                top: var(--header-height);
+                height: calc(100vh - var(--header-height));
+                z-index: 99;
+                transition: left 0.3s ease;
+            }
+            
+            .sidebar.open {
+                left: 0;
+            }
+            
+            .stats-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .filter-form {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            
+            .filter-group {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <header class="main-header">
+            <div class="logo-section">
+                <button id="sidebar-toggle" class="sidebar-toggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <h1>Log Detection Platform</h1>
+            </div>
+            <div class="header-actions">
+                <span class="username">{{ request.user.username }}</span>
+                <a href="{% url 'logout' %}" class="logout-btn">Logout</a>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <!-- Sidebar Navigation -->
+            <aside class="sidebar">
+                <nav class="sidebar-nav">
+                    <ul>
+                        <li><a href="{% url 'dashboard' %}"><i class="fas fa-chart-line"></i> Dashboard</a></li>
+                        <li><a href="{% url 'events' %}"><i class="fas fa-calendar-alt"></i> Events</a></li>
+                        <li><a href="{% url 'apache_logs' %}"><i class="fas fa-server"></i> Apache Logs</a></li>
+                        <li class="active"><a href="{% url 'mysql_logs' %}"><i class="fas fa-database"></i> MySQL Logs</a></li>
+                        <li><a href="{% url 'mitre_details' %}"><i class="fas fa-shield-alt"></i> MITRE ATT&CK</a></li>
+                        <li><a href="{% url 'reports' %}"><i class="fas fa-file-alt"></i> Reports</a></li>
+                        <li><a href="{% url 'explore_agent' %}"><i class="fas fa-robot"></i> AI Assistant</a></li>
+                        <li><a href="{% url 'settings' %}"><i class="fas fa-cog"></i> Settings</a></li>
+                    </ul>
+                </nav>
+            </aside>
+
+            <!-- Content Area -->
+            <main class="content">
+                <div class="alert alert-info mb-4 debug-section">
+                    <h5>Debug Information</h5>
+                    <p>Total logs: {{ total_logs }}</p>
+                    <p>Period: {{ period_name }}</p>
+                    <p>Query types: {{ query_types|length }} different types</p>
+                    <p>Applied filters: Time range: {{ time_range }}, Query type: {{ query_type }}, Execution time: {{ execution_time }}</p>
+                    <button class="btn btn-sm btn-secondary" onclick="document.querySelector('.debug-section').style.display='none';">Hide Debug Info</button>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2>MySQL Database Logs</h2>
+                    <div class="d-flex">
+                        <div class="dropdown me-2">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fas fa-download"></i> Export
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="?{{ request.GET.urlencode }}&export=csv">Export to CSV</a></li>
+                                <li><a class="dropdown-item" href="?{{ request.GET.urlencode }}&export=json">Export to JSON</a></li>
+                            </ul>
+                        </div>
+                        <button id="refresh-btn" class="btn btn-sm btn-primary">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filters Section -->
+                <div class="filters-section">
+                    <form class="filter-form" method="get">
+                        <div class="filter-group">
+                            <label for="time_range" class="form-label">Time Range</label>
+                            <select id="time_range" name="time_range" class="form-select">
+                                <option value="1h" {% if time_range == '1h' %}selected{% endif %}>Last Hour</option>
+                                <option value="12h" {% if time_range == '12h' %}selected{% endif %}>Last 12 Hours</option>
+                                <option value="24h" {% if time_range == '24h' %}selected{% endif %}>Last 24 Hours</option>
+                                <option value="7d" {% if time_range == '7d' %}selected{% endif %}>Last 7 Days</option>
+                                <option value="30d" {% if time_range == '30d' %}selected{% endif %}>Last 30 Days</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="query_type" class="form-label">Query Type</label>
+                            <select id="query_type" name="query_type" class="form-select">
+                                <option value="all" {% if query_type == 'all' %}selected{% endif %}>All Query Types</option>
+                                <option value="SELECT" {% if query_type == 'SELECT' %}selected{% endif %}>SELECT</option>
+                                <option value="INSERT" {% if query_type == 'INSERT' %}selected{% endif %}>INSERT</option>
+                                <option value="UPDATE" {% if query_type == 'UPDATE' %}selected{% endif %}>UPDATE</option>
+                                <option value="DELETE" {% if query_type == 'DELETE' %}selected{% endif %}>DELETE</option>
+                                <option value="CREATE" {% if query_type == 'CREATE' %}selected{% endif %}>CREATE</option>
+                                <option value="ALTER" {% if query_type == 'ALTER' %}selected{% endif %}>ALTER</option>
+                                <option value="DROP" {% if query_type == 'DROP' %}selected{% endif %}>DROP</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="execution_time" class="form-label">Execution Time</label>
+                            <select id="execution_time" name="execution_time" class="form-select">
+                                <option value="all" {% if execution_time == 'all' %}selected{% endif %}>All Queries</option>
+                                <option value="fast" {% if execution_time == 'fast' %}selected{% endif %}>Fast (<1s)</option>
+                                <option value="medium" {% if execution_time == 'medium' %}selected{% endif %}>Medium (1-5s)</option>
+                                <option value="slow" {% if execution_time == 'slow' %}selected{% endif %}>Slow (>5s)</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="search" class="form-label">Search</label>
+                            <input type="text" id="search" name="search" class="form-control" placeholder="Search in queries or user IDs" value="{{ search_query }}">
+                        </div>
+                        <div class="filter-actions">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-filter"></i> Apply Filters
+                            </button>
+                            <a href="{% url 'mysql_logs' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-undo"></i> Reset
+                            </a>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Statistics Cards -->
+                <div class="stats-container">
+                    <div class="stat-card">
+                        <div class="stat-title">Total Queries</div>
+                        <div class="stat-value">{{ total_logs }}</div>
+                        <div class="stat-subtitle">{{ period_name }}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">Optimal Queries</div>
+                        <div class="stat-value">{{ normal_queries }}</div>
+                        <div class="stat-subtitle">
+                            {{ normal_queries|floatformat:1 }}% of total queries
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">Slow Queries</div>
+                        <div class="stat-value">{{ slow_queries }}</div>
+                        <div class="stat-subtitle">
+                            Execution time > 1 second
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Performance Metrics Section -->
+                <div class="performance-section">
+                    <div class="chart-header mb-3">
+                        <h3 class="chart-title">MySQL Performance Metrics</h3>
+                    </div>
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-5">
+                            <h4 class="mb-3">Query Type Distribution</h4>
+                            <div class="query-type-list">
+                                {% for qt in query_types %}
+                                <div class="query-type-pill query-type-{% if qt.type in 'SELECT,INSERT,UPDATE,DELETE' %}{{ qt.type }}{% else %}other{% endif %}">
+                                    {{ qt.type }}
+                                    <span class="badge bg-white text-dark">{{ qt.count }}</span>
+                                </div>
+                                {% endfor %}
+                                {% if not query_types %}
+                                <div class="text-muted">No query type data available</div>
+                                {% endif %}
+                            </div>
+                            
+                            <h4 class="mb-3 mt-4">Query Performance</h4>
+                            <div class="progress" style="height: 30px;">
+                                {% if total_logs > 0 %}
+                                <div class="progress-bar bg-success" role="progressbar" style="width: {{ normal_queries|floatformat:1 }}%" 
+                                     aria-valuenow="{{ normal_queries }}" aria-valuemin="0" aria-valuemax="100">
+                                    Optimal ({{ normal_queries|floatformat:1 }}%)
+                                </div>
+                                <div class="progress-bar bg-danger" role="progressbar" style="width: {{ slow_queries|floatformat:1 }}%" 
+                                     aria-valuenow="{{ slow_queries }}" aria-valuemin="0" aria-valuemax="100">
+                                    Slow ({{ slow_queries|floatformat:1 }}%)
+                                </div>
+                                {% else %}
+                                <div class="progress-bar" role="progressbar" style="width: 100%" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">
+                                    No data available
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-7">
+                            <h4 class="mb-3">Most Active Database Users</h4>
+                            <div class="card">
+                                <div class="card-body p-0">
+                                    <ul class="top-users-list p-3">
+                                        {% for user in top_users %}
+                                        <li>
+                                            <span class="user-name">{{ user.user_id|default:"system" }}</span>
+                                            <span class="user-count">{{ user.count }}</span>
+                                        </li>
+                                        {% empty %}
+                                        <li class="text-center text-muted py-3">No user data available</li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <h4 class="mb-3">Slowest Queries</h4>
+                    <div class="table-responsive">
+                        <table class="table slow-queries-table">
+                            <thead>
+                                <tr>
+                                    <th>User</th>
+                                    <th>Execution Time</th>
+                                    <th>Query</th>
+                                    <th>Timestamp</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for query in slowest_queries %}
+                                <tr>
+                                    <td>{{ query.user_id|default:"system" }}</td>
+                                    <td class="execution-time">{{ query.execution_time|floatformat:2 }}s</td>
+                                    <td>
+                                        <code class="query-preview">{{ query.query|truncatechars:100 }}</code>
+                                    </td>
+                                    <td>{{ query.raw_log.timestamp|date:"Y-m-d H:i:s" }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="4" class="text-center py-3">No slow query data available</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- MySQL Logs Table -->
+                <div class="logs-section">
+                    <h3 class="mb-3">MySQL Queries</h3>
+                    {% if logs %}
+                    <div class="table-responsive">
+                        <table class="logs-table">
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>User</th>
+                                    <th>Query</th>
+                                    <th>Execution Time</th>
+                                    <th>Rows</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for log in logs %}
+                                <tr>
+                                    <td class="time-cell">{{ log.raw_log.timestamp|date:"Y-m-d H:i:s" }}</td>
+                                    <td>{{ log.user_id|default:"system" }}</td>
+                                    <td class="query-cell" title="{{ log.query }}">
+                                        {{ log.query|truncatechars:100 }}
+                                    </td>
+                                    <td>
+                                        {% if log.execution_time >= 5.0 %}
+                                        <span class="performance-indicator performance-slow" title="Slow query"></span>
+                                        {% elif log.execution_time >= 1.0 %}
+                                        <span class="performance-indicator performance-medium" title="Medium performance"></span>
+                                        {% else %}
+                                        <span class="performance-indicator performance-fast" title="Fast query"></span>
+                                        {% endif %}
+                                        {{ log.execution_time|floatformat:2 }}s
+                                    </td>
+                                    <td>{{ log.rows_affected|default:"0" }}</td>
+                                    <td>
+                                        {% if log.status == 'success' %}
+                                        <span class="badge bg-success">Success</span>
+                                        {% elif log.status == 'error' %}
+                                        <span class="badge bg-danger">Error</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">{{ log.status|default:"Unknown" }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Pagination -->
+                    {% if total_pages > 1 %}
+                    <nav aria-label="Logs pagination">
+                        <ul class="pagination justify-content-center">
+                            {% if has_prev %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ prev_page }}&time_range={{ time_range }}&query_type={{ query_type }}&execution_time={{ execution_time }}&search={{ search_query }}" aria-label="Previous">
+                                    <span aria-hidden="true">&laquo;</span>
+                                </a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled">
+                                <a class="page-link" href="#" aria-label="Previous">
+                                    <span aria-hidden="true">&laquo;</span>
+                                </a>
+                            </li>
+                            {% endif %}
+                            
+                            {% for p in page_range %}
+                                {% if p == '...' %}
+                                <li class="page-item disabled">
+                                    <a class="page-link" href="#">...</a>
+                                </li>
+                                {% else %}
+                                <li class="page-item {% if p == current_page %}active{% endif %}">
+                                    <a class="page-link" href="?page={{ p }}&time_range={{ time_range }}&query_type={{ query_type }}&execution_time={{ execution_time }}&search={{ search_query }}">{{ p }}</a>
+                                </li>
+                                {% endif %}
+                            {% endfor %}
+                            
+                            {% if has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ next_page }}&time_range={{ time_range }}&query_type={{ query_type }}&execution_time={{ execution_time }}&search={{ search_query }}" aria-label="Next">
+                                    <span aria-hidden="true">&raquo;</span>
+                                </a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled">
+                                <a class="page-link" href="#" aria-label="Next">
+                                    <span aria-hidden="true">&raquo;</span>
+                                </a>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+                    
+                    {% else %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> No MySQL logs found for the selected filters.
+                    </div>
+                    {% endif %}
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS & jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Sidebar toggle functionality
+            const sidebarToggle = document.getElementById('sidebar-toggle');
+            const sidebar = document.querySelector('.sidebar');
+            
+            if (sidebarToggle) {
+                sidebarToggle.addEventListener('click', function() {
+                    sidebar.classList.toggle('collapsed');
+                    
+                    // Handle mobile view
+                    if (window.innerWidth <= 768) {
+                        sidebar.classList.toggle('open');
+                    }
+                });
+            }
+            
+            // Refresh button functionality
+            const refreshBtn = document.getElementById('refresh-btn');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', function() {
+                    this.querySelector('i').classList.add('fa-spin');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 500);
+                });
+            }
+            
+            // Make query cells expandable on click
+            document.querySelectorAll('.query-cell').forEach(function(cell) {
+                cell.addEventListener('click', function() {
+                    this.classList.toggle('text-truncate');
+                    this.style.whiteSpace = this.style.whiteSpace === 'normal' ? 'nowrap' : 'normal';
+                    this.style.maxWidth = this.style.maxWidth === 'none' ? '400px' : 'none';
+                });
+            });
+            
+            // Enable tooltips
+            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+            tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl)
+            });
+        });
+    </script>
+</body>
+</html>
