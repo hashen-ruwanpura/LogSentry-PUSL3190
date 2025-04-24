@@ -436,6 +436,58 @@
                 grid-template-columns: 1fr;
             }
         }
+        .home-nav-item {
+            margin-top: auto;
+            border-top: 1px solid var(--border-color);
+        }
+        
+        .sidebar-nav {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        
+        .sidebar-nav ul {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+        }
+
+        /* Sidebar Toggle Functionality CSS */
+        .sidebar.hidden {
+            display: none !important;
+        }
+
+        .content.full-width {
+            margin-left: 0 !important;
+            width: 100% !important;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                left: -250px;
+                top: var(--header-height);
+                height: calc(100vh - var(--header-height));
+                z-index: 99;
+                transition: left 0.3s ease;
+            }
+            
+            .sidebar.open {
+                left: 0;
+                box-shadow: 2px 0 10px rgba(0, 0, 0, 0.2);
+            }
+            
+            .sidebar-backdrop {
+                position: fixed;
+                top: var(--header-height);
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background-color: rgba(0,0,0,0.5);
+                z-index: 98;
+            }
+        }
     </style>
 </head>
 <body>
@@ -458,14 +510,16 @@
             <aside class="sidebar">
                 <nav class="sidebar-nav">
                     <ul>
-                        <li><a href="{% url 'dashboard' %}"><i class="fas fa-chart-line"></i> Dashboard</a></li>
+                        <li class="active"><a href="{% url 'dashboard' %}"><i class="fas fa-chart-line"></i> Dashboard</a></li>
                         <li><a href="{% url 'events' %}"><i class="fas fa-calendar-alt"></i> Events</a></li>
-                        <li class="active"><a href="{% url 'apache_logs' %}"><i class="fas fa-server"></i> Apache Logs</a></li>
+                        <li><a href="{% url 'apache_logs' %}"><i class="fas fa-server"></i> Apache Logs</a></li>
                         <li><a href="{% url 'mysql_logs' %}"><i class="fas fa-database"></i> MySQL Logs</a></li>
                         <li><a href="{% url 'mitre_details' %}"><i class="fas fa-shield-alt"></i> MITRE ATT&CK</a></li>
                         <li><a href="{% url 'reports' %}"><i class="fas fa-file-alt"></i> Reports</a></li>
                         <li><a href="{% url 'explore_agent' %}"><i class="fas fa-robot"></i> AI Assistant</a></li>
+                        <li><a href="{% url 'ai_analytics:reports_dashboard' %}"><i class="fas fa-robot"></i> <span>AI Reports</span></a></li>
                         <li><a href="{% url 'settings' %}"><i class="fas fa-cog"></i> Settings</a></li>
+                        <li class="home-nav-item"><a href="/"><i class="fas fa-home"></i> <span>Home</span></a></li>
                     </ul>
                 </nav>
             </aside>
@@ -751,6 +805,88 @@
                 return new bootstrap.Tooltip(tooltipTriggerEl)
             });
         });
+
+        // Sidebar Toggle Functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            // Get sidebar elements
+            const sidebarToggle = document.getElementById('sidebar-toggle');
+            const sidebar = document.querySelector('.sidebar');
+            const content = document.querySelector('.content');
+            
+            // Initialize sidebar state for mobile
+            if (window.innerWidth <= 768) {
+                sidebar.style.left = '-250px';
+            }
+            
+            // Toggle sidebar visibility
+            if (sidebarToggle) {
+                sidebarToggle.addEventListener('click', function() {
+                    if (window.innerWidth <= 768) {
+                        // Mobile view - slide in/out with backdrop
+                        if (sidebar.style.left === '0px') {
+                            // Hide the sidebar
+                            sidebar.style.left = '-250px';
+                            
+                            // Remove backdrop if exists
+                            const backdrop = document.querySelector('.sidebar-backdrop');
+                            if (backdrop) backdrop.remove();
+                        } else {
+                            // Show the sidebar
+                            sidebar.style.left = '0px';
+                            
+                            // Add backdrop for mobile
+                            const backdrop = document.createElement('div');
+                            backdrop.className = 'sidebar-backdrop';
+                            document.body.appendChild(backdrop);
+                            
+                            // Close sidebar when backdrop is clicked
+                            backdrop.addEventListener('click', function() {
+                                sidebar.style.left = '-250px';
+                                backdrop.remove();
+                            });
+                        }
+                    } else {
+                        // Desktop view - fully hide instead of collapse
+                        sidebar.classList.toggle('hidden');
+                        content.classList.toggle('full-width');
+                    }
+                });
+            }
+            
+            // Handle window resize
+            window.addEventListener('resize', function() {
+                if (window.innerWidth <= 768) {
+                    // Switch to mobile view behavior
+                    sidebar.classList.remove('hidden');
+                    content.classList.remove('full-width');
+                    
+                    // If sidebar isn't explicitly shown, make sure it's hidden
+                    if (!sidebar.classList.contains('open') && sidebar.style.left !== '0px') {
+                        sidebar.style.left = '-250px';
+                    }
+                } else {
+                    // Switch to desktop view behavior
+                    sidebar.style.removeProperty('left');
+                    
+                    // Remove any mobile-specific elements
+                    const backdrop = document.querySelector('.sidebar-backdrop');
+                    if (backdrop) backdrop.remove();
+                }
+            });
+            
+            // Optional: Close mobile sidebar when clicking menu items
+            const sidebarLinks = sidebar.querySelectorAll('a');
+            sidebarLinks.forEach(link => {
+                link.addEventListener('click', function() {
+                    if (window.innerWidth <= 768) {
+                        sidebar.style.left = '-250px';
+                        const backdrop = document.querySelector('.sidebar-backdrop');
+                        if (backdrop) backdrop.remove();
+                    }
+                });
+            });
+        });
     </script>
 </body>
 </html>
+

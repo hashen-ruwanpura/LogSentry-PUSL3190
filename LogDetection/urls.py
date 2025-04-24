@@ -127,6 +127,14 @@ urlpatterns = [
     path('api/reports/threat-details/<int:threat_id>/', views_reports.threat_details, name='threat_details'),
     path('api/reports/export/', views_reports.export_report, name='export_report'),
     path('api/reports/export-table/', views_reports.export_table_data, name='export_table_data'),
+
+    # Add the export_events URL pattern here
+    path('export_events/', views.export_events, name='export_events'),
+]
+
+# AI ANALYTICS
+urlpatterns += [
+    path('ai/', include('ai_analytics.urls', namespace='ai_analytics')),
 ]
 
 if settings.DEBUG:

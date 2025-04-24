@@ -112,6 +112,10 @@
             width: var(--sidebar-collapsed-width);
         }
         
+        .sidebar.hidden {
+            display: none !important;
+        }
+
         .sidebar-nav ul {
             list-style: none;
             padding: 0;
@@ -163,6 +167,11 @@
         
         .content.expanded {
             margin-left: calc(var(--sidebar-collapsed-width) - var(--sidebar-width));
+        }
+
+        .content.full-width {
+            margin-left: 0 !important;
+            width: 100% !important;
         }
         
         .page-header {
@@ -383,6 +392,23 @@
                 margin-top: 0.5rem;
             }
         }
+
+        .home-nav-item {
+            margin-top: auto;
+            border-top: 1px solid var(--border-color);
+        }
+        
+        .sidebar-nav {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        
+        .sidebar-nav ul {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+        }
     </style>
 </head>
 <body>
@@ -412,7 +438,9 @@
                         <li><a href="{% url 'mitre_details' %}"><i class="fas fa-shield-alt"></i> MITRE ATT&CK</a></li>
                         <li><a href="{% url 'reports' %}"><i class="fas fa-file-alt"></i> Reports</a></li>
                         <li><a href="{% url 'explore_agent' %}"><i class="fas fa-robot"></i> AI Assistant</a></li>
+                        <li><a href="{% url 'ai_analytics:reports_dashboard' %}"><i class="fas fa-robot"></i> <span>AI Reports</span></a></li>
                         <li><a href="{% url 'settings' %}"><i class="fas fa-cog"></i> Settings</a></li>
+                        <li class="home-nav-item"><a href="/"><i class="fas fa-home"></i> <span>Home</span></a></li>
                     </ul>
                 </nav>
             </aside>
@@ -690,19 +718,20 @@
                 updateDashboardData();
             });
 
-            // Sidebar toggle
+            // Sidebar toggle - with full hide functionality
             const sidebarToggle = document.getElementById('sidebar-toggle');
             const sidebar = document.querySelector('.sidebar');
             const content = document.querySelector('.content');
-            
+
             if (sidebarToggle) {
                 sidebarToggle.addEventListener('click', function() {
-                    sidebar.classList.toggle('collapsed');
-                    content.classList.toggle('expanded');
-                    
-                    // Handle mobile view
                     if (window.innerWidth <= 768) {
+                        // Mobile view - toggle open class
                         sidebar.classList.toggle('open');
+                    } else {
+                        // Desktop view - fully hide instead of collapse
+                        sidebar.classList.toggle('hidden');
+                        content.classList.toggle('full-width');
                     }
                 });
             }

@@ -1,4 +1,3 @@
-events.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,7 +7,7 @@ events.html -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
-            --primary-color: #17a2b8;
+            --primary-color: #3f51b5; /* Changed from #17a2b8 */
             --secondary-color: #6c757d;
             --success-color: #28a745;
             --danger-color: #dc3545;
@@ -16,11 +15,14 @@ events.html -->
             --info-color: #17a2b8;
             --light-color: #f8f9fa;
             --dark-color: #343a40;
-            --body-bg: #f5f5f5;
+            --body-bg: #f5f7fa; /* Changed from #f5f5f5 */
             --card-bg: #ffffff;
-            --text-main: #212529;
-            --text-muted: #6c757d;
+            --text-primary: #212529;
+            --text-secondary: #6c757d;
             --border-color: #dee2e6;
+            --header-height: 60px;
+            --sidebar-width: 250px;
+            --sidebar-collapsed-width: 70px;
         }
 
         * {
@@ -43,20 +45,20 @@ events.html -->
             min-height: 100vh;
         }
 
-        /* Header Styles */
+        /* Header Styles - update to match dashboard */
         .main-header {
-            background-color: var(--dark-color);
-            padding: 1rem 1.5rem;
-            color: white;
+            background-color: #fff; /* Changed from dark to light */
+            border-bottom: 1px solid var(--border-color);
+            height: var(--header-height);
             display: flex;
-            align-items: center;
             justify-content: space-between;
-            position: fixed;
+            align-items: center;
+            padding: 0 1.5rem;
+            position: sticky;
             top: 0;
-            left: 0;
-            right: 0;
-            z-index: 1000;
-            height: 60px;
+            z-index: 100;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            color: var(--text-primary); /* Changed from white to dark */
         }
 
         .logo-section {
@@ -67,18 +69,17 @@ events.html -->
         .sidebar-toggle {
             background: none;
             border: none;
-            color: white;
-            font-size: 1.2rem;
+            color: var(--text-primary); /* Changed from white to dark */
             cursor: pointer;
-            margin-right: 1rem;
-            display: flex;
-            align-items: center;
+            font-size: 1.25rem;
             padding: 0.25rem;
         }
 
         .logo-section h1 {
             font-size: 1.25rem;
-            font-weight: 600;
+            margin: 0 0 0 1rem;
+            font-weight: 500;
+            color: var(--text-primary); /* Ensure text color is dark */
         }
 
         .header-actions {
@@ -88,22 +89,17 @@ events.html -->
         }
 
         .username {
-            color: #e9ecef;
+            color: var(--text-secondary); /* Changed from light to secondary */
             font-weight: 500;
         }
 
         .logout-btn {
-            color: white;
+            color: var(--danger-color); /* Changed to match dashboard */
             text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
             padding: 0.3rem 0.75rem;
-            background-color: rgba(255, 255, 255, 0.1);
-            border-radius: 4px;
-            font-size: 0.9rem;
-            transition: background-color 0.2s;
-        }
-
-        .logout-btn:hover {
-            background-color: rgba(255, 255, 255, 0.2);
+            background-color: transparent; /* Removed background */
         }
 
         /* Main Content Layout */
@@ -116,44 +112,53 @@ events.html -->
         /* Sidebar Styles */
         .sidebar {
             width: 250px;
-            background-color: var(--dark-color);
-            color: white;
+            background-color: #fff; /* Changed from dark to light background */
+            border-right: 1px solid var(--border-color);
+            transition: width 0.3s ease;
+            overflow-y: auto;
+            box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
             position: fixed;
             top: 60px;
             left: 0;
             bottom: 0;
             z-index: 900;
-            transition: transform 0.3s ease-in-out;
         }
 
         .sidebar-nav ul {
             list-style: none;
-            padding: 1rem 0;
+            padding: 0;
+            margin: 0;
+        }
+
+        .sidebar-nav li {
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
         }
 
         .sidebar-nav li a {
             display: flex;
             align-items: center;
-            padding: 0.75rem 1.5rem;
-            color: rgba(255, 255, 255, 0.8);
+            padding: 1rem 1.5rem;
+            color: var(--text-primary); /* Changed from light to dark text */
             text-decoration: none;
             transition: all 0.2s;
         }
 
-        .sidebar-nav li.active a {
-            background-color: var(--primary-color);
-            color: white;
+        .sidebar-nav li a i {
+            margin-right: 1rem;
+            min-width: 20px;
+            text-align: center;
         }
 
         .sidebar-nav li a:hover {
-            background-color: rgba(255, 255, 255, 0.1);
-            color: white;
+            background-color: rgba(0, 0, 0, 0.03); /* Lighter hover background */
+            color: var(--primary-color);
         }
 
-        .sidebar-nav li a i {
-            margin-right: 0.75rem;
-            width: 20px;
-            text-align: center;
+        .sidebar-nav li.active a {
+            background-color: rgba(63, 81, 181, 0.1); /* Changed to match dashboard */
+            color: var(--primary-color);
+            font-weight: 500;
+            border-left: 4px solid var(--primary-color);
         }
 
         /* Main Content Area */
@@ -482,6 +487,58 @@ events.html -->
                 justify-content: space-between;
             }
         }
+        .home-nav-item {
+            margin-top: auto;
+            border-top: 1px solid var(--border-color);
+        }
+        
+        .sidebar-nav {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        
+        .sidebar-nav ul {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+        }
+
+        /* Sidebar Toggle Functionality CSS */
+        .sidebar.hidden {
+            display: none !important;
+        }
+
+        .content.full-width {
+            margin-left: 0 !important;
+            width: 100% !important;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                left: -250px;
+                top: var(--header-height);
+                height: calc(100vh - var(--header-height));
+                z-index: 99;
+                transition: left 0.3s ease;
+            }
+            
+            .sidebar.open {
+                left: 0;
+                box-shadow: 2px 0 10px rgba(0, 0, 0, 0.2);
+            }
+            
+            .sidebar-backdrop {
+                position: fixed;
+                top: var(--header-height);
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background-color: rgba(0,0,0,0.5);
+                z-index: 98;
+            }
+        }
     </style>
 </head>
 <body>
@@ -504,13 +561,16 @@ events.html -->
             <aside class="sidebar">
                 <nav class="sidebar-nav">
                     <ul>
-                        <li><a href="{% url 'dashboard' %}"><i class="fas fa-chart-line"></i> Dashboard</a></li>
-                        <li class="active"><a href="{% url 'events' %}"><i class="fas fa-calendar-alt"></i> Events</a></li>
+                        <li class="active"><a href="{% url 'dashboard' %}"><i class="fas fa-chart-line"></i> Dashboard</a></li>
+                        <li><a href="{% url 'events' %}"><i class="fas fa-calendar-alt"></i> Events</a></li>
                         <li><a href="{% url 'apache_logs' %}"><i class="fas fa-server"></i> Apache Logs</a></li>
                         <li><a href="{% url 'mysql_logs' %}"><i class="fas fa-database"></i> MySQL Logs</a></li>
-                        <li><a href="{% url 'reports' %}"><i class="fas fa-file-alt"></i> AI Reports</a></li>
-                        <li><a href="{% url 'profile' %}"><i class="fas fa-user"></i> Profile</a></li>
+                        <li><a href="{% url 'mitre_details' %}"><i class="fas fa-shield-alt"></i> MITRE ATT&CK</a></li>
+                        <li><a href="{% url 'reports' %}"><i class="fas fa-file-alt"></i> Reports</a></li>
+                        <li><a href="{% url 'explore_agent' %}"><i class="fas fa-robot"></i> AI Assistant</a></li>
+                        <li><a href="{% url 'ai_analytics:reports_dashboard' %}"><i class="fas fa-robot"></i> <span>AI Reports</span></a></li>
                         <li><a href="{% url 'settings' %}"><i class="fas fa-cog"></i> Settings</a></li>
+                        <li class="home-nav-item"><a href="/"><i class="fas fa-home"></i> <span>Home</span></a></li>
                     </ul>
                 </nav>
             </aside>
@@ -738,13 +798,113 @@ events.html -->
             const dateRange = document.getElementById('date-range').value;
             const searchTerm = document.getElementById('search-events').value;
             
-            const url = new URL(window.location.origin + '/generate_report/');
-            url.searchParams.set('log_type', eventType);
-            url.searchParams.set('severity', severity);
-            url.searchParams.set('start_date', getDateFromRange(dateRange));
-            url.searchParams.set('search_query', searchTerm);
+            // Create a modal/dialog for format selection
+            const formatDialog = document.createElement('div');
+            formatDialog.className = 'export-format-dialog';
+            formatDialog.innerHTML = `
+                <div class="export-format-content">
+                    <h3>Choose Export Format</h3>
+                    <div class="format-options">
+                        <button class="btn format-btn" data-format="csv">
+                            <i class="fas fa-file-csv"></i> CSV
+                        </button>
+                        <button class="btn format-btn" data-format="pdf">
+                            <i class="fas fa-file-pdf"></i> PDF
+                        </button>
+                    </div>
+                    <button class="btn btn-outline cancel-btn">Cancel</button>
+                </div>
+            `;
             
-            window.open(url.toString(), '_blank');
+            // Add styles for the dialog
+            const style = document.createElement('style');
+            style.textContent = `
+                .export-format-dialog {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background-color: rgba(0,0,0,0.5);
+                    z-index: 1000;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                }
+                .export-format-content {
+                    background-color: white;
+                    padding: 2rem;
+                    border-radius: 8px;
+                    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+                    width: 350px;
+                    text-align: center;
+                }
+                .format-options {
+                    display: flex;
+                    justify-content: center;
+                    gap: 1rem;
+                    margin: 2rem 0;
+                }
+                .format-btn {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    padding: 1rem;
+                    border: 1px solid var(--border-color);
+                    border-radius: 8px;
+                    cursor: pointer;
+                    flex: 1;
+                    transition: all 0.2s;
+                }
+                .format-btn:hover {
+                    background-color: var(--light-color);
+                    border-color: var(--primary-color);
+                }
+                .format-btn i {
+                    font-size: 2rem;
+                    margin-bottom: 0.5rem;
+                }
+                .format-btn[data-format="csv"] i {
+                    color: #008000;
+                }
+                .format-btn[data-format="pdf"] i {
+                    color: #ff0000;
+                }
+                .cancel-btn {
+                    padding: 0.5rem 1rem;
+                }
+            `;
+            
+            document.body.appendChild(style);
+            document.body.appendChild(formatDialog);
+            
+            // Handle format selection
+            formatDialog.querySelectorAll('.format-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const format = this.dataset.format;
+                    
+                    // Construct the URL with the format parameter
+                    const url = new URL(window.location.origin + '/export_events/');
+                    url.searchParams.set('event_type', eventType);
+                    url.searchParams.set('severity', severity);
+                    url.searchParams.set('time_range', dateRange);
+                    url.searchParams.set('search', searchTerm);
+                    url.searchParams.set('format', format);
+                    
+                    // Open in new tab
+                    window.open(url.toString(), '_blank');
+                    
+                    // Remove the dialog
+                    formatDialog.remove();
+                    style.remove();
+                });
+            });
+            
+            // Handle cancel button
+            formatDialog.querySelector('.cancel-btn').addEventListener('click', function() {
+                formatDialog.remove();
+                style.remove();
+            });
         }
         
         // Helper to convert date range to start date
@@ -771,6 +931,87 @@ events.html -->
             
             return '';
         }
+
+        // Sidebar Toggle Functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            // Get sidebar elements
+            const sidebarToggle = document.getElementById('sidebar-toggle');
+            const sidebar = document.querySelector('.sidebar');
+            const content = document.querySelector('.content');
+            
+            // Initialize sidebar state for mobile
+            if (window.innerWidth <= 768) {
+                sidebar.style.left = '-250px';
+            }
+            
+            // Toggle sidebar visibility
+            if (sidebarToggle) {
+                sidebarToggle.addEventListener('click', function() {
+                    if (window.innerWidth <= 768) {
+                        // Mobile view - slide in/out with backdrop
+                        if (sidebar.style.left === '0px') {
+                            // Hide the sidebar
+                            sidebar.style.left = '-250px';
+                            
+                            // Remove backdrop if exists
+                            const backdrop = document.querySelector('.sidebar-backdrop');
+                            if (backdrop) backdrop.remove();
+                        } else {
+                            // Show the sidebar
+                            sidebar.style.left = '0px';
+                            
+                            // Add backdrop for mobile
+                            const backdrop = document.createElement('div');
+                            backdrop.className = 'sidebar-backdrop';
+                            document.body.appendChild(backdrop);
+                            
+                            // Close sidebar when backdrop is clicked
+                            backdrop.addEventListener('click', function() {
+                                sidebar.style.left = '-250px';
+                                backdrop.remove();
+                            });
+                        }
+                    } else {
+                        // Desktop view - fully hide instead of collapse
+                        sidebar.classList.toggle('hidden');
+                        content.classList.toggle('full-width');
+                    }
+                });
+            }
+            
+            // Handle window resize
+            window.addEventListener('resize', function() {
+                if (window.innerWidth <= 768) {
+                    // Switch to mobile view behavior
+                    sidebar.classList.remove('hidden');
+                    content.classList.remove('full-width');
+                    
+                    // If sidebar isn't explicitly shown, make sure it's hidden
+                    if (!sidebar.classList.contains('open') && sidebar.style.left !== '0px') {
+                        sidebar.style.left = '-250px';
+                    }
+                } else {
+                    // Switch to desktop view behavior
+                    sidebar.style.removeProperty('left');
+                    
+                    // Remove any mobile-specific elements
+                    const backdrop = document.querySelector('.sidebar-backdrop');
+                    if (backdrop) backdrop.remove();
+                }
+            });
+            
+            // Optional: Close mobile sidebar when clicking menu items
+            const sidebarLinks = sidebar.querySelectorAll('a');
+            sidebarLinks.forEach(link => {
+                link.addEventListener('click', function() {
+                    if (window.innerWidth <= 768) {
+                        sidebar.style.left = '-250px';
+                        const backdrop = document.querySelector('.sidebar-backdrop');
+                        if (backdrop) backdrop.remove();
+                    }
+                });
+            });
+        });
     </script>
 </body>
 </html>

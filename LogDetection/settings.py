@@ -47,8 +47,10 @@ INSTALLED_APPS = [
     'rest_framework',
     'siem',
     'frontend',
-    'analytics', 
+    'analytics',
+    'ai_analytics',
 ]
+
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -58,6 +60,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # 'LogDetection.middleware.DebugMiddleware',
 ]
 
 ROOT_URLCONF = 'LogDetection.urls'
@@ -162,3 +165,17 @@ EMAIL_HOST_PASSWORD = ''
 
 # Mock data for testing without API keys
 USE_MOCK_THREAT_INTELLIGENCE = True
+
+# OpenRouter API Configuration
+OPENROUTER_API_KEY = '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'
+OPENROUTER_MODEL = 'openai/gpt-4o-mini'
+OPENAI_MAX_TOKENS = 1000  # Max tokens for report generation (adjust for report length)
+OPENAI_TEMPERATURE = 0.2  # Lower for more factual, higher for more creative
+
+# AI Report Configuration
+AI_REPORT_CACHE_HOURS = 24  # How long to cache reports before regenerating
+
+# Site Configuration
+SITE_NAME = 'Log Detection Platform'
+
+

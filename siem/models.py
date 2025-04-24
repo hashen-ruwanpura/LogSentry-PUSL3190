@@ -1,6 +1,10 @@
+import logging
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 def validate_modifier_range(value):
     if not 0 < value <= 10:

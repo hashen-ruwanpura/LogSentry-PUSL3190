@@ -21,7 +21,7 @@ from django.http import HttpResponse, JsonResponse
 import io
 import csv
 from django.contrib.auth.views import LoginView
-from django.urls import reverse_lazy
+from django.urls import reverse_lazy, reverse
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.contrib.auth import update_session_auth_hash
 
@@ -31,6 +31,8 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
 from reportlab.lib.units import inch
 from io import BytesIO
+from django.db.models import Count, Sum
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -263,6 +265,16 @@ def dashboard_view(request):
         'apache_5xx_percentage': apache_5xx_percentage,
         'mysql_fast_percentage': mysql_fast_percentage,
         'mysql_slow_percentage': mysql_slow_percentage,
+        'ai_reports_url': reverse('ai_analytics:reports_dashboard'),
+        'features': [
+            {
+                'title': 'AI-Powered Reports',
+                'icon': 'fas fa-robot',
+                'description': 'Generate intelligent security analysis with AI',
+                'url': reverse('ai_analytics:reports_dashboard'),
+                'color': 'primary'
+            }
+        ]
     }
     
     
@@ -1102,145 +1114,139 @@ def events_view(request):
 @login_required
 def export_events(request):
     """
-    View for exporting security events to various formats (CSV, JSON, PDF).
-    Uses the same filtering logic as the events view.
+    Export events in CSV or PDF format based on filters.
     """
     # Get filter parameters
-    time_range = request.GET.get('time_range', '24h')
+    event_type = request.GET.get('event_type', 'all')
     severity = request.GET.get('severity', 'all')
-    mitre_tactic = request.GET.get('mitre_tactic', 'all')
-    status = request.GET.get('status', 'all')
-    search_query = request.GET.get('search', '')
+    time_range = request.GET.get('time_range', '24h')
+    search = request.GET.get('search', '')
     export_format = request.GET.get('format', 'csv')
     
-    # Determine time period based on range parameter
-    now = timezone.now()
-    if time_range == '1h':
-        start_time = now - timedelta(hours=1)
-        period_name = 'Last Hour'
-    elif time_range == '12h':
-        start_time = now - timedelta(hours=12)
-        period_name = 'Last 12 Hours'
+    # Calculate the date range based on time_range
+    end_date = timezone.now()
+    if time_range == '24h':
+        start_date = end_date - timedelta(hours=24)
+    elif time_range == '3d':
+        start_date = end_date - timedelta(days=3)
     elif time_range == '7d':
-        start_time = now - timedelta(days=7)
-        period_name = 'Last 7 Days'
+        start_date = end_date - timedelta(days=7)
     elif time_range == '30d':
-        start_time = now - timedelta(days=30)
-        period_name = 'Last 30 Days'
-    else:  # Default to 24h
-        start_time = now - timedelta(days=1)
-        period_name = 'Last 24 Hours'
+        start_date = end_date - timedelta(days=30)
+    else:
+        start_date = end_date - timedelta(days=7)  # Default to 7 days
     
-    # Base queryset - get all events without pagination
-    events = Threat.objects.filter(created_at__gte=start_time).order_by('-created_at')
+    # Query events based on filters - using Threat model instead of Event
+    events = Threat.objects.filter(created_at__gte=start_date, created_at__lte=end_date)
     
-    # Apply severity filter
+    if event_type != 'all' and event_type == 'apache':
+        events = events.filter(parsed_log__source_type='apache')
+    elif event_type != 'all' and event_type == 'mysql':
+        events = events.filter(parsed_log__source_type='mysql')
+    
     if severity != 'all':
         events = events.filter(severity=severity)
     
-    # Apply MITRE tactic filter
-    if mitre_tactic != 'all':
-        events = events.filter(mitre_tactic=mitre_tactic)
+    if search:
+        events = events.filter(description__icontains=search)
     
-    # Apply status filter
-    if status != 'all':
-        events = events.filter(status=status)
-    
-    # Apply search filter
-    if search_query:
-        events = events.filter(
-            Q(description__icontains=search_query) | 
-            Q(source_ip__icontains=search_query) |
-            Q(mitre_technique__icontains=search_query)
-        )
-    
-    # Generate filename with timestamp
-    timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
-    filename_base = f"security_events_{timestamp}"
+    # Order by timestamp descending (newest first)
+    events = events.order_by('-created_at')
     
     if export_format == 'csv':
-        # CSV export
+        # Create CSV response
         response = HttpResponse(content_type='text/csv')
-        response['Content-Disposition'] = f'attachment; filename="{filename_base}.csv"'
+        response['Content-Disposition'] = f'attachment; filename="security_events_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv"'
         
         writer = csv.writer(response)
-        writer.writerow([
-            'Event ID', 
-            'Timestamp', 
-            'Source IP', 
-            'Severity', 
-            'Status',
-            'MITRE Tactic', 
-            'MITRE Technique', 
-            'Description'
-        ])
         
+        # Write header row - adjusted for Threat model
+        writer.writerow(['Timestamp', 'Type', 'Source IP', 'Severity', 'Status', 'Description', 'MITRE Tactic', 'MITRE Technique'])
+        
+        # Write data rows - adjusted for Threat model
         for event in events:
             writer.writerow([
-                event.id,
-                event.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-                event.source_ip or 'Unknown',
+                event.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                event.rule.rule_type if event.rule else "Unknown",
+                event.source_ip or "N/A",
                 event.severity,
                 event.status,
-                event.mitre_tactic or 'Unclassified',
-                event.mitre_technique or 'N/A',
-                event.description
+                event.description[:100] + ('...' if len(event.description) > 100 else ''),
+                event.mitre_tactic or "N/A",
+                event.mitre_technique or "N/A"
             ])
         
         return response
     
-    elif export_format == 'json':
-        # JSON export
-        events_data = []
+    elif export_format == 'pdf':
+        # Create a PDF with ReportLab
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        elements = []
         
-        for event in events:
-            events_data.append({
-                'id': event.id,
-                'timestamp': event.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-                'source_ip': event.source_ip or 'Unknown',
-                'severity': event.severity,
-                'status': event.status,
-                'mitre_tactic': event.mitre_tactic or 'Unclassified',
-                'mitre_technique': event.mitre_technique or 'N/A',
-                'description': event.description
-            })
+        # Add title
+        styles = getSampleStyleSheet()
+        title = Paragraph("Security Events Report", styles['Title'])
+        elements.append(title)
         
-        response = JsonResponse({
-            'events': events_data,
-            'total_count': len(events_data),
-            'export_time': timezone.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'filter_params': {
-                'time_range': time_range,
-                'severity': severity,
-                'mitre_tactic': mitre_tactic,
-                'status': status,
-                'search_query': search_query
-            }
-        })
-        response['Content-Disposition'] = f'attachment; filename="{filename_base}.json"'
+        # Add report metadata
+        date_range = f"Period: {start_date.strftime('%Y-%m-%d %H:%M:%S')} to {end_date.strftime('%Y-%m-%d %H:%M:%S')}"
+        filter_info = f"Filters: Event Type={event_type}, Severity={severity}"
+        if search:
+            filter_info += f", Search={search}"
+        
+        elements.append(Paragraph(date_range, styles['Normal']))
+        elements.append(Paragraph(filter_info, styles['Normal']))
+        elements.append(Spacer(1, 20))
+        
+        # Create table data - adjusted for Threat model
+        data = [['Timestamp', 'Source IP', 'Severity', 'Status', 'Description']]  # Header row
+        
+        # Add data rows (limit to 200 events to prevent very large PDFs)
+        for event in events[:200]:  # Limit to 200 for reasonable PDF size
+            data.append([
+                event.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                event.source_ip or "N/A",
+                event.severity,
+                event.status,
+                event.description[:100] + ('...' if len(event.description) > 100 else '')  # Truncate long messages
+            ])
+        
+        # Create the table
+        table = Table(data, repeatRows=1)
+        
+        # Define table style
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ]))
+        
+        # Add the table to the elements
+        elements.append(table)
+        
+        # Build the PDF
+        doc.build(elements)
+        
+        # Get the PDF value from the BytesIO buffer
+        pdf = buffer.getvalue()
+        buffer.close()
+        
+        # Create HTTP response with PDF content
+        response = HttpResponse(content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="security_events_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf"'
+        response.write(pdf)
+        
         return response
     
-    elif export_format == 'pdf':
-        # PDF export
-        context = {
-            'events': events,
-            'total_count': events.count(),
-            'period_name': period_name,
-            'export_time': timezone.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'filter_params': {
-                'time_range': time_range,
-                'severity': severity,
-                'mitre_tactic': mitre_tactic,
-                'status': status,
-                'search_query': search_query
-            }
-        }
-        
-        return render(request, 'authentication/exports/events_pdf.html', context)
-    
-    # Default fallback to the events view if format is not supported
-    messages.warning(request, f"Export format '{export_format}' is not supported. Supported formats: csv, json, pdf")
-    return redirect('events')
+    else:
+        # Unsupported format
+        return HttpResponse("Unsupported export format", status=400)
 
 def generate_alerts_chart_data(start_time, end_time):
     """
