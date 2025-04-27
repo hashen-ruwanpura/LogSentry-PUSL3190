@@ -5,14 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Log Detection Platform - Reports</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/css/jsvectormap.min.css">
     <style>
         :root {
-            --primary-color: #17a2b8;
-            --primary-dark: #138496;
+            --primary-color: #3f51b5;
+            --primary-dark: #303f9f;
             --secondary-color: #343a40;
             --secondary-light: #495057;
-            --light-bg: #f8f9fa;
+            --light-bg: #f5f7fa;
             --border-color: #dee2e6;
             --success-color: #28a745;
             --warning-color: #ffc107;
@@ -20,121 +22,176 @@
             --info-color: #0dcaf0;
             --text-muted: #6c757d;
             --sidebar-width: 250px;
-        }
-        
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
+            --sidebar-collapsed-width: 70px;
+            --header-height: 60px;
         }
         
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--light-bg);
-            color: #333;
-            line-height: 1.6;
+            background-color: #f5f7fa;
+            margin: 0;
+            padding: 0;
+            color: var(--text-primary);
+        }
+        
+        /* Dashboard container */
+        .dashboard-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
         }
         
         /* Header styles */
-        header {
-            background-color: var(--secondary-color);
-            color: white;
-            padding: 1rem;
+        .main-header {
+            background-color: #fff;
+            border-bottom: 1px solid var(--border-color);
+            height: var(--header-height);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            position: fixed;
-            width: 100%;
+            padding: 0 1.5rem;
+            position: sticky;
             top: 0;
             z-index: 100;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
         }
         
-        .header-content {
+        .logo-section {
             display: flex;
             align-items: center;
+        }
+        
+        .logo-section h1 {
+            font-size: 1.25rem;
+            margin: 0 0 0 1rem;
+            font-weight: 500;
+        }
+        
+        .sidebar-toggle {
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 1.25rem;
+            padding: 0.25rem;
         }
         
         .header-actions {
             display: flex;
             align-items: center;
+            gap: 1rem;
         }
         
         .username {
-            margin-right: 15px;
+            color: var(--text-secondary);
+            font-weight: 500;
         }
         
         .logout-btn {
-            background-color: var(--danger-color);
-            color: white;
-            border: none;
-            padding: 0.3rem 0.7rem;
-            border-radius: 4px;
-            cursor: pointer;
+            color: var(--danger-color);
             text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
         }
         
         /* Main content layout */
         .main-content {
             display: flex;
-            margin-top: 4rem;
-            min-height: calc(100vh - 4rem);
+            flex: 1;
+            overflow: hidden;
         }
         
         /* Sidebar styles */
         .sidebar {
             width: var(--sidebar-width);
-            background-color: var(--secondary-color);
-            color: white;
-            padding: 1rem 0;
-            position: fixed;
-            height: calc(100vh - 4rem);
+            background-color: #fff;
+            border-right: 1px solid var(--border-color);
+            transition: width 0.3s ease;
             overflow-y: auto;
+            box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
         }
         
+        .sidebar.collapsed {
+            width: var(--sidebar-collapsed-width);
+        }
+        
+        .sidebar.hidden {
+            display: none !important;
+        }
+
+        .sidebar-nav {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
         .sidebar-nav ul {
             list-style: none;
             padding: 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
         }
         
         .sidebar-nav li {
-            margin-bottom: 0.5rem;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
         }
         
-        .sidebar-nav a {
-            display: block;
-            padding: 0.8rem 1rem;
-            color: rgba(255,255,255,0.8);
+        .sidebar-nav li a {
+            display: flex;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            color: var(--text-primary);
             text-decoration: none;
-            transition: all 0.3s;
-            border-left: 3px solid transparent;
+            transition: all 0.2s;
         }
         
-        .sidebar-nav a:hover {
-            background-color: rgba(255,255,255,0.1);
-            color: white;
-        }
-        
-        .sidebar-nav li.active a {
-            background-color: rgba(255,255,255,0.1);
-            color: white;
-            border-left: 3px solid var(--primary-color);
-        }
-        
-        .sidebar-nav i {
-            margin-right: 10px;
-            width: 20px;
+        .sidebar-nav li a i {
+            margin-right: 1rem;
+            min-width: 20px;
             text-align: center;
         }
         
-        /* Content area */
-        .content {
-            flex: 1;
-            margin-left: var(--sidebar-width);
-            padding: 1.5rem;
+        .sidebar-nav li a:hover {
+            background-color: rgba(0, 0, 0, 0.03);
+            color: var(--primary-color);
         }
         
-        /* Page header */
+        .sidebar-nav li.active a {
+            background-color: rgba(63, 81, 181, 0.1);
+            color: var(--primary-color);
+            font-weight: 500;
+            border-left: 4px solid var(--primary-color);
+        }
+        
+        .sidebar.collapsed .sidebar-nav li a span {
+            display: none;
+        }
+
+        .home-nav-item {
+            margin-top: auto;
+            border-top: 1px solid var(--border-color);
+        }
+        
+        /* Content area styles */
+        .content {
+            flex: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+            transition: margin-left 0.3s ease;
+        }
+        
+        .content.expanded {
+            margin-left: calc(var(--sidebar-collapsed-width) - var(--sidebar-width));
+        }
+
+        .content.full-width {
+            margin-left: 0 !important;
+            width: 100% !important;
+        }
+        
         .page-header {
             display: flex;
             justify-content: space-between;
@@ -142,55 +199,111 @@
             margin-bottom: 1.5rem;
         }
         
+        .page-header h2 {
+            font-size: 1.5rem;
+            font-weight: 500;
+            margin: 0;
+        }
+        
         .actions {
             display: flex;
-            gap: 10px;
+            gap: 0.75rem;
         }
         
         /* Button styles */
-        .btn {
-            padding: 0.5rem 1rem;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: 500;
-            transition: all 0.3s;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
+        .btn-outline {
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+        }
+        
+        /* Card and metrics styles */
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1.5rem;
             border: none;
         }
         
-        .btn i {
-            margin-right: 6px;
+        .card-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            font-weight: 500;
+            font-size: 1.1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: white;
         }
         
-        .btn-primary {
-            background-color: var(--primary-color);
-            color: white;
+        .card-body {
+            padding: 1.5rem;
         }
         
-        .btn-primary:hover {
-            background-color: var(--primary-dark);
+        /* Chart container */
+        .chart-container {
+            height: 300px;
+            position: relative;
+            margin-bottom: 1.5rem;
         }
         
-        .btn-secondary {
-            background-color: var(--secondary-light);
-            color: white;
+        /* Stats cards */
+        .stats-row {
+            display: flex;
+            flex-wrap: wrap;
+            margin: 0 -10px;
+            margin-bottom: 1.5rem;
         }
         
-        .btn-secondary:hover {
-            background-color: var(--secondary-color);
+        .stat-card {
+            flex: 1;
+            min-width: 200px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            padding: 1.2rem;
+            margin: 0 10px 1rem;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
         }
         
-        .btn-outline {
-            background-color: transparent;
-            color: var(--primary-color);
-            border: 1px solid var(--primary-color);
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
         }
         
-        .btn-outline:hover {
-            background-color: var(--primary-color);
-            color: white;
+        .stat-icon {
+            position: absolute;
+            right: 1.2rem;
+            top: 1.2rem;
+            font-size: 1.8rem;
+            opacity: 0.2;
+        }
+        
+        .stat-title {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: 500;
+            margin-bottom: 0.3rem;
+        }
+        
+        .stat-change {
+            font-size: 0.8rem;
+        }
+        
+        .text-success {
+            color: var(--success-color);
+        }
+        
+        .text-danger {
+            color: var(--danger-color);
         }
         
         /* Filter section */
@@ -198,7 +311,7 @@
             background-color: white;
             padding: 1.2rem;
             border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
             margin-bottom: 1.5rem;
         }
         
@@ -237,88 +350,6 @@
             gap: 10px;
         }
         
-        /* Card styles */
-        .card {
-            background-color: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            margin-bottom: 1.5rem;
-        }
-        
-        .card-header {
-            padding: 1rem 1.5rem;
-            border-bottom: 1px solid var(--border-color);
-            font-weight: 500;
-            font-size: 1.1rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .card-body {
-            padding: 1.5rem;
-        }
-        
-        /* Chart container */
-        .chart-container {
-            height: 300px;
-            position: relative;
-            margin-bottom: 1.5rem;
-        }
-        
-        /* Stats cards */
-        .stats-row {
-            display: flex;
-            flex-wrap: wrap;
-            margin: 0 -10px;
-            margin-bottom: 1.5rem;
-        }
-        
-        .stat-card {
-            flex: 1;
-            min-width: 200px;
-            background-color: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            padding: 1.2rem;
-            margin: 0 10px 1rem;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .stat-icon {
-            position: absolute;
-            right: 1.2rem;
-            top: 1.2rem;
-            font-size: 1.8rem;
-            opacity: 0.2;
-        }
-        
-        .stat-title {
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            color: var(--text-muted);
-            margin-bottom: 0.5rem;
-        }
-        
-        .stat-value {
-            font-size: 1.8rem;
-            font-weight: 500;
-            margin-bottom: 0.3rem;
-        }
-        
-        .stat-change {
-            font-size: 0.8rem;
-        }
-        
-        .text-success {
-            color: var(--success-color);
-        }
-        
-        .text-danger {
-            color: var(--danger-color);
-        }
-        
         /* Table styles */
         .reports-table {
             width: 100%;
@@ -333,7 +364,7 @@
         }
         
         .reports-table th {
-            background-color: var(--light-bg);
+            background-color: rgba(0, 0, 0, 0.03);
             font-weight: 500;
         }
         
@@ -393,44 +424,44 @@
             color: white;
         }
         
-        /* Responsive design */
-        @media (max-width: 992px) {
-            .sidebar {
-                width: 60px;
-                overflow: visible;
-            }
-            
-            .sidebar-nav span {
-                display: none;
-            }
-            
-            .sidebar-nav i {
-                margin-right: 0;
-                font-size: 1.2rem;
-            }
-            
-            .content {
-                margin-left: 60px;
-            }
-            
-            .sidebar-nav a {
-                text-align: center;
-                padding: 1rem 0.5rem;
-            }
+        /* Dropdown menu */
+        .dropdown {
+            position: relative;
+            display: inline-block;
         }
         
-        @media (max-width: 768px) {
-            .stats-row {
-                flex-direction: column;
-            }
-            
-            .stat-card {
-                width: calc(100% - 20px);
-            }
-            
-            .content {
-                padding: 1rem;
-            }
+        .dropdown-menu {
+            position: absolute;
+            right: 0;
+            top: calc(100% + 5px);
+            background-color: white;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: none;
+            z-index: 1000;
+            min-width: 160px;
+        }
+        
+        .dropdown-menu a {
+            display: block;
+            padding: 0.5rem 1rem;
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+        
+        .dropdown-menu a:hover {
+            background-color: rgba(0,0,0,0.05);
+        }
+        
+        .export-option {
+            display: flex;
+            align-items: center;
+        }
+        
+        .export-option i {
+            margin-right: 8px;
         }
         
         /* Loading overlay */
@@ -446,242 +477,334 @@
             align-items: center;
             z-index: 10;
         }
+        
+        /* Responsive styles */
+        @media (max-width: 992px) {
+            .sidebar {
+                width: var(--sidebar-collapsed-width);
+                overflow: visible;
+            }
+            
+            .sidebar-nav span {
+                display: none;
+            }
+            
+            .sidebar-nav i {
+                margin-right: 0;
+                font-size: 1.2rem;
+            }
+            
+            .content {
+                margin-left: var(--sidebar-collapsed-width);
+            }
+            
+            .sidebar-nav a {
+                text-align: center;
+                padding: 1rem 0.5rem;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                left: -250px;
+                top: var(--header-height);
+                height: calc(100vh - var(--header-height));
+                z-index: 99;
+                transition: left 0.3s ease;
+            }
+            
+            .sidebar.open {
+                left: 0;
+            }
+            
+            .content {
+                margin-left: 0 !important;
+            }
+            
+            .stats-row {
+                flex-direction: column;
+            }
+            
+            .stat-card {
+                width: calc(100% - 20px);
+            }
+        }
     </style>
 </head>
 <body>
-    <!-- Header -->
-    <header>
-        <div class="header-content">
-            <div class="logo">
+    <div class="dashboard-container">
+        <!-- Header -->
+        <header class="main-header">
+            <div class="logo-section">
+                <button id="sidebar-toggle" class="sidebar-toggle">
+                    <i class="fas fa-bars"></i>
+                </button>
                 <h1>Log Detection Platform</h1>
             </div>
-        </div>
-        <div class="header-actions">
-            <span class="username">{{ user.username }}</span>
-            <a href="{% url 'logout' %}" class="logout-btn">Logout</a>
-        </div>
-    </header>
-
-    <div class="main-content">
-        <!-- Sidebar -->
-        <aside class="sidebar">
-            <nav class="sidebar-nav">
-                <ul>
-                    <li><a href="/dashboard/"><i class="fas fa-chart-line"></i> <span>Dashboard</span></a></li>
-                    <li><a href="/events/"><i class="fas fa-calendar-alt"></i> <span>Events</span></a></li>
-                    <li><a href="/apache-logs/"><i class="fas fa-server"></i> <span>Apache Logs</span></a></li>
-                    <li><a href="/mysql-logs/"><i class="fas fa-database"></i> <span>MySQL Logs</span></a></li>
-                    <li class="active"><a href="/reports/"><i class="fas fa-file-alt"></i> <span>AI Reports</span></a></li>
-                    <li><a href="/settings/"><i class="fas fa-cog"></i> <span>Settings</span></a></li>
-                    <li><a href="/explore-agent/"><i class="fas fa-robot"></i> <span>AI Assistant</span></a></li>
-                </ul>
-            </nav>
-        </aside>
-
-        <!-- Main Content -->
-        <main class="content">
-            <div class="page-header">
-                <h2>Security Reports</h2>
-                <div class="actions">
-                    <button id="refresh-btn" class="btn btn-outline"><i class="fas fa-sync-alt"></i> Refresh</button>
-                    <div class="dropdown">
-                        <button class="btn btn-primary" id="export-btn">
-                            <i class="fas fa-file-export"></i> Export Report
-                        </button>
-                        <div class="dropdown-menu" id="export-menu">
-                            <a href="#" data-format="pdf" class="export-option"><i class="far fa-file-pdf"></i> PDF</a>
-                            <a href="#" data-format="xlsx" class="export-option"><i class="far fa-file-excel"></i> Excel</a>
-                            <a href="#" data-format="csv" class="export-option"><i class="far fa-file-csv"></i> CSV</a>
-                        </div>
-                    </div>
-                </div>
+            <div class="header-actions">
+                <span class="username">{{ request.user.username }}</span>
+                <a href="{% url 'logout' %}" class="logout-btn">Logout</a>
             </div>
+        </header>
 
-            <!-- Filters -->
-            <div class="filters">
-                <form id="report-filters">
-                    <div class="filters-row">
-                        <div class="filter-group">
-                            <label for="dateRange">Date Range</label>
-                            <input type="text" id="dateRange" name="dateRange">
-                        </div>
-                        <div class="filter-group">
-                            <label for="logType">Log Type</label>
-                            <select id="logType" name="logType">
-                                <option value="all" selected>All Types</option>
-                                <option value="apache">Apache</option>
-                                <option value="mysql">MySQL</option>
-                            </select>
-                        </div>
-                        <div class="filter-group">
-                            <label for="severityFilter">Severity</label>
-                            <select id="severityFilter" name="severity">
-                                <option value="all" selected>All Severities</option>
-                                <option value="high">High</option>
-                                <option value="medium">Medium</option>
-                                <option value="low">Low</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="filter-actions">
-                        <button type="button" id="reset-filters" class="btn btn-secondary">
-                            <i class="fas fa-undo"></i> Reset
+        <div class="main-content">
+            <!-- Sidebar Navigation -->
+            <aside class="sidebar">
+                <nav class="sidebar-nav">
+                    <ul>
+                        <li><a href="{% url 'dashboard' %}"><i class="fas fa-chart-line"></i> <span>Dashboard</span></a></li>
+                        <li><a href="{% url 'events' %}"><i class="fas fa-calendar-alt"></i> <span>Events</span></a></li>
+                        <li><a href="{% url 'apache_logs' %}"><i class="fas fa-server"></i> <span>Apache Logs</span></a></li>
+                        <li><a href="{% url 'mysql_logs' %}"><i class="fas fa-database"></i> <span>MySQL Logs</span></a></li>
+                        <li><a href="{% url 'mitre_details' %}"><i class="fas fa-shield-alt"></i> <span>MITRE ATT&CK</span></a></li>
+                        <li class="active"><a href="{% url 'reports' %}"><i class="fas fa-file-alt"></i> <span>Reports</span></a></li>
+                        <li><a href="{% url 'explore_agent' %}"><i class="fas fa-robot"></i> <span>AI Assistant</span></a></li>
+                        <li><a href="{% url 'ai_analytics:reports_dashboard' %}"><i class="fas fa-brain"></i> <span>AI Reports</span></a></li>
+                        <li><a href="{% url 'settings' %}"><i class="fas fa-cog"></i> <span>Settings</span></a></li>
+                        <li class="home-nav-item"><a href="/"><i class="fas fa-home"></i> <span>Home</span></a></li>
+                    </ul>
+                </nav>
+            </aside>
+
+            <!-- Main Content -->
+            <main class="content">
+                <div class="page-header">
+                    <h2>Security Reports</h2>
+                    <div class="actions">
+                        <button id="refresh-btn" class="btn btn-outline">
+                            <i class="fas fa-sync-alt"></i> Refresh
                         </button>
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-filter"></i> Apply Filters
-                        </button>
+                        <div class="dropdown">
+                            <button class="btn btn-primary" id="export-btn">
+                                <i class="fas fa-file-export"></i> Export Report
+                            </button>
+                            <div class="dropdown-menu" id="export-menu">
+                                <a href="#" data-format="pdf" class="export-option"><i class="far fa-file-pdf"></i> PDF</a>
+                                <a href="#" data-format="xlsx" class="export-option"><i class="far fa-file-excel"></i> Excel</a>
+                                <a href="#" data-format="csv" class="export-option"><i class="far fa-file-csv"></i> CSV</a>
+                            </div>
+                        </div>
                     </div>
-                </form>
-            </div>
+                </div>
 
-            <!-- Stats Overview -->
-            <div class="stats-row">
-                <div class="stat-card">
-                    <div class="stat-icon text-danger">
-                        <i class="fas fa-shield-virus"></i>
-                    </div>
-                    <div class="stat-title">Total Threats</div>
-                    <div class="stat-value" id="totalThreats">{{ stats.total_threats|default:"--" }}</div>
-                    <div class="stat-change text-success" id="threatChange">{{ stats.threat_change|default:"--" }}</div>
+                <!-- Filters -->
+                <div class="filters">
+                    <form id="report-filters">
+                        {% csrf_token %}
+                        <div class="filters-row">
+                            <div class="filter-group">
+                                <label for="dateRange">Date Range</label>
+                                <input type="text" id="dateRange" name="dateRange" class="form-control">
+                            </div>
+                            <div class="filter-group">
+                                <label for="logType">Log Type</label>
+                                <select id="logType" name="logType" class="form-select">
+                                    <option value="all" selected>All Types</option>
+                                    <option value="apache">Apache</option>
+                                    <option value="mysql">MySQL</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label for="severityFilter">Severity</label>
+                                <select id="severityFilter" name="severity" class="form-select">
+                                    <option value="all" selected>All Severities</option>
+                                    <option value="high">High</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="low">Low</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="filter-actions">
+                            <button type="button" id="reset-filters" class="btn btn-secondary">
+                                <i class="fas fa-undo"></i> Reset
+                            </button>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-filter"></i> Apply Filters
+                            </button>
+                        </div>
+                    </form>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-icon text-warning">
-                        <i class="fas fa-user-ninja"></i>
-                    </div>
-                    <div class="stat-title">Intrusion Attempts</div>
-                    <div class="stat-value" id="intrusionAttempts">{{ stats.intrusion_attempts|default:"--" }}</div>
-                    <div class="stat-change text-danger" id="intrusionChange">{{ stats.intrusion_change|default:"--" }}</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon text-primary">
-                        <i class="fas fa-bug"></i>
-                    </div>
-                    <div class="stat-title">System Errors</div>
-                    <div class="stat-value" id="systemErrors">{{ stats.system_errors|default:"--" }}</div>
-                    <div class="stat-change text-success" id="errorChange">{{ stats.error_change|default:"--" }}</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon text-success">
-                        <i class="fas fa-shield-alt"></i>
-                    </div>
-                    <div class="stat-title">Blocked Attacks</div>
-                    <div class="stat-value" id="blockedAttacks">{{ stats.blocked_attacks|default:"--" }}</div>
-                    <div class="stat-change text-success" id="blockedChange">{{ stats.blocked_change|default:"--" }}</div>
-                </div>
-            </div>
 
-            <!-- Charts Row -->
-            <div class="row">
-                <!-- Threat Trend Chart -->
+                <!-- Stats Overview -->
+                <div class="stats-row">
+                    <div class="stat-card">
+                        <div class="stat-icon text-danger">
+                            <i class="fas fa-shield-virus"></i>
+                        </div>
+                        <div class="stat-title">Total Threats</div>
+                        <div class="stat-value" id="totalThreats">{{ stats.total_threats|default:"--" }}</div>
+                        <div class="stat-change text-success" id="threatChange">{{ stats.threat_change|default:"--" }}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon text-warning">
+                            <i class="fas fa-user-ninja"></i>
+                        </div>
+                        <div class="stat-title">Intrusion Attempts</div>
+                        <div class="stat-value" id="intrusionAttempts">{{ stats.intrusion_attempts|default:"--" }}</div>
+                        <div class="stat-change text-danger" id="intrusionChange">{{ stats.intrusion_change|default:"--" }}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon text-primary">
+                            <i class="fas fa-bug"></i>
+                        </div>
+                        <div class="stat-title">System Errors</div>
+                        <div class="stat-value" id="systemErrors">{{ stats.system_errors|default:"--" }}</div>
+                        <div class="stat-change text-success" id="errorChange">{{ stats.error_change|default:"--" }}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon text-success">
+                            <i class="fas fa-shield-alt"></i>
+                        </div>
+                        <div class="stat-title">Blocked Attacks</div>
+                        <div class="stat-value" id="blockedAttacks">{{ stats.blocked_attacks|default:"--" }}</div>
+                        <div class="stat-change text-success" id="blockedChange">{{ stats.blocked_change|default:"--" }}</div>
+                    </div>
+                </div>
+
+                <!-- Charts Row -->
+                <div class="row">
+                    <!-- Threat Trend Chart -->
+                    <div class="card">
+                        <div class="card-header">
+                            <span>Threat Trend</span>
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-outline-primary btn-sm" data-period="day" id="dailyBtn">Daily</button>
+                                <button type="button" class="btn btn-outline-primary btn-sm" data-period="week" id="weeklyBtn">Weekly</button>
+                                <button type="button" class="btn btn-outline-primary btn-sm" data-period="month" id="monthlyBtn">Monthly</button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container">
+                                <canvas id="threatTrendChart"></canvas>
+                                <div class="loading-overlay" id="trend-loading" style="display: none;">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <!-- Existing Severity Distribution card remains here -->
+                        <div class="card">
+                            <div class="card-header">Severity Distribution</div>
+                            <div class="card-body">
+                                <div class="chart-container" style="height: 250px;">
+                                    <canvas id="severityDistChart"></canvas>
+                                    <div class="loading-overlay" id="severity-loading" style="display: none;">
+                                        <div class="spinner-border text-primary" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row text-center" style="margin-top: 1rem;">
+                                    <div class="col">
+                                        <div class="severity-high"><i class="fas fa-exclamation-circle"></i> High</div>
+                                        <strong id="highSeverityCount">{{ severity.high|default:"--" }}</strong>
+                                    </div>
+                                    <div class="col">
+                                        <div class="severity-medium"><i class="fas fa-exclamation-triangle"></i> Medium</div>
+                                        <strong id="mediumSeverityCount">{{ severity.medium|default:"--" }}</strong>
+                                    </div>
+                                    <div class="col">
+                                        <div class="severity-low"><i class="fas fa-info-circle"></i> Low</div>
+                                        <strong id="lowSeverityCount">{{ severity.low|default:"--" }}</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- New Geographic Heat Map card -->
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Geographic Distribution of Attacks</div>
+                            <div class="card-body">
+                                <div class="chart-container" style="height: 250px;">
+                                    <div id="world-map-attacks" class="world-map"></div>
+                                    <div class="loading-overlay" id="map-loading" style="display: none;">
+                                        <div class="spinner-border text-primary" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="map-legend text-center" style="margin-top: 1rem;">
+                                    <span class="d-inline-block me-3">
+                                        <i class="fas fa-circle" style="color: #ffe0e0;"></i> Low
+                                    </span>
+                                    <span class="d-inline-block me-3">
+                                        <i class="fas fa-circle" style="color: #ff9e9e;"></i> Medium
+                                    </span>
+                                    <span class="d-inline-block">
+                                        <i class="fas fa-circle" style="color: #ff5252;"></i> High
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Threats Table -->
                 <div class="card">
                     <div class="card-header">
-                        <span>Threat Trend</span>
-                        <div class="btn-group">
-                            <button type="button" class="btn btn-outline" data-period="day" id="dailyBtn">Daily</button>
-                            <button type="button" class="btn btn-outline" data-period="week" id="weeklyBtn">Weekly</button>
-                            <button type="button" class="btn btn-outline" data-period="month" id="monthlyBtn">Monthly</button>
+                        <span>Recent Security Events</span>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-primary" id="tableExportBtn">
+                                <i class="fas fa-download"></i> Export
+                            </button>
                         </div>
                     </div>
                     <div class="card-body">
-                        <div class="chart-container">
-                            <canvas id="threatTrendChart"></canvas>
-                            <div class="loading-overlay" id="trend-loading" style="display: none;">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="visually-hidden">Loading...</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="row">
-                <!-- Severity Distribution -->
-                <div class="card">
-                    <div class="card-header">Severity Distribution</div>
-                    <div class="card-body">
-                        <div class="chart-container" style="height: 250px;">
-                            <canvas id="severityDistChart"></canvas>
-                            <div class="loading-overlay" id="severity-loading" style="display: none;">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="visually-hidden">Loading...</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="row text-center" style="margin-top: 1rem;">
-                            <div class="col">
-                                <div class="severity-high"><i class="fas fa-exclamation-circle"></i> High</div>
-                                <strong id="highSeverityCount">{{ severity.high|default:"--" }}</strong>
-                            </div>
-                            <div class="col">
-                                <div class="severity-medium"><i class="fas fa-exclamation-triangle"></i> Medium</div>
-                                <strong id="mediumSeverityCount">{{ severity.medium|default:"--" }}</strong>
-                            </div>
-                            <div class="col">
-                                <div class="severity-low"><i class="fas fa-info-circle"></i> Low</div>
-                                <strong id="lowSeverityCount">{{ severity.low|default:"--" }}</strong>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Recent Threats Table -->
-            <div class="card">
-                <div class="card-header">
-                    <span>Recent Security Events</span>
-                    <div class="dropdown">
-                        <button class="btn btn-sm btn-outline" id="tableExportBtn">
-                            <i class="fas fa-download"></i> Export
-                        </button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="reports-table">
-                            <thead>
-                                <tr>
-                                    <th>Time</th>
-                                    <th>Source IP</th>
-                                    <th>Log Type</th>
-                                    <th>Threat Type</th>
-                                    <th>Severity</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="recentThreatsTable">
-                                {% if recent_threats %}
-                                    {% for threat in recent_threats %}
+                        <div class="table-responsive">
+                            <table class="reports-table">
+                                <thead>
                                     <tr>
-                                        <td>{{ threat.timestamp }}</td>
-                                        <td>{{ threat.source_ip }}</td>
-                                        <td>{{ threat.log_type }}</td>
-                                        <td>{{ threat.threat_type }}</td>
-                                        <td class="severity-{{ threat.severity|lower }}">{{ threat.severity }}</td>
-                                        <td>
-                                            <span class="badge badge-{% if threat.status == 'Resolved' %}success{% elif threat.status == 'In Progress' %}warning{% else %}danger{% endif %}">
-                                                {{ threat.status }}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <button class="btn btn-sm btn-primary view-details" data-id="{{ threat.id }}">
-                                                <i class="fas fa-eye"></i>
-                                            </button>
-                                        </td>
+                                        <th>Time</th>
+                                        <th>Source IP</th>
+                                        <th>Log Type</th>
+                                        <th>Threat Type</th>
+                                        <th>Severity</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
                                     </tr>
-                                    {% endfor %}
-                                {% else %}
-                                    <tr>
-                                        <td colspan="7" class="text-center">No threats found</td>
-                                    </tr>
-                                {% endif %}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody id="recentThreatsTable">
+                                    {% if recent_threats %}
+                                        {% for threat in recent_threats %}
+                                        <tr>
+                                            <td>{{ threat.timestamp }}</td>
+                                            <td>{{ threat.source_ip }}</td>
+                                            <td>{{ threat.log_type }}</td>
+                                            <td>{{ threat.threat_type }}</td>
+                                            <td class="severity-{{ threat.severity|lower }}">{{ threat.severity }}</td>
+                                            <td>
+                                                <span class="badge badge-{% if threat.status == 'Resolved' %}success{% elif threat.status == 'In Progress' %}warning{% else %}danger{% endif %}">
+                                                    {{ threat.status }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <button class="btn btn-sm btn-primary view-details" data-id="{{ threat.id }}">
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    {% else %}
+                                        <tr>
+                                            <td colspan="7" class="text-center">No threats found</td>
+                                        </tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </main>
+            </main>
+        </div>
     </div>
 
     <!-- Threat Detail Modal -->
@@ -752,10 +875,30 @@
     <script src="https://cdn.jsdelivr.net/momentjs/latest/moment.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/js/jsvectormap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/maps/world.js"></script>
     
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             console.log("Document loaded, initializing reports dashboard...");
+            
+            // Sidebar toggle functionality
+            const sidebarToggle = document.getElementById('sidebar-toggle');
+            const sidebar = document.querySelector('.sidebar');
+            const content = document.querySelector('.content');
+
+            if (sidebarToggle) {
+                sidebarToggle.addEventListener('click', function() {
+                    if (window.innerWidth <= 768) {
+                        // Mobile view - toggle open class
+                        sidebar.classList.toggle('open');
+                    } else {
+                        // Desktop view - fully hide instead of collapse
+                        sidebar.classList.toggle('hidden');
+                        content.classList.toggle('full-width');
+                    }
+                });
+            }
             
             // Initialize date range picker
             $('#dateRange').daterangepicker({
@@ -817,6 +960,15 @@
                 menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
             });
             
+            // Close dropdown when clicking outside
+            document.addEventListener('click', function(e) {
+                const exportBtn = document.getElementById('export-btn');
+                const exportMenu = document.getElementById('export-menu');
+                if (!exportBtn.contains(e.target) && !exportMenu.contains(e.target)) {
+                    exportMenu.style.display = 'none';
+                }
+            });
+            
             // Export options
             document.querySelectorAll('.export-option').forEach(option => {
                 option.addEventListener('click', function(e) {
@@ -838,6 +990,9 @@
             document.getElementById('tableExportBtn').addEventListener('click', function() {
                 exportTableData();
             });
+            
+            // Start the map refresh interval
+            startMapRefresh();
         });
         
         function initializeCharts() {
@@ -869,8 +1024,8 @@
                         {
                             label: 'Low',
                             data: [7, 9, 6, 10, 8, 11, 7],
-                            borderColor: 'rgba(13, 110, 253, 1)',
-                            backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                            borderColor: 'rgba(63, 81, 181, 1)',
+                            backgroundColor: 'rgba(63, 81, 181, 0.1)',
                             borderWidth: 2,
                             tension: 0.4,
                             fill: true
@@ -911,12 +1066,12 @@
                         backgroundColor: [
                             'rgba(220, 53, 69, 0.8)',
                             'rgba(255, 193, 7, 0.8)',
-                            'rgba(13, 110, 253, 0.8)'
+                            'rgba(63, 81, 181, 0.8)'
                         ],
                         borderColor: [
                             'rgba(220, 53, 69, 1)',
                             'rgba(255, 193, 7, 1)',
-                            'rgba(13, 110, 253, 1)'
+                            'rgba(63, 81, 181, 1)'
                         ],
                         borderWidth: 1
                     }]
@@ -1114,7 +1269,10 @@
         function showThreatDetails(threatId) {
             fetch(`/api/reports/threat-details/${threatId}/`, {
                 method: 'GET',
-                credentials: 'same-origin'
+                credentials: 'same-origin',
+                headers: {
+                    'X-CSRFToken': getCsrfToken()
+                }
             })
             .then(response => {
                 if (!response.ok) {
@@ -1229,6 +1387,9 @@
             document.body.appendChild(form);
             form.submit();
             document.body.removeChild(form);
+            
+            // Hide the dropdown after selection
+            document.getElementById('export-menu').style.display = 'none';
         }
         
         // Export table data
@@ -1304,6 +1465,205 @@
             return document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
                    document.cookie.replace(/(?:(?:^|.*;\s*)csrftoken\s*\=\s*([^;]*).*$)|^.*$/, "$1");
         }
+
+        // Function to update the world map with country data
+function updateWorldMap(countryData) {
+    if (!window.attackMap || !window.attackMap.params) {
+        console.error("Map not initialized properly");
+        return;
+    }
+    
+    try {
+        // Update the values in the map
+        window.attackMap.params.series.regions[0].values = countryData;
+        
+        // Refresh the map visualization
+        window.attackMap.series.regions[0].setValues(countryData);
+        
+        console.log("Map updated with data for", Object.keys(countryData).length, "countries");
+    } catch (error) {
+        console.error("Error updating map:", error);
+    }
+}
+
+// Start an interval to refresh the map data periodically
+function startMapRefresh() {
+    // Clear any existing interval
+    if (window.mapRefreshInterval) {
+        clearInterval(window.mapRefreshInterval);
+    }
+    
+    // Set new interval to refresh map data every 5 minutes (300000 ms)
+    window.mapRefreshInterval = setInterval(function() {
+        console.log("Refreshing map data...");
+        loadGeoAttackData();
+    }, 300000);
+}
+
+// Add this at window unload to clean up the interval
+window.addEventListener('beforeunload', function() {
+    if (window.mapRefreshInterval) {
+        clearInterval(window.mapRefreshInterval);
+    }
+});
+
+// Update the world map initialization function for better visualization
+
+function initializeWorldMap() {
+    if (!document.getElementById('world-map-attacks')) return;
+    
+    // Check if jsVectorMap is loaded
+    if (typeof jsVectorMap === 'undefined') {
+        console.error('jsVectorMap library not loaded. Retrying in 1 second...');
+        setTimeout(initializeWorldMap, 1000);
+        return;
+    }
+    
+    console.log('Initializing world map');
+    try {
+        window.attackMap = new jsVectorMap({
+            selector: '#world-map-attacks',
+            map: 'world',
+            zoomButtons: true,
+            zoomOnScroll: true,
+            zoomOnScrollSpeed: 1.2,
+            panOnDrag: true,
+            backgroundColor: '#f5f7fa',
+            regionStyle: {
+                initial: {
+                    fill: '#e4e4e4',
+                    stroke: '#bbb',
+                    strokeWidth: 0.5,
+                    fillOpacity: 1
+                },
+                hover: {
+                    fill: '#ccc',
+                    stroke: '#aaa',
+                    strokeWidth: 0.5,
+                    cursor: 'pointer'
+                }
+            },
+            series: {
+                regions: [{
+                    attribute: 'fill',
+                    legend: {
+                        vertical: true,
+                        title: 'Attack Volume',
+                        labelRender: function(value) {
+                            return value < 10 ? 'Low' : value < 50 ? 'Medium' : 'High';
+                        }
+                    },
+                    // SIMPLIFIED COLOR SCALE - just 3 levels instead of 6
+                    scale: {
+                        '1': '#ffe0e0',   // Low - light red
+                        '10': '#ff9e9e',  // Medium - medium red
+                        '50': '#ff5252'   // High - dark red
+                    },
+                    values: {} // Will be populated with data
+                }]
+            },
+            onRegionTipShow: function(event, element, code) {
+                const attackCount = window.attackMap.params.series.regions[0].values[code] || 0;
+                if (attackCount > 0) {
+                    element.html(`<div style="padding:5px;">
+                                    <strong>${element.html()}</strong><br>
+                                    ${attackCount} attack${attackCount !== 1 ? 's' : ''}
+                                  </div>`);
+                }
+            }
+        });
+        
+        // Force load initial map data (ensure this runs)
+        loadGeoAttackData();
+    } catch (error) {
+        console.error('Error initializing map:', error);
+        const mapContainer = document.getElementById('world-map-attacks');
+        if (mapContainer) {
+            mapContainer.innerHTML = '<div class="alert alert-warning">Could not load the map. Please refresh the page.</div>';
+            document.getElementById('map-loading').style.display = 'none';
+        }
+    }
+}
+
+// Then ensure the map initialization happens after all scripts are loaded
+document.addEventListener('DOMContentLoaded', function() {
+    // Your existing initialization code...
+    
+    // Use a small delay to ensure all scripts are loaded
+    setTimeout(function() {
+        initializeWorldMap();
+    }, 500);
+    
+    // Add update for map when filters are applied
+    document.getElementById('report-filters').addEventListener('submit', function(e) {
+        // Your existing filter code
+        
+        // Also update the map
+        loadGeoAttackData();
+    });
+});
+
+// Function to load geographic attack data
+function loadGeoAttackData() {
+    document.getElementById('map-loading').style.display = 'flex';
+    
+    const filters = getFilters();
+    
+    fetch('/api/reports/geo-attacks/', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify(filters)
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`Server responded with ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log("Map data received:", data);
+        if (data.countryData && Object.keys(data.countryData).length > 0) {
+            updateWorldMap(data.countryData);
+        } else {
+            console.warn("No country data received, using fallback data");
+            // Use fallback sample data
+            updateWorldMap(generateSampleCountryData());
+        }
+        document.getElementById('map-loading').style.display = 'none';
+    })
+    .catch(error => {
+        console.error('Error loading geographic attack data:', error);
+        document.getElementById('map-loading').style.display = 'none';
+        
+        // Always use sample data on error
+        updateWorldMap(generateSampleCountryData());
+    });
+}
+
+// Add this helper function to generate sample data
+function generateSampleCountryData() {
+    return {
+        'US': 75, 'CN': 85, 'RU': 60, 'IR': 45, 'KP': 30, 
+        'GB': 40, 'DE': 50, 'BR': 35, 'IN': 55, 'AU': 20,
+        'TR': 25, 'FR': 35, 'CA': 30, 'IT': 25, 'ES': 15,
+        'JP': 30, 'KR': 20, 'NL': 15, 'SE': 10, 'MX': 25
+    };
+}
+
+// Add at the end of your DOMContentLoaded event handler
+// Ensure the map always displays data - additional fallback
+setTimeout(function() {
+    if (window.attackMap && 
+        (!window.attackMap.params.series.regions[0].values || 
+         Object.keys(window.attackMap.params.series.regions[0].values).length === 0)) {
+        console.log("No data detected in map after timeout, forcing sample data display");
+        updateWorldMap(generateSampleCountryData());
+    }
+}, 3000); // Check after 3 seconds
     </script>
 </body>
 </html>

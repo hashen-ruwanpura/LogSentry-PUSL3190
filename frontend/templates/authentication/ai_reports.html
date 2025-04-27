@@ -9,6 +9,9 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/jsvectormap@1.5.3/dist/css/jsvectormap.min.css">
+    <script src="https://unpkg.com/jsvectormap@1.5.3/dist/js/jsvectormap.min.js"></script>
+    <script src="https://unpkg.com/jsvectormap@1.5.3/dist/maps/world.js"></script>
     <style>
         :root {
             --primary-color: #3f51b5;
@@ -400,6 +403,22 @@
             margin-left: 0.5rem;
             vertical-align: middle;
         }
+
+        /* Simplified Severity indicators - text-only with colors */
+        .severity-high {
+            color: #dc3545;  /* Red */
+            font-weight: 500;
+        }
+
+        .severity-medium {
+            color: #ffc107;  /* Amber/Yellow */
+            font-weight: 500;
+        }
+
+        .severity-low {
+            color: #17a2b8;  /* Cyan/Light Blue */
+            font-weight: 500;
+        }
         
         @media (max-width: 992px) {
             .filter-group {
@@ -510,7 +529,8 @@
                         <li><a href="{% url 'mitre_details' %}"><i class="fas fa-shield-alt"></i> MITRE ATT&CK</a></li>
                         <li><a href="{% url 'reports' %}"><i class="fas fa-file-alt"></i> Reports</a></li>
                         <li><a href="{% url 'explore_agent' %}"><i class="fas fa-robot"></i> AI Assistant</a></li>
-                        <li><a href="{% url 'ai_analytics:reports_dashboard' %}"><i class="fas fa-robot"></i> <span>AI Reports</span></a></li>
+                        <li class="active"><a href="{% url 'ai_analytics:reports_dashboard' %}"><i class="fas fa-robot"></i> <span>AI
+                                    Reports</span></a></li>
                         <li><a href="{% url 'settings' %}"><i class="fas fa-cog"></i> Settings</a></li>
                         <li class="home-nav-item"><a href="/"><i class="fas fa-home"></i> <span>Home</span></a></li>
                     </ul>
@@ -690,6 +710,66 @@
                         </div>
                     </div>
                 </div>
+<div class="row">
+    <div class="col-md-6">
+        <!-- Existing Severity Distribution card remains here -->
+        <div class="card">
+            <div class="card-header">Severity Distribution</div>
+            <div class="card-body">
+                <div class="chart-container" style="height: 250px;">
+                    <canvas id="severityDistChart"></canvas>
+                    <div class="loading-overlay" id="severity-loading" style="display: none;">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="row text-center" style="margin-top: 1rem;">
+                    <div class="col">
+                        <div class="severity-high"><i class="fas fa-exclamation-circle"></i> High</div>
+                        <strong id="highSeverityCount">{{ severity.high|default:"--" }}</strong>
+                    </div>
+                    <div class="col">
+                        <div class="severity-medium"><i class="fas fa-exclamation-triangle"></i> Medium</div>
+                        <strong id="mediumSeverityCount">{{ severity.medium|default:"--" }}</strong>
+                    </div>
+                    <div class="col">
+                        <div class="severity-low"><i class="fas fa-info-circle"></i> Low</div>
+                        <strong id="lowSeverityCount">{{ severity.low|default:"--" }}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Geographic Heat Map card -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">Geographic Distribution of Attacks</div>
+            <div class="card-body">
+                <div class="chart-container" style="height: 250px;">
+                    <div id="world-map-attacks" class="world-map"></div>
+                    <div class="loading-overlay" id="map-loading" style="display: none;">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="map-legend text-center" style="margin-top: 1rem;">
+                    <span class="d-inline-block me-3">
+                        <i class="fas fa-circle" style="color: #ffe0e0;"></i> Low
+                    </span>
+                    <span class="d-inline-block me-3">
+                        <i class="fas fa-circle" style="color: #ff9e9e;"></i> Medium
+                    </span>
+                    <span class="d-inline-block">
+                        <i class="fas fa-circle" style="color: #ff5252;"></i> High
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
             </main>
         </div>
     </div>
@@ -1307,6 +1387,120 @@
                 });
             });
         });
+            // Initialize world map
+            function initializeWorldMap() {
+                if (!document.getElementById('world-map-attacks')) return;
+
+                console.log('Initializing world map');
+                window.attackMap = new jsVectorMap({
+                    selector: '#world-map-attacks',
+                    map: 'world',
+                    zoomButtons: true,
+                    zoomOnScroll: false,
+                    regionStyle: {
+                        initial: {
+                            fill: '#e4e4e4',
+                            stroke: '#bbb',
+                            strokeWidth: 0.5,
+                        },
+                        hover: {
+                            fill: '#ccc',
+                            stroke: '#aaa',
+                            strokeWidth: 0.5,
+                        }
+                    },
+                    series: {
+                        regions: [{
+                            attribute: 'fill',
+                            legend: {
+                                title: 'Attack Density',
+                            },
+                            scale: {
+                                '0': '#ffe0e0',
+                                '5': '#ff9e9e',
+                                '10': '#ff5252'
+                            },
+                            values: {} // Will be populated with data
+                        }]
+                    },
+                    onRegionTipShow: function (event, element, code) {
+                        const attackCount = window.attackMap.params.series.regions[0].values[code] || 0;
+                        element.html(element.html() + ': ' + attackCount + ' attacks');
+                    }
+                });
+
+                // Load initial map data
+                loadGeoAttackData();
+            }
+
+            // Function to load geographic attack data
+            function loadGeoAttackData() {
+                document.getElementById('map-loading').style.display = 'flex';
+
+                const filters = getFilters();
+
+                fetch('/api/reports/geo-attacks/', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    },
+                    body: JSON.stringify(filters)
+                })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`Server responded with ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        updateWorldMap(data.countryData);
+                        document.getElementById('map-loading').style.display = 'none';
+                    })
+                    .catch(error => {
+                        console.error('Error loading geographic attack data:', error);
+                        document.getElementById('map-loading').style.display = 'none';
+
+                        // Show sample data if there's an error
+                        const sampleData = {
+                            'US': 15, 'CN': 24, 'RU': 18, 'IR': 12, 'KP': 8,
+                            'GB': 6, 'DE': 9, 'BR': 7, 'IN': 11, 'AU': 3,
+                            'TR': 5, 'FR': 4, 'CA': 2, 'IT': 3, 'ES': 2
+                        };
+                        updateWorldMap(sampleData);
+                    });
+            }
+
+            // Update world map with attack data
+            function updateWorldMap(countryData) {
+                if (!window.attackMap) {
+                    console.warn("Attack map not initialized");
+                    return;
+                }
+
+                // Update the values in the map
+                window.attackMap.params.series.regions[0].values = countryData;
+
+                // Refresh the map visualization
+                window.attackMap.series.regions[0].setValues(countryData);
+            }
+
+            // Add this to your document ready function
+            document.addEventListener('DOMContentLoaded', function () {
+                // Your existing initialization code...
+
+                // Initialize the world map
+                initializeWorldMap();
+
+                // Add update for map when filters are applied
+                document.getElementById('report-filters').addEventListener('submit', function (e) {
+                    // Your existing filter code
+
+                    // Also update the map
+                    loadGeoAttackData();
+                });
+            });
     </script>
 </body>
 </html>

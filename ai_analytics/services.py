@@ -556,6 +556,209 @@ Based on the available data:
         }
 
 
+class AlertAnalysisService:
+    """Service for analyzing individual security alerts with AI"""
+    
+    def __init__(self):
+        """Initialize the service using the existing OpenRouter configuration"""
+        try:
+            from ai_analytics.services import OpenRouterReportGenerator
+            self.openrouter = OpenRouterReportGenerator()
+            logger.info("AlertAnalysisService initialized with OpenRouterReportGenerator")
+        except Exception as e:
+            logger.error(f"Error initializing AlertAnalysisService: {str(e)}")
+            raise
+    
+    def analyze_threat(self, threat, action_type='analyze'):
+        """Analyze a threat/alert with AI and return insights"""
+        try:
+            # Log the attempt
+            logger.info(f"Analyzing threat ID #{threat.id} with action: {action_type}")
+            
+            # Prepare context data about the threat
+            context = self._prepare_threat_context(threat)
+            
+            # Generate prompt based on action type
+            prompt = self._create_prompt(threat, action_type, context)
+            
+            # Call OpenRouter API
+            response = self.openrouter.client.chat.completions.create(
+                extra_headers={
+                    "HTTP-Referer": self.openrouter.site_url,
+                    "X-Title": self.openrouter.site_name,
+                },
+                model=self.openrouter.model,
+                messages=[
+                    {"role": "system", "content": "You are a cybersecurity analyst specializing in threat detection and analysis."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.2,
+                max_tokens=1000,
+            )
+            
+            # Process response
+            if response.choices and response.choices[0].message.content:
+                analysis = response.choices[0].message.content
+                logger.info(f"Successfully analyzed threat #{threat.id}, generated {len(analysis)} characters")
+                return analysis
+            else:
+                logger.warning(f"Empty response from OpenRouter API for threat #{threat.id}")
+                return "AI couldn't generate a response. Please try again."
+                
+        except Exception as e:
+            error_msg = f"Error analyzing threat with AI: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            return f"Error analyzing threat: {str(e)}"
+    
+    def _prepare_threat_context(self, threat):
+        """Prepare context data about the threat for AI analysis"""
+        try:
+            # Get related parsed log if available
+            related_log = None
+            raw_log_content = None
+            if hasattr(threat, 'parsed_log') and threat.parsed_log:
+                related_log = threat.parsed_log
+                if hasattr(related_log, 'raw_log'):
+                    raw_log_content = related_log.raw_log.content
+            
+            # Get similar threats
+            similar_threats = Threat.objects.filter(
+                Q(source_ip=threat.source_ip) | Q(mitre_tactic=threat.mitre_tactic)
+            ).exclude(id=threat.id).order_by('-created_at')[:3]
+            
+            # Format similar threats
+            similar_threats_data = []
+            for st in similar_threats:
+                similar_threats_data.append({
+                    'id': st.id,
+                    'created_at': st.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                    'severity': st.severity,
+                    'status': st.status,
+                    'description': st.description,
+                    'mitre_tactic': st.mitre_tactic,
+                    'source_ip': st.source_ip,
+                })
+            
+            # Check if IP is blacklisted
+            is_blacklisted = False
+            if threat.source_ip:
+                is_blacklisted = BlacklistedIP.objects.filter(ip_address=threat.source_ip).exists()
+            
+            # Build context dictionary
+            context = {
+                'threat': {
+                    'id': threat.id,
+                    'created_at': threat.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                    'updated_at': threat.updated_at.strftime('%Y-%m-%d %H:%M:%S'),
+                    'severity': threat.severity,
+                    'status': threat.status,
+                    'source_ip': threat.source_ip or 'Unknown',
+                    'affected_system': threat.affected_system or 'Not specified',
+                    'mitre_tactic': threat.mitre_tactic or 'Unclassified',
+                    'mitre_technique': threat.mitre_technique or 'Unclassified',
+                    'description': threat.description,
+                    'recommendation': getattr(threat, 'recommendation', 'No recommendation provided'),
+                    'is_ip_blacklisted': is_blacklisted,
+                },
+                'related_log': {
+                    'available': related_log is not None,
+                    'content': raw_log_content,
+                    'timestamp': related_log.timestamp.strftime('%Y-%m-%d %H:%M:%S') if related_log and hasattr(related_log, 'timestamp') else None,
+                    'request_method': getattr(related_log, 'request_method', None),
+                    'request_path': getattr(related_log, 'request_path', None),
+                    'status_code': getattr(related_log, 'status_code', None),
+                    'user_agent': getattr(related_log, 'user_agent', None),
+                },
+                'similar_threats': similar_threats_data,
+            }
+            
+            return context
+            
+        except Exception as e:
+            logger.error(f"Error preparing threat context: {str(e)}")
+            # Return minimal context to avoid analysis failure
+            return {
+                'threat': {
+                    'id': threat.id,
+                    'severity': getattr(threat, 'severity', 'unknown'),
+                    'description': getattr(threat, 'description', 'No description available'),
+                },
+                'related_log': {'available': False},
+                'similar_threats': []
+            }
+    
+    def _create_prompt(self, threat, action_type, context):
+        """Create a prompt for the AI based on the action type"""
+        base_prompt = (
+            f"Security alert #{threat.id} - {threat.severity.upper()} severity\n"
+            f"Description: {threat.description}\n\n"
+        )
+        
+        if context['related_log']['available'] and context['related_log']['content']:
+            base_prompt += f"Related log entry:\n{context['related_log']['content'][:500]}\n\n"
+            
+        if threat.mitre_tactic:
+            base_prompt += f"MITRE ATT&CK Tactic: {threat.mitre_tactic}\n"
+            
+        if threat.mitre_technique:
+            base_prompt += f"MITRE ATT&CK Technique: {threat.mitre_technique}\n\n"
+            
+        # Add similar threats if available
+        if context['similar_threats']:
+            base_prompt += "Similar threats detected:\n"
+            for st in context['similar_threats']:
+                base_prompt += f"- #{st['id']}: {st['severity']} severity, {st['description'][:100]}...\n"
+            base_prompt += "\n"
+            
+        # Action-specific prompts
+        if action_type == 'explain':
+            base_prompt += (
+                "Please explain this security alert in detail, including:\n"
+                "1. What this alert means in simple terms\n"
+                "2. The potential impact if this is a real threat\n"
+                "3. Common causes for this type of alert\n"
+                "4. Whether this alert appears to be a false positive based on the information provided\n"
+                "\nFormat your response in clear sections with markdown headings."
+            )
+        elif action_type == 'suggest':
+            base_prompt += (
+                "Please suggest specific solutions for addressing this security alert, including:\n"
+                "1. Immediate mitigation steps\n"
+                "2. Long-term fixes to prevent similar issues\n"
+                "3. Security hardening recommendations\n"
+                "4. Monitoring suggestions to detect similar threats\n"
+                "\nProvide actionable, specific steps rather than generic advice. Format your response with markdown."
+            )
+        elif action_type == 'risk':
+            base_prompt += (
+                "Please provide a risk assessment of this security alert, including:\n"
+                "1. The potential business impact if exploited\n"
+                "2. The likelihood of exploitation based on the information provided\n"
+                "3. A risk score (Critical, High, Medium, Low) with justification\n"
+                "4. Factors that might increase or decrease the risk level\n"
+                "\nFormat your response in clear sections with markdown."
+            )
+        elif action_type == 'related':
+            base_prompt += (
+                "Based on the alert details, please identify:\n"
+                "1. Related attack patterns that might accompany this alert\n"
+                "2. Other MITRE ATT&CK techniques often used alongside this one\n"
+                "3. Indicators of compromise (IoCs) to look for in other systems\n"
+                "4. Associated threat actors or groups known to use these techniques\n"
+                "\nFormat your response in clear sections with markdown."
+            )
+        else:  # Default analyze action
+            base_prompt += (
+                "Please analyze this security alert comprehensively and provide insights, including:\n"
+                "1. Analysis of what happened and why this alert was triggered\n"
+                "2. Assessment of severity and whether it matches the assigned level\n"
+                "3. Recommended next steps for investigation\n"
+                "4. Potential remediation actions\n"
+                "\nFormat your response in clear sections with markdown."
+            )
+            
+        return base_prompt
+    
 def test_openrouter_api():
     """Debug function to test OpenRouter API directly"""
     try:

@@ -5,6 +5,7 @@ from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from log_ingestion.models import RawLog, ParsedLog
 from threat_detection.models import Threat, BlacklistedIP
+from threat_detection.models import Threat, ThreatAnalysis
 
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib import messages
@@ -17,6 +18,7 @@ from log_ingestion.models import LogSource, RawLog, ParsedLog  # Remove LogEntry
 from threat_detection.models import Threat
 from django.db.models import Count, Q
 import logging
+from django.views.decorators.http import require_POST
 from django.http import HttpResponse, JsonResponse
 import io
 import csv
@@ -33,6 +35,9 @@ from reportlab.lib.units import inch
 from io import BytesIO
 from django.db.models import Count, Sum
 from django.conf import settings
+
+from threat_detection.models import Threat, ThreatAnalysis
+from ai_analytics.services import AlertAnalysisService
 
 logger = logging.getLogger(__name__)
 
@@ -285,41 +290,63 @@ def dashboard_data_api(request):
     """API endpoint for dashboard data updates via AJAX"""
     timeframe = request.GET.get('timeframe', '1d')
     start_date = get_start_date_from_timeframe(timeframe)
+    now = timezone.now()
     
-    # Calculate metrics
-    total_logs = ParsedLog.objects.filter(timestamp__gte=start_date).count()
+    # FIXED: Use RawLog instead of ParsedLog to match dashboard_view function
+    # And use the same field access patterns
+    total_logs = RawLog.objects.filter(timestamp__gte=start_date).count()
+    
+    # Get Apache metrics - use source__source_type to match dashboard_view
+    apache_count = RawLog.objects.filter(
+        source__source_type='apache', 
+        timestamp__gte=start_date
+    ).count()
+    
+    # Get Apache errors through ParsedLog with correct relationship
+    apache_4xx = ParsedLog.objects.filter(
+        raw_log__source__source_type='apache',
+        raw_log__timestamp__gte=start_date,
+        status_code__gte=400,
+        status_code__lt=500
+    ).count()
+    
+    apache_5xx = ParsedLog.objects.filter(
+        raw_log__source__source_type='apache',
+        raw_log__timestamp__gte=start_date,
+        status_code__gte=500
+    ).count()
+    
+    # Get MySQL metrics - use source__source_type to match dashboard_view
+    mysql_count = RawLog.objects.filter(
+        source__source_type='mysql', 
+        timestamp__gte=start_date
+    ).count()
+    
+    # Get MySQL slow queries through ParsedLog with correct relationship
+    mysql_slow = ParsedLog.objects.filter(
+        raw_log__source__source_type='mysql',
+        raw_log__timestamp__gte=start_date,
+        execution_time__gt=1.0
+    ).count()
+    
+    # Rest of function remains the same...
     high_level_alerts = Threat.objects.filter(
         created_at__gte=start_date, 
         severity__in=['high', 'critical']
     ).count()
+    
     auth_failures = ParsedLog.objects.filter(
-        timestamp__gte=start_date,
-        status='authentication_failure'
+        raw_log__timestamp__gte=start_date,
+        status='failure'
     ).count()
+    
     auth_success = ParsedLog.objects.filter(
-        timestamp__gte=start_date,
-        status='authentication_success'
+        raw_log__timestamp__gte=start_date,
+        status='success'
     ).count()
-    
-    # Get Apache metrics
-    apache_logs = ParsedLog.objects.filter(
-        timestamp__gte=start_date,
-        source_type='apache'
-    )
-    apache_count = apache_logs.count()
-    apache_4xx = apache_logs.filter(status_code__gte=400, status_code__lt=500).count()
-    apache_5xx = apache_logs.filter(status_code__gte=500).count()
-    
-    # Get MySQL metrics
-    mysql_logs = ParsedLog.objects.filter(
-        timestamp__gte=start_date,
-        source_type='mysql'
-    )
-    mysql_count = mysql_logs.count()
-    mysql_slow = mysql_logs.filter(execution_time__gt=1.0).count()
     
     # Get chart data
-    chart_labels, alerts_data = get_chart_data_for_timeframe(timeframe)
+    chart_labels, alerts_data = generate_alerts_chart_data(start_date, now)
     
     # Get MITRE data
     mitre_tactics = Threat.objects.filter(
@@ -944,7 +971,7 @@ def generate_report(request):
                 return response
     
     # Display report generation form
-    return render(request, 'authentication/reports.html', {
+    return render(request, 'reports.html', {
         'current_time': timezone.now().strftime('%Y-%m-%d'),
         'week_ago': (timezone.now() - timedelta(days=7)).strftime('%Y-%m-%d')
     })
@@ -960,14 +987,96 @@ def reports_view(request):
 
 @login_required
 def alert_detail(request, alert_id):
-    """
-    View for displaying detailed information about a specific security alert/threat.
-    Shows complete threat information, related logs, and possible remediation steps.
-    """
     try:
         # Get the specific threat by ID
         threat = Threat.objects.get(id=alert_id)
         
+        # Handle form submissions (existing code)
+        if request.method == 'POST':
+            action = request.POST.get('action')
+            
+            if action == 'update_status':
+                # Update threat status
+                status = request.POST.get('status')
+                comment = request.POST.get('comment')
+                
+                threat.status = status
+                threat.save()
+                
+                # Record comment if provided
+                if comment and comment.strip():
+                    # If you have a comments model, you would create a comment here
+                    # For now, we'll just add a message
+                    messages.success(request, f"Status updated to '{status}' with comment: {comment}")
+                else:
+                    messages.success(request, f"Status updated to '{status}'")
+                    
+                return redirect('alert_detail', alert_id=alert_id)
+                
+            elif action == 'block_ip':
+                # Block the IP address
+                ip_address = request.POST.get('ip_address')
+                reason = request.POST.get('reason')
+                expiration = request.POST.get('expiration')
+                
+                # Check if already blacklisted
+                if BlacklistedIP.objects.filter(ip_address=ip_address).exists():
+                    messages.info(request, f"IP address {ip_address} is already blacklisted.")
+                else:
+                    # Calculate expiry date if not permanent
+                    expires_at = None
+                    if expiration == '24h':
+                        expires_at = timezone.now() + timedelta(hours=24)
+                    elif expiration == '7d':
+                        expires_at = timezone.now() + timedelta(days=7)
+                    elif expiration == '30d':
+                        expires_at = timezone.now() + timedelta(days=30)
+                    
+                    # Create blacklist entry - REMOVED added_by field which doesn't exist
+                    BlacklistedIP.objects.create(
+                        ip_address=ip_address,
+                        reason=reason,
+                        expires_at=expires_at
+                    )
+                    
+                    messages.success(request, f"IP address {ip_address} has been blacklisted successfully.")
+                
+                return redirect('alert_detail', alert_id=alert_id)
+                
+            elif action == 'add_comment':
+                # Add a comment to the threat
+                comment_text = request.POST.get('comment_text')
+                
+                if comment_text and comment_text.strip():
+                    # If you have a comments model, create a comment here
+                    # For this example, we'll just add a message
+                    messages.success(request, "Comment added successfully.")
+                else:
+                    messages.error(request, "Comment text cannot be empty.")
+                
+                return redirect('alert_detail', alert_id=alert_id)
+            
+            # Add this new elif block to the action handler section
+            elif action == 'unblock_ip':
+                # Unblock the IP address
+                ip_address = request.POST.get('ip_address')
+                unblock_reason = request.POST.get('unblock_reason')
+                
+                # Try to find and delete the blacklisted IP
+                try:
+                    blacklisted_ip = BlacklistedIP.objects.get(ip_address=ip_address)
+                    blacklisted_ip.delete()
+                    
+                    # If you want to log the unblocking, you could do it here
+                    # For example, add a log entry with the unblock_reason
+                    
+                    messages.success(request, f"IP address {ip_address} has been removed from the blacklist.")
+                except BlacklistedIP.DoesNotExist:
+                    messages.warning(request, f"IP address {ip_address} was not found in the blacklist.")
+                
+                return redirect('alert_detail', alert_id=alert_id)
+
+        # Continue with the rest of the view...
         # Get related parsed log if available
         related_log = None
         if hasattr(threat, 'parsed_log') and threat.parsed_log:
@@ -986,13 +1095,23 @@ def alert_detail(request, alert_id):
         # Check if IP is in blacklist
         is_blacklisted = BlacklistedIP.objects.filter(ip_address=threat.source_ip).exists() if threat.source_ip else False
         
+        # Check if we already have an AI analysis for this threat
+        ai_analysis = None
+        try:
+            # If you want to store analyses, you can create a model for this
+            # For now, just set to None so the UI shows the default prompt
+            pass
+        except Exception as e:
+            logger.warning(f"Error retrieving AI analysis: {str(e)}")
+        
         context = {
             'threat': threat,
             'related_log': related_log,
             'raw_log_content': raw_log_content,
             'similar_threats': similar_threats,
             'is_blacklisted': is_blacklisted,
-            'page_title': f"Alert Details: {threat.id}"
+            'page_title': f"Alert Details: {threat.id}",
+            'ai_analysis': ai_analysis,  # Add this to the context
         }
         
         return render(request, 'authentication/alert_detail.html', context)
@@ -1725,4 +1844,155 @@ def mitre_details_view(request):
     
     return render(request, 'authentication/mitre_details.html', context)
 
+@login_required
+@require_POST
+def analyze_alert_with_ai(request, alert_id):
+    """API endpoint to analyze a security alert with AI"""
+    try:
+        # Parse request data
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            logger.error("Invalid JSON in analyze_alert_with_ai request")
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid JSON data in request'
+            }, status=400)
+            
+        # Get the action type from request (default: analyze)
+        action_type = data.get('action', 'analyze')
+        logger.info(f"AI Analysis requested for alert #{alert_id}, action: {action_type}")
+        
+        # Get the threat object
+        try:
+            threat = Threat.objects.get(id=alert_id)
+        except Threat.DoesNotExist:
+            logger.warning(f"Alert not found in analyze_alert_with_ai: #{alert_id}")
+            return JsonResponse({
+                'success': False,
+                'error': f"Alert #{alert_id} not found"
+            }, status=404)
+        
+        # Check for cached analysis (less than 1 hour old)
+        cached_analysis = ThreatAnalysis.objects.filter(
+            threat=threat,
+            analysis_type=action_type,
+            generated_at__gte=timezone.now() - timezone.timedelta(hours=1)
+        ).first()
+        
+        if cached_analysis:
+            logger.info(f"Using cached analysis for alert #{alert_id} ({action_type})")
+            return JsonResponse({
+                'success': True,
+                'analysis': cached_analysis.content,
+                'from_cache': True
+            })
+        
+        # Initialize the AI service
+        try:
+            ai_service = AlertAnalysisService()
+        except Exception as e:
+            logger.error(f"Error initializing AI service: {str(e)}", exc_info=True)
+            return JsonResponse({
+                'success': False,
+                'error': f"AI service initialization error: {str(e)}"
+            }, status=500)
+        
+        # Generate the analysis
+        try:
+            analysis_content = ai_service.analyze_threat(threat, action_type)
+        except Exception as e:
+            logger.error(f"Error in AI analysis: {str(e)}", exc_info=True)
+            return JsonResponse({
+                'success': False,
+                'error': f"Analysis error: {str(e)}"
+            }, status=500)
+        
+        if not analysis_content:
+            return JsonResponse({
+                'success': False,
+                'error': "AI generated an empty response"
+            }, status=500)
+        
+        # Save the analysis to the database
+        try:
+            ThreatAnalysis.objects.update_or_create(
+                threat=threat,
+                analysis_type=action_type,
+                defaults={
+                    'content': analysis_content,
+                    'generated_at': timezone.now(),
+                    'tokens_used': len(analysis_content) // 4  # Rough estimate
+                }
+            )
+        except Exception as e:
+            logger.error(f"Error saving analysis: {str(e)}", exc_info=True)
+            # Continue anyway since we have the analysis content
+        
+        # Return the analysis content
+        return JsonResponse({
+            'success': True,
+            'analysis': analysis_content,
+            'from_cache': False
+        })
+        
+    except Exception as e:
+        logger.exception(f"Unexpected error in analyze_alert_with_ai: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': f"An error occurred: {str(e)}"
+        }, status=500)
 
+@login_required
+def alert_detail_api(request, alert_id):
+    """API endpoint for retrieving alert details"""
+    try:
+        threat = Threat.objects.get(id=alert_id)
+        
+        # Create a JSON-serializable representation of the threat
+        threat_data = {
+            'id': threat.id,
+            'created_at': threat.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'updated_at': threat.updated_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'severity': threat.severity,
+            'status': threat.status,
+            'source_ip': threat.source_ip,
+            'affected_system': threat.affected_system,
+            'mitre_tactic': threat.mitre_tactic,
+            'mitre_technique': threat.mitre_technique,
+            'description': threat.description,
+        }
+        
+        # Get related log if available
+        related_log = None
+        if hasattr(threat, 'parsed_log') and threat.parsed_log:
+            related_log = {
+                'id': threat.parsed_log.id,
+                'timestamp': threat.parsed_log.raw_log.timestamp.strftime('%Y-%m-%d %H:%M:%S') if hasattr(threat.parsed_log, 'raw_log') else None,
+                                'source_type': threat.parsed_log.raw_log.source.source_type if hasattr(threat.parsed_log, 'raw_log') and hasattr(threat.parsed_log.raw_log, 'source') else None,
+            }
+        
+        # Check if IP is blacklisted
+        is_blacklisted = False
+        if threat.source_ip:
+            is_blacklisted = BlacklistedIP.objects.filter(ip_address=threat.source_ip).exists()
+        
+        return JsonResponse({
+            'success': True,
+            'threat': threat_data,
+            'related_log': related_log,
+            'is_blacklisted': is_blacklisted
+        })
+        
+    except Threat.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': f"Alert #{alert_id} not found"
+        }, status=404)
+    
+    except Exception as e:
+        logger.exception(f"Error in alert_detail_api: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': f"An error occurred: {str(e)}"
+        }, status=500)

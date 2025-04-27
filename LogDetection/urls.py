@@ -48,6 +48,8 @@ urlpatterns = [
     path('explore_logs/', views.explore_logs, name='explore_logs'),
     path('generate_report/', views.generate_report, name='generate_report'),
     path('alert/<int:alert_id>/', views.alert_detail, name='alert_detail'),
+    path('', include('authentication.urls')),
+
 
     path('events/', views.events_view, name='events'),
     path('events/export/', views.export_events, name='export_events'),

@@ -703,19 +703,67 @@
         document.addEventListener('DOMContentLoaded', function() {
             // Initialize charts based on data from backend
             initChartsWithBackendData();
-
-            // Setup timeframe buttons
-            document.querySelectorAll('.timeframe-btn').forEach(button => {
-                button.addEventListener('click', function() {
-                    const timeframe = this.getAttribute('data-timeframe');
-                    window.location.href = `?timeframe=${timeframe}`;
-                });
+            
+            // Fix: Set the active timeframe button based on current timeframe
+            const currentTimeframe = document.getElementById('current-timeframe').textContent;
+            const timeframeButtons = document.querySelectorAll('.timeframe-btn');
+            
+            timeframeButtons.forEach(button => {
+                // Remove active class from all buttons first
+                button.classList.remove('active');
+                
+                // Add active class to the button matching current timeframe
+                if (button.getAttribute('data-timeframe') === currentTimeframe) {
+                    button.classList.add('active');
+                }
             });
 
+            // Update timeframe buttons to properly refresh server status data
+            document.querySelectorAll('.timeframe-btn').forEach(button => {
+                button.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    // Get the clicked timeframe
+                    const timeframe = this.getAttribute('data-timeframe');
+                    
+                    // For 30D timeframe, add special handling with cache busting
+                    if (timeframe === '30d') {
+                        // Show loading indicators immediately
+                        document.querySelectorAll('.chart-container').forEach(container => {
+                            // Add loading overlay if not already present
+                            if (!container.querySelector('.loading-spinner')) {
+                                const loader = document.createElement('div');
+                                loader.className = 'loading-spinner';
+                                loader.style.display = 'flex';
+                                loader.innerHTML = '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>';
+                                container.appendChild(loader);
+                            } else {
+                                container.querySelector('.loading-spinner').style.display = 'flex';
+                            }
+                        });
+                        
+                        // Add cache busting parameter to URL
+                        const timestamp = new Date().getTime();
+                        window.location.href = `?timeframe=${timeframe}&nocache=${timestamp}`;
+                    } else {
+                        // Normal behavior for other timeframes
+                        window.location.href = `?timeframe=${timeframe}`;
+                    }
+                });
+            });
+            
             // Refresh button functionality
             document.getElementById('refresh-btn').addEventListener('click', function() {
-                this.querySelector('i').classList.add('fa-spin');
-                updateDashboardData();
+                // Show refresh button spinner
+                const refreshBtn = document.getElementById('refresh-btn');
+                refreshBtn.querySelector('i').classList.add('fa-spin');
+                
+                // Get the current timeframe
+                const timeframe = document.getElementById('current-timeframe').textContent;
+                
+                // Add cache busting for all refreshes
+                const timestamp = new Date().getTime();
+                window.location.href = `?timeframe=${timeframe}&nocache=${timestamp}`;
             });
 
             // Sidebar toggle - with full hide functionality
@@ -827,44 +875,78 @@
                 document.getElementById('alerts-chart-loader').style.display = 'flex';
                 document.getElementById('mitre-chart-loader').style.display = 'flex';
                 
-                const timeframe = document.getElementById('current-timeframe').textContent;
+                // Add loading indicators for server status sections too
+                const apacheContainer = document.querySelector('.chart-container:nth-of-type(3)');
+                const mysqlContainer = document.querySelector('.chart-container:nth-of-type(4)');
                 
-                fetch(`/dashboard-data-api/?timeframe=${timeframe}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        console.log('Dashboard data updated:', data);
-                        
-                        // Update metrics
-                        updateMetrics(data.metrics);
-                        
-                        // Update charts
-                        updateCharts(data.charts);
-                        
-                        // Update alerts table
-                        updateAlertsTable(data.alerts);
-                        
-                        // Hide loading spinners
-                        document.getElementById('alerts-chart-loader').style.display = 'none';
-                        document.getElementById('mitre-chart-loader').style.display = 'none';
-                        
-                        // Reset refresh button
-                        const refreshBtn = document.getElementById('refresh-btn');
-                        refreshBtn.querySelector('i').classList.remove('fa-spin');
-                    })
-                    .catch(error => {
-                        console.error('Error updating dashboard data:', error);
-                        
-                        // Hide loading spinners
-                        document.getElementById('alerts-chart-loader').style.display = 'none';
-                        document.getElementById('mitre-chart-loader').style.display = 'none';
-                        
-                        // Reset refresh button
-                        const refreshBtn = document.getElementById('refresh-btn');
-                        refreshBtn.querySelector('i').classList.remove('fa-spin');
-                        
-                        // Show error message
-                        alert('Error updating dashboard data. Please try again.');
-                    });
+                let apacheLoader = document.getElementById('apache-status-loader');
+                let mysqlLoader = document.getElementById('mysql-status-loader');
+                
+                // Create loaders if they don't exist
+                if (apacheContainer && !apacheLoader) {
+                    apacheLoader = document.createElement('div');
+                    apacheLoader.className = 'loading-spinner';
+                    apacheLoader.id = 'apache-status-loader';
+                    apacheLoader.innerHTML = '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>';
+                    apacheContainer.appendChild(apacheLoader);
+                }
+                
+                if (mysqlContainer && !mysqlLoader) {
+                    mysqlLoader = document.createElement('div');
+                    mysqlLoader.className = 'loading-spinner';
+                    mysqlLoader.id = 'mysql-status-loader';
+                    mysqlLoader.innerHTML = '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>';
+                    mysqlContainer.appendChild(mysqlLoader);
+                }
+                
+                // Show all loaders
+                if (apacheLoader) apacheLoader.style.display = 'flex';
+                if (mysqlLoader) mysqlLoader.style.display = 'flex';
+                
+                const timeframe = document.getElementById('current-timeframe').textContent;
+                console.log('Fetching dashboard data for timeframe:', timeframe);
+                
+                // Force a fresh request with cache-busting
+                const timestamp = new Date().getTime();
+                fetch(`/api/dashboard-data/?timeframe=${timeframe}&_=${timestamp}`, {
+                    method: 'GET',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Cache-Control': 'no-cache'
+                    }
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error, status = ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Dashboard data received:', data);
+                    
+                    if (!data.metrics) {
+                        throw new Error('No metrics in response data');
+                    }
+                    
+                    // Force a page reload instead of trying to update the UI
+                    // This ensures we get a complete refresh of all metrics
+                    window.location.href = `?timeframe=${timeframe}`;
+                })
+                .catch(error => {
+                    console.error('Error updating dashboard data:', error);
+                    
+                    // Hide all loading spinners
+                    document.getElementById('alerts-chart-loader').style.display = 'none';
+                    document.getElementById('mitre-chart-loader').style.display = 'none';
+                    if (apacheLoader) apacheLoader.style.display = 'none';
+                    if (mysqlLoader) mysqlLoader.style.display = 'none';
+                    
+                    // Reset refresh button
+                    const refreshBtn = document.getElementById('refresh-btn');
+                    refreshBtn.querySelector('i').classList.remove('fa-spin');
+                    
+                    alert('Error updating dashboard data. Please try again.');
+                });
             }
 
             // Function to update metrics
@@ -902,23 +984,48 @@
 
             // Function to update Apache progress bars
             function updateApacheProgressBars(metrics) {
-                if (!metrics || !metrics.apache_count) return;
+                console.log('Updating Apache metrics:', metrics);
                 
-                const apacheContainer = document.querySelector('.chart-container:nth-of-type(3)');
-                if (!apacheContainer) return;
+                // Ensure metrics exist before continuing
+                if (!metrics) {
+                    console.error('No metrics data provided');
+                    return;
+                }
+                
+                // Use more specific selector to find the Apache container
+                const apacheContainer = document.querySelector('.chart-container:has(.chart-title:contains("Apache Server Status"))') || 
+                                      document.querySelector('.chart-container:nth-of-type(3)');
+                
+                if (!apacheContainer) {
+                    console.error('Apache container not found');
+                    return;
+                }
+                
+                // Update metric values first
+                const metricValues = apacheContainer.querySelectorAll('.metric-value');
+                if (metricValues.length >= 3) {
+                    metricValues[0].textContent = metrics.apache_count || '0';
+                    metricValues[1].textContent = metrics.apache_4xx || '0';
+                    metricValues[2].textContent = metrics.apache_5xx || '0';
+                }
                 
                 const progressBars = apacheContainer.querySelectorAll('.progress-bar');
-                if (!progressBars || progressBars.length < 3) return;
+                if (!progressBars || progressBars.length < 3) {
+                    console.error('Apache progress bars not found');
+                    return;
+                }
                 
-                // Calculate percentages
-                const apacheTotal = metrics.apache_count || 0;
-                const apache4xx = metrics.apache_4xx || 0;
-                const apache5xx = metrics.apache_5xx || 0;
-                const apacheSuccess = apacheTotal - apache4xx - apache5xx;
+                // Calculate percentages with safety checks
+                const apacheTotal = parseInt(metrics.apache_count) || 0;
+                const apache4xx = parseInt(metrics.apache_4xx) || 0;
+                const apache5xx = parseInt(metrics.apache_5xx) || 0;
+                const apacheSuccess = Math.max(0, apacheTotal - apache4xx - apache5xx);
                 
                 const successPercentage = apacheTotal > 0 ? (apacheSuccess / apacheTotal * 100) : 0;
                 const error4xxPercentage = apacheTotal > 0 ? (apache4xx / apacheTotal * 100) : 0;
                 const error5xxPercentage = apacheTotal > 0 ? (apache5xx / apacheTotal * 100) : 0;
+                
+                console.log('Apache percentages:', {successPercentage, error4xxPercentage, error5xxPercentage});
                 
                 // Update progress bars
                 progressBars[0].style.width = `${successPercentage}%`;
@@ -936,21 +1043,45 @@
 
             // Function to update MySQL progress bars
             function updateMySQLProgressBars(metrics) {
-                if (!metrics || !metrics.mysql_count) return;
+                console.log('Updating MySQL metrics:', metrics);
                 
-                const mysqlContainer = document.querySelector('.chart-container:nth-of-type(4)');
-                if (!mysqlContainer) return;
+                // Ensure metrics exist before continuing
+                if (!metrics) {
+                    console.error('No metrics data provided');
+                    return;
+                }
+                
+                // Use more specific selector to find the MySQL container
+                const mysqlContainer = document.querySelector('.chart-container:has(.chart-title:contains("MySQL Server Status"))') || 
+                                     document.querySelector('.chart-container:nth-of-type(4)');
+                
+                if (!mysqlContainer) {
+                    console.error('MySQL container not found');
+                    return;
+                }
+                
+                // Update metric values first
+                const metricValues = mysqlContainer.querySelectorAll('.metric-value');
+                if (metricValues.length >= 2) {
+                    metricValues[0].textContent = metrics.mysql_count || '0';
+                    metricValues[1].textContent = metrics.mysql_slow || '0';
+                }
                 
                 const progressBars = mysqlContainer.querySelectorAll('.progress-bar');
-                if (!progressBars || progressBars.length < 2) return;
+                if (!progressBars || progressBars.length < 2) {
+                    console.error('MySQL progress bars not found');
+                    return;
+                }
                 
-                // Calculate percentages
-                const mysqlTotal = metrics.mysql_count || 0;
-                const mysqlSlow = metrics.mysql_slow || 0;
-                const mysqlFast = mysqlTotal - mysqlSlow;
+                // Calculate percentages with safety checks
+                const mysqlTotal = parseInt(metrics.mysql_count) || 0;
+                const mysqlSlow = parseInt(metrics.mysql_slow) || 0;
+                const mysqlFast = Math.max(0, mysqlTotal - mysqlSlow);
                 
                 const fastPercentage = mysqlTotal > 0 ? (mysqlFast / mysqlTotal * 100) : 0;
                 const slowPercentage = mysqlTotal > 0 ? (mysqlSlow / mysqlTotal * 100) : 0;
+                
+                console.log('MySQL percentages:', {fastPercentage, slowPercentage});
                 
                 // Update progress bars
                 progressBars[0].style.width = `${fastPercentage}%`;
@@ -973,10 +1104,20 @@
                     window.alertsChart.update();
                 }
                 
-                // Update MITRE chart
+                // Update MITRE chart - with empty data handling
                 if (window.mitreChart && charts.mitre) {
-                    window.mitreChart.data.labels = charts.mitre.labels;
-                    window.mitreChart.data.datasets[0].data = charts.mitre.data;
+                    // Check if MITRE data is empty
+                    if (!charts.mitre.labels || charts.mitre.labels.length === 0) {
+                        // Show "No data" in the MITRE chart
+                        window.mitreChart.data.labels = ['No data available'];
+                        window.mitreChart.data.datasets[0].data = [1];
+                        window.mitreChart.options.plugins.legend.display = false;
+                    } else {
+                        // Normal update with data
+                        window.mitreChart.data.labels = charts.mitre.labels;
+                        window.mitreChart.data.datasets[0].data = charts.mitre.data;
+                        window.mitreChart.options.plugins.legend.display = true;
+                    }
                     window.mitreChart.update();
                 }
             }

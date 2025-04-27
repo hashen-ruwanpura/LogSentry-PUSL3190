@@ -152,3 +152,30 @@ class BlacklistedIP(models.Model):
         if not self.expires_at:
             return False
         return timezone.now() > self.expires_at
+
+
+# Add this model to store AI analyses for threats
+class ThreatAnalysis(models.Model):
+    """Stores AI-generated analyses for security threats/alerts"""
+    threat = models.ForeignKey(Threat, on_delete=models.CASCADE, related_name='ai_analyses')
+    analysis_type = models.CharField(max_length=20, 
+                                    choices=[
+                                        ('analyze', 'General Analysis'),
+                                        ('explain', 'Explanation'),
+                                        ('suggest', 'Suggested Solutions'),
+                                        ('risk', 'Risk Assessment'),
+                                        ('related', 'Related Threats'),
+                                    ], default='analyze')
+    content = models.TextField()
+    generated_at = models.DateTimeField(auto_now_add=True)
+    tokens_used = models.IntegerField(default=0)
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['threat', 'analysis_type']),
+            models.Index(fields=['generated_at']),
+        ]
+        unique_together = ['threat', 'analysis_type']  # One analysis per type per threat
+        
+    def __str__(self):
+        return f"{self.analysis_type.title()} for Threat #{self.threat.id}"

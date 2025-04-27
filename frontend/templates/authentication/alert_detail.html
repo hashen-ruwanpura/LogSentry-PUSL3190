@@ -112,7 +112,16 @@
             width: var(--sidebar-collapsed-width);
         }
         
+        .sidebar-nav {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
         .sidebar-nav ul {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
             list-style: none;
             padding: 0;
             margin: 0;
@@ -288,7 +297,21 @@
             border-radius: 3px;
             margin-left: 0.5rem;
         }
-        
+
+        .sidebar.hidden {
+            display: none !important;
+        }
+
+        .content.full-width {
+            margin-left: 0 !important;
+            width: 100% !important;
+        }
+
+        .home-nav-item {
+            margin-top: auto;
+            border-top: 1px solid var(--border-color);
+        }
+
         @media (max-width: 992px) {
             .detail-row {
                 flex-direction: column;
@@ -300,6 +323,58 @@
                 flex-wrap: wrap;
             }
         }
+    </style>
+
+    <!-- Add these stylesheets for markdown rendering -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/github.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
+    <style>
+    .markdown-body {
+        padding: 1rem;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+        border: 1px solid #dee2e6;
+        font-size: 0.9rem;
+    }
+
+    .markdown-body h2 {
+        font-size: 1.25rem;
+        margin-top: 1.5rem;
+        margin-bottom: 1rem;
+        padding-bottom: 0.3rem;
+        border-bottom: 1px solid #eaecef;
+    }
+
+    .markdown-body h3 {
+        font-size: 1.1rem;
+        margin-top: 1.25rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .markdown-body pre {
+        background-color: #f2f3f5;
+        border-radius: 3px;
+        padding: 1rem;
+        overflow: auto;
+    }
+
+    .markdown-body code {
+        background-color: #f2f3f5;
+        padding: 0.2em 0.4em;
+        border-radius: 3px;
+        font-size: 0.85em;
+        font-family: SFMono-Regular, Consolas, Liberation Mono, Menlo, monospace;
+    }
+
+    .markdown-body pre code {
+        padding: 0;
+        background-color: transparent;
+    }
+
+    .ai-controls {
+        border-top: 1px solid #dee2e6;
+        padding-top: 1rem;
+    }
     </style>
 </head>
 <body>
@@ -323,13 +398,15 @@
                 <nav class="sidebar-nav">
                     <ul>
                         <li><a href="{% url 'dashboard' %}"><i class="fas fa-chart-line"></i> Dashboard</a></li>
-                        <li><a href="{% url 'events' %}"><i class="fas fa-calendar-alt"></i> Events</a></li>
+                        <li class="active"><a href="{% url 'events' %}"><i class="fas fa-calendar-alt"></i> Events</a></li>
                         <li><a href="{% url 'apache_logs' %}"><i class="fas fa-server"></i> Apache Logs</a></li>
                         <li><a href="{% url 'mysql_logs' %}"><i class="fas fa-database"></i> MySQL Logs</a></li>
                         <li><a href="{% url 'mitre_details' %}"><i class="fas fa-shield-alt"></i> MITRE ATT&CK</a></li>
                         <li><a href="{% url 'reports' %}"><i class="fas fa-file-alt"></i> Reports</a></li>
                         <li><a href="{% url 'explore_agent' %}"><i class="fas fa-robot"></i> AI Assistant</a></li>
+                        <li><a href="{% url 'ai_analytics:reports_dashboard' %}"><i class="fas fa-robot"></i> <span>AI Reports</span></a></li>
                         <li><a href="{% url 'settings' %}"><i class="fas fa-cog"></i> Settings</a></li>
+                        <li class="home-nav-item"><a href="/"><i class="fas fa-home"></i> <span>Home</span></a></li>
                     </ul>
                 </nav>
             </aside>
@@ -348,6 +425,17 @@
                         <i class="fas fa-arrow-left"></i> Back to Events
                     </a>
                 </div>
+
+                {% if messages %}
+                <div id="message-container">
+                    {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
 
                 <div class="card shadow-sm mb-4">
                     <div class="card-header bg-white">
@@ -418,6 +506,31 @@
                                 </div>
                             </div>
                             {% endif %}
+                        </div>
+
+                        <div class="action-buttons mb-4">
+                            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#updateStatusModal">
+                                <i class="fas fa-edit"></i> Update Status
+                            </button>
+                            {% if threat.source_ip %}
+                                {% if is_blacklisted %}
+                                <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#unblockIPModal">
+                                    <i class="fas fa-check-circle"></i> Unblock IP
+                                </button>
+                                {% else %}
+                                <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#blockIPModal">
+                                    <i class="fas fa-ban"></i> Block IP
+                                </button>
+                                {% endif %}
+                            {% endif %}
+                            {% if threat.mitre_tactic %}
+                            <a href="{% url 'mitre_details' %}?tactic={{ threat.mitre_tactic|urlencode }}" class="btn btn-info">
+                                <i class="fas fa-shield-alt"></i> View MITRE Tactics
+                            </a>
+                            {% endif %}
+                            <button id="refresh-btn" class="btn btn-secondary">
+                                <i class="fas fa-sync"></i> Refresh
+                            </button>
                         </div>
                         
                         {% if related_log %}
@@ -496,29 +609,58 @@
                             {% endfor %}
                         </div>
                         {% endif %}
-                        
-                        <div class="action-buttons">
-                            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#updateStatusModal">
-                                <i class="fas fa-edit"></i> Update Status
-                            </button>
+
+                        <!-- Replace the comments section with this AI Assistant section -->
+                        <div class="detail-section">
+                            <h3>
+                                <i class="fas fa-robot me-2"></i> AI Assistant
+                                <button class="btn btn-sm btn-primary float-end" id="analyze-alert-btn">
+                                    <i class="fas fa-sync"></i> Analyze Alert
+                                </button>
+                            </h3>
                             
-                            {% if threat.source_ip %}
-                            <button class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#blockIPModal">
-                                <i class="fas fa-ban"></i> Block IP
-                            </button>
-                            {% endif %}
-                            
-                            <button class="btn btn-info" data-bs-toggle="modal" data-bs-target="#addCommentModal">
-                                <i class="fas fa-comment"></i> Add Comment
-                            </button>
-                            
-                            <a href="{% url 'mitre_details' %}?search={{ threat.mitre_tactic|urlencode }}" class="btn btn-secondary">
-                                <i class="fas fa-sitemap"></i> View MITRE Details
-                            </a>
-                            
-                            <button class="btn btn-outline-secondary" onclick="window.print()">
-                                <i class="fas fa-print"></i> Print
-                            </button>
+                            <div id="ai-assistant-container" class="mb-3">
+                                <!-- Initial placeholder or previous analysis -->
+                                <div id="ai-loading" style="display:none;">
+                                    <div class="d-flex align-items-center">
+                                        <div class="spinner-border text-primary me-3" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                        <span>AI Assistant is analyzing this alert...</span>
+                                    </div>
+                                </div>
+                                
+                                <div id="ai-content" class="markdown-body">
+                                    {% if ai_analysis %}
+                                        {{ ai_analysis|safe }}
+                                    {% else %}
+                                        <div class="alert alert-info">
+                                            <i class="fas fa-info-circle me-2"></i>
+                                            Click "Analyze Alert" to get AI-powered insights about this security alert.
+                                        </div>
+                                    {% endif %}
+                                </div>
+
+                                <div id="ai-error" class="alert alert-danger" style="display:none;"></div>
+                            </div>
+
+                            <!-- AI Assistant Options -->
+                            <div class="ai-controls mt-3">
+                                <div class="d-flex gap-2 mb-3">
+                                    <button class="btn btn-outline-secondary btn-sm ai-action" data-action="explain">
+                                        <i class="fas fa-search"></i> Explain Alert
+                                    </button>
+                                    <button class="btn btn-outline-secondary btn-sm ai-action" data-action="suggest">
+                                        <i class="fas fa-lightbulb"></i> Suggest Solutions
+                                    </button>
+                                    <button class="btn btn-outline-secondary btn-sm ai-action" data-action="risk">
+                                        <i class="fas fa-chart-line"></i> Risk Assessment
+                                    </button>
+                                    <button class="btn btn-outline-secondary btn-sm ai-action" data-action="related">
+                                        <i class="fas fa-link"></i> Find Related Threats
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -535,7 +677,7 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <form action="#" method="post">
+                    <form action="{% url 'alert_detail' threat.id %}" method="post" id="updateStatusForm">
                         {% csrf_token %}
                         <input type="hidden" name="action" value="update_status">
                         
@@ -556,7 +698,7 @@
                         
                         <div class="d-flex justify-content-end">
                             <button type="button" class="btn btn-secondary me-2" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-primary">Update Status</button>
+                            <button type="submit" class="btn btn-primary submit-btn">Update Status</button>
                         </div>
                     </form>
                 </div>
@@ -573,7 +715,7 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <form action="#" method="post">
+                    <form action="{% url 'alert_detail' threat.id %}" method="post" id="blockIPForm">
                         {% csrf_token %}
                         <input type="hidden" name="action" value="block_ip">
                         <input type="hidden" name="ip_address" value="{{ threat.source_ip }}">
@@ -602,7 +744,43 @@
                         
                         <div class="d-flex justify-content-end">
                             <button type="button" class="btn btn-secondary me-2" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-danger">Block IP</button>
+                            <button type="submit" class="btn btn-danger submit-btn">Block IP</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Unblock IP Modal -->
+    <div class="modal fade" id="unblockIPModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Unblock IP Address</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form action="{% url 'alert_detail' threat.id %}" method="post" id="unblockIPForm">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="unblock_ip">
+                        <input type="hidden" name="ip_address" value="{{ threat.source_ip }}">
+                        
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i> 
+                            You are about to unblock the IP address <strong>{{ threat.source_ip }}</strong>. 
+                            This will allow this IP to access your systems again.
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="unblock_reason" class="form-label">Reason for unblocking</label>
+                            <textarea class="form-control" id="unblock_reason" name="unblock_reason" rows="3" 
+                                      placeholder="Explain why this IP should be unblocked"></textarea>
+                        </div>
+                        
+                        <div class="d-flex justify-content-end">
+                            <button type="button" class="btn btn-secondary me-2" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-success submit-btn">Unblock IP</button>
                         </div>
                     </form>
                 </div>
@@ -619,7 +797,7 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <form action="#" method="post">
+                    <form action="{% url 'alert_detail' threat.id %}" method="post" id="addCommentForm">
                         {% csrf_token %}
                         <input type="hidden" name="action" value="add_comment">
                         
@@ -630,7 +808,7 @@
                         
                         <div class="d-flex justify-content-end">
                             <button type="button" class="btn btn-secondary me-2" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-primary">Add Comment</button>
+                            <button type="submit" class="btn btn-primary submit-btn">Add Comment</button>
                         </div>
                     </form>
                 </div>
@@ -642,12 +820,245 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // Sidebar toggle functionality
             const sidebarToggle = document.getElementById('sidebar-toggle');
             const sidebar = document.querySelector('.sidebar');
+            const content = document.querySelector('.content');
             
             if (sidebarToggle) {
                 sidebarToggle.addEventListener('click', function() {
-                    sidebar.classList.toggle('collapsed');
+                    if (window.innerWidth <= 768) {
+                        // Mobile view - toggle open class
+                        sidebar.classList.toggle('open');
+                    } else {
+                        // Desktop view - fully hide instead of collapse
+                        sidebar.classList.toggle('hidden');
+                        content.classList.toggle('full-width');
+                    }
+                });
+            }
+            
+            // Form submission enhancements
+            const forms = document.querySelectorAll('#updateStatusForm, #blockIPForm, #unblockIPForm, #addCommentForm');
+            forms.forEach(form => {
+                form.addEventListener('submit', function(e) {
+                    const submitBtn = form.querySelector('.submit-btn');
+                    const originalText = submitBtn.innerText;
+                    
+                    // Show loading state
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
+                    
+                    // Continue with form submission
+                    return true;
+                });
+            });
+            
+            // Manual dismissal of alerts
+            document.querySelectorAll('.alert .btn-close').forEach(button => {
+                button.addEventListener('click', function() {
+                    const alert = this.closest('.alert');
+                    const bsAlert = new bootstrap.Alert(alert);
+                    bsAlert.close();
+                });
+            });
+            
+            // Add animation to alerts
+            document.querySelectorAll('.alert').forEach(alert => {
+                alert.style.animation = 'fadeInDown 0.5s';
+            });
+
+            // AI Assistant functionality
+            const analyzeBtn = document.getElementById('analyze-alert-btn');
+            const aiLoading = document.getElementById('ai-loading');
+            const aiContent = document.getElementById('ai-content');
+            const aiError = document.getElementById('ai-error');
+
+            if (analyzeBtn) {
+                analyzeBtn.addEventListener('click', function() {
+                    analyzeAlertWithAI('analyze');
+                });
+            }
+
+            // Add event listeners for specialized AI actions
+            document.querySelectorAll('.ai-action').forEach(button => {
+                button.addEventListener('click', function() {
+                    const action = this.getAttribute('data-action');
+                    analyzeAlertWithAI(action);
+                });
+            });
+
+            function analyzeAlertWithAI(action) {
+                // Show loading state
+                aiLoading.style.display = 'block';
+                aiContent.innerHTML = '';
+                aiError.style.display = 'none';
+                
+                // Get CSRF token
+                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+                
+                // Log what we're doing
+                console.log(`Sending analysis request for alert ${threatId}, action: ${action}`);
+                
+                // Make API request
+                fetch(`/api/alerts/${threatId}/analyze/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken,
+                    },
+                    body: JSON.stringify({
+                        threat_id: threatId,
+                        action: action
+                    })
+                })
+                .then(response => {
+                    // Log response status
+                    console.log(`API response status: ${response.status} ${response.statusText}`);
+                    
+                    if (!response.ok) {
+                        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Hide loading indicator
+                    aiLoading.style.display = 'none';
+                    
+                    // Display results with proper formatting
+                    if (data.analysis) {
+                        // Convert markdown to HTML
+                        const formattedContent = markdownToHTML(data.analysis);
+                        aiContent.innerHTML = formattedContent;
+
+                        // Apply syntax highlighting to code blocks
+                        document.querySelectorAll('pre code').forEach((block) => {
+                            hljs.highlightElement(block);
+                        });
+                    } else {
+                        throw new Error('API returned success but no analysis content was found');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error during AI analysis:', error);
+                    aiLoading.style.display = 'none';
+                    aiError.style.display = 'block';
+                    aiError.textContent = `Error getting AI analysis: ${error.message}`;
+                });
+            }
+
+            // Simple markdown to HTML conversion
+            function markdownToHTML(markdown) {
+                if (!markdown) return '';
+                
+                // Convert headers
+                let html = markdown
+                    .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+                    .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+                    .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+                    
+                    // Convert bold and italic
+                    .replace(/\*\*(.*?)\*\*/gm, '<strong>$1</strong>')
+                    .replace(/\*(.*?)\*/gm, '<em>$1</em>')
+                    
+                    // Convert lists
+                    .replace(/^\- (.*$)/gim, '<ul><li>$1</li></ul>')
+                    .replace(/^[0-9]+\. (.*$)/gim, '<ol><li>$1</li></ol>')
+                    
+                    // Convert code blocks
+                    .replace(/```([\s\S]*?)```/gm, '<pre><code>$1</code></pre>')
+                    .replace(/`(.*?)`/gm, '<code>$1</code>');
+                    
+                // Convert line breaks to paragraphs
+                const paragraphs = html.split(/\n\s*\n/);
+                return paragraphs.map(p => {
+                    if (p.trim() && !p.includes('<h') && !p.includes('<ul>') && !p.includes('<ol>') && !p.includes('<pre>')) {
+                        return `<p>${p.replace(/\n/g, '<br>')}</p>`;
+                    }
+                    return p;
+                }).join('');
+            }
+
+            // Initialize threat ID for API calls
+            const threatId = {{ threat.id }};
+        });
+        
+        // Add animation keyframes to head
+        const styleSheet = document.createElement('style');
+        styleSheet.textContent = `
+            @keyframes fadeInDown {
+                from {
+                    opacity: 0;
+                    transform: translateY(-20px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            
+            #message-container {
+                position: fixed;
+                top: 70px;
+                right: 20px;
+                z-index: 1050;
+                min-width: 300px;
+                max-width: 500px;
+            }
+            
+            #message-container .alert {
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                margin-bottom: 1rem;
+                border-left: 4px solid;
+            }
+            
+            #message-container .alert-success {
+                border-left-color: #28a745;
+            }
+            
+            #message-container .alert-danger {
+                border-left-color: #dc3545;
+            }
+            
+            #message-container .alert-info {
+                border-left-color: #17a2b8;
+            }
+            
+            #message-container .alert-warning {
+                border-left-color: #ffc107;
+            }
+        `;
+        document.head.appendChild(styleSheet);
+
+        // Improved modal accessibility fix - replace the existing modal fix
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add special handling for the Block IP button
+            const blockIPButton = document.querySelector('[data-bs-target="#blockIPModal"]');
+            if (blockIPButton) {
+                blockIPButton.addEventListener('click', function() {
+                    setTimeout(() => {
+                        // Remove aria-hidden from modal
+                        const modal = document.getElementById('blockIPModal');
+                        if (modal) {
+                            modal.removeAttribute('aria-hidden');
+                            
+                            // Ensure warning is visible with enhanced styling
+                            const warning = modal.querySelector('.alert-warning');
+                            if (warning) {
+                                warning.style.display = 'block';
+                                warning.style.fontWeight = '500';
+                                warning.style.border = '2px solid #ffc107';
+                                warning.style.background = '#fff3cd';
+                                warning.style.boxShadow = '0 0 6px rgba(255, 193, 7, 0.3)';
+                            }
+                            
+                            // Focus on the first input field
+                            const firstInput = modal.querySelector('textarea');
+                            if (firstInput) {
+                                firstInput.focus();
+                            }
+                        }
+                    }, 50); // Small delay to ensure modal is rendered
                 });
             }
         });
