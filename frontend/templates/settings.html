@@ -1,703 +1,1456 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Settings - Log Detection Platform</title>
+    <title>Settings - LogSentry</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-
         :root {
-            --primary-color: #17a2b8;
-            --primary-dark: #138496;
-            --secondary-color: #343a40;
-            --light-bg: #f8f9fa;
-            --border-color: #dee2e6;
-            --text-muted: #6c757d;
+            --primary-color: #3f51b5;
+            --primary-rgb: 63, 81, 181;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --warning-color: #ffc107;
+            --info-color: #17a2b8;
+            --light-color: #f8f9fa;
+            --dark-color: #343a40;
+            --white: #ffffff;
+            --navbar-height: 80px;
         }
         
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             line-height: 1.6;
             margin: 0;
             padding: 0;
             color: #333;
-            background-color: var(--light-bg);
+            background-color: var(--light-color);
         }
         
-        .container {
-            width: 80%;
-            margin: 0 auto;
-            padding: 2rem;
-        }
-
-        header {
-            background-color: var(--secondary-color);
-            color: white;
-            padding: 1rem 0;
+        .navbar {
+            background-color: var(--white);
+            padding: 0.8rem 1rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 1000;
+            transition: all 0.3s ease;
+            height: var(--navbar-height);
         }
         
-        .header-content {
+        .navbar.scrolled {
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            height: 70px;
+        }
+        
+        .navbar-brand {
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            width: 80%;
-            margin: 0 auto;
-        }
-        
-        .logo h1 {
-            margin: 0;
+            font-weight: 600;
             font-size: 1.5rem;
+            color: var(--primary-color);
         }
         
-        nav ul {
-            display: flex;
-            list-style: none;
-            margin: 0;
-            padding: 0;
-        }
-        
-        nav ul li {
-            margin-left: 1.5rem;
-        }
-        
-        nav ul li a {
-            color: white;
-            text-decoration: none;
-            display: flex;
-            align-items: center;
-        }
-        
-        nav ul li a i {
+        .navbar-brand i {
             margin-right: 0.5rem;
+            font-size: 1.8rem;
         }
         
-        .settings-container {
-            display: flex;
-            flex-direction: column;
-            gap: 2rem;
-            margin-top: 2rem;
+        .navbar .nav-item {
+            margin: 0 0.2rem;
+        }
+        
+        .navbar .nav-link {
+            color: var(--dark-color);
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            transition: all 0.2s ease;
+        }
+        
+        .navbar .nav-link:hover {
+            color: var(--primary-color);
+            background-color: rgba(var(--primary-rgb), 0.05);
+        }
+        
+        .navbar .nav-link.active {
+            color: var(--primary-color);
+            background-color: rgba(var(--primary-rgb), 0.1);
+        }
+        
+        .container-main {
+            padding-top: calc(var(--navbar-height) + 2rem);
+            padding-bottom: 3rem;
+            width: 90%;
+            max-width: 1200px;
+            margin: 0 auto;
         }
         
         .settings-card {
-            background-color: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            background-color: var(--white);
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+            margin-bottom: 2rem;
             overflow: hidden;
+            border: 1px solid rgba(0,0,0,0.05);
         }
         
-        .card-header {
+        .settings-header {
             background-color: var(--primary-color);
             color: white;
-            padding: 1rem;
-            font-weight: 500;
-        }
-        
-        .card-header h3 {
-            margin: 0;
+            padding: 1.5rem;
+            font-weight: 600;
             display: flex;
             align-items: center;
         }
         
-        .card-header h3 i {
+        .settings-header i {
             margin-right: 0.75rem;
+            font-size: 1.3rem;
         }
         
-        .card-body {
+        .settings-body {
             padding: 1.5rem;
         }
         
-        .settings-form {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.5rem;
-        }
-        
         .form-group {
-            margin-bottom: 1rem;
+            margin-bottom: 1.5rem;
         }
         
-        .form-group label {
-            display: block;
+        .form-label {
+            font-weight: 500;
             margin-bottom: 0.5rem;
-            font-weight: 500;
         }
         
-        .form-group input, 
-        .form-group select,
-        .form-group textarea {
-            width: 100%;
-            padding: 0.6rem;
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
+        .form-control {
+            border-radius: 5px;
+            border: 1px solid rgba(0,0,0,0.1);
+            padding: 0.75rem;
+            font-size: 0.95rem;
         }
         
-        .toggle-switch {
-            position: relative;
-            display: inline-block;
-            width: 48px;
-            height: 24px;
+        .form-control:focus {
+            box-shadow: 0 0 0 0.2rem rgba(var(--primary-rgb), 0.25);
+            border-color: var(--primary-color);
         }
         
-        .toggle-switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-        
-        .slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: #ccc;
-            transition: .3s;
-            border-radius: 24px;
-        }
-        
-        .slider:before {
-            position: absolute;
-            content: "";
-            height: 18px;
-            width: 18px;
-            left: 3px;
-            bottom: 3px;
-            background-color: white;
-            transition: .3s;
-            border-radius: 50%;
-        }
-        
-        input:checked + .slider {
-            background-color: var(--primary-color);
-        }
-        
-        input:checked + .slider:before {
-            transform: translateX(24px);
-        }
-        
-        .settings-actions {
-            margin-top: 1.5rem;
-            text-align: right;
-        }
-        
-        .btn {
-            display: inline-block;
-            padding: 0.6rem 1.5rem;
-            border-radius: 4px;
-            text-decoration: none;
-            font-weight: 500;
-            cursor: pointer;
-            border: 0;
+        .form-text {
+            color: var(--secondary-color);
+            font-size: 0.875rem;
+            margin-top: 0.25rem;
         }
         
         .btn-primary {
             background-color: var(--primary-color);
-            color: white;
+            border-color: var(--primary-color);
+            padding: 0.75rem 1.5rem;
+            font-weight: 500;
+            box-shadow: 0 2px 5px rgba(var(--primary-rgb), 0.3);
         }
         
         .btn-primary:hover {
-            background-color: var(--primary-dark);
+            background-color: #3a4bb0;
+            border-color: #3a4bb0;
+            transform: translateY(-1px);
+            box-shadow: 0 5px 10px rgba(var(--primary-rgb), 0.35);
         }
         
-        .setting-item {
+        .form-switch .form-check-input:checked {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        
+        .settings-footer {
+            border-top: 1px solid rgba(0,0,0,0.05);
+            padding: 1rem 1.5rem;
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem 0;
-            border-bottom: 1px solid var(--border-color);
+            justify-content: flex-end;
         }
         
-        .setting-item:last-child {
-            border-bottom: none;
+        .settings-separator {
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+            margin: 1.5rem 0;
         }
         
-        .setting-info h4 {
-            margin: 0 0 0.3rem 0;
-            font-size: 1rem;
+        .alert {
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            margin-bottom: 1.5rem;
+            border: none;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
         }
         
-        .setting-description {
-            color: var(--text-muted);
-            font-size: 0.9rem;
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
         }
         
-        footer {
+        .alert-danger {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        .footer {
+            background-color: var(--dark-color);
+            color: rgba(255,255,255,0.7);
+            padding: 3rem 0 2rem;
             text-align: center;
-            margin-top: 2rem;
-            padding: 1.5rem 0;
-            color: #6c757d;
-            background-color: #343a40;
-            color: #fff;
         }
         
-        @media (max-width: 768px) {
-            .container {
-                width: 95%;
-                padding: 1rem;
-            }
-            
-            .header-content {
-                flex-direction: column;
-                width: 95%;
-            }
-            
-            nav ul {
-                margin-top: 1rem;
-                flex-wrap: wrap;
-                justify-content: center;
-            }
-            
-            nav ul li {
-                margin: 0.5rem;
-            }
-            
-            .settings-form {
-                grid-template-columns: 1fr;
-            }
+        .footer p {
+            margin-bottom: 0;
         }
         
-        /* Add these styles for the user dropdown menu */
+        /* Animation for message alerts */
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .alert {
+            animation: fadeInDown 0.5s forwards;
+        }
+        
+        .refresh-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        
+        .refresh-active {
+            background-color: var(--success-color);
+            box-shadow: 0 0 5px var(--success-color);
+        }
+        
+        .refresh-inactive {
+            background-color: var(--danger-color);
+            box-shadow: 0 0 5px var(--danger-color);
+        }
+        
+        /* User dropdown */
         .user-dropdown {
             position: relative;
             display: inline-block;
         }
         
-        .dropdown-content {
-            display: none;
-            position: absolute;
-            right: 0;
-            background-color: #343a40;
-            min-width: 120px;
-            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
-            z-index: 150;
-            border-radius: 4px;
+        .user-dropdown .dropdown-menu {
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            border: 1px solid rgba(0,0,0,0.05);
+            margin-top: 0.5rem;
         }
         
-        .dropdown-content a {
-            color: white;
-            padding: 12px 16px;
-            text-decoration: none;
-            display: block;
-            text-align: left;
+        .user-dropdown .dropdown-item i {
+            margin-right: 0.5rem;
+            opacity: 0.7;
         }
         
-        .dropdown-content a:hover {
-            background-color: #495057;
+        .dropdown-item:hover {
+            background-color: rgba(var(--primary-rgb), 0.05);
+            color: var(--primary-color);
         }
-        
-        .user-dropdown:hover .dropdown-content {
-            display: block;
+
+        .time-display {
+            font-size: 0.9rem;
+            color: var(--secondary-color);
         }
-        
-        .username {
-            display: flex;
-            align-items: center;
+
+        /* Dropzone styling */
+        .dropzone {
+            position: relative;  /* Ensure relative positioning */
+            border: 2px dashed var(--secondary-color);
+            border-radius: 5px;
+            padding: 2rem;
+            text-align: center;
             cursor: pointer;
+            background-color: #f8f9fa;
+            transition: all 0.3s ease;
+            z-index: 1;  /* Lower z-index */
         }
-        
-        .username i {
-            margin-right: 5px;
+
+        .dropzone:hover, .dropzone.dragover {
+            border-color: var(--primary-color);
+            background-color: rgba(var(--primary-rgb), 0.05);
         }
-        
-        .username .fa-chevron-down {
-            margin-left: 5px;
-            font-size: 0.8rem;
+
+        .dropzone .dz-message {
+            margin: 0;
         }
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
+
+        .file-input {
+            position: absolute;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-        }
-
-        .modal-content {
-            background-color: #fff;
-            margin: 15% auto;
-            padding: 2rem;
-            border-radius: 5px;
-            max-width: 400px;
-            animation: modalFade 0.3s ease;
-        }
-
-        @keyframes modalFade {
-            from { opacity: 0; transform: translateY(-20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-        }
-
-        .modal-header h3 {
-            margin: 0;
-            color: #343a40;
-        }
-
-        .close-modal {
-            background: none;
-            border: none;
-            font-size: 1.5rem;
+            top: 0;
+            left: 0;
+            opacity: 0;
             cursor: pointer;
-            color: #aaa;
+            z-index: 2;  /* Only over the dropzone */
+            pointer-events: none;  /* Initially disable pointer events */
         }
 
-        .modal-body {
-            margin-bottom: 1.5rem;
+        .dropzone:hover .file-input {
+            pointer-events: auto;  /* Enable pointer events only when hovering over dropzone */
         }
 
-        .modal-footer {
-            text-align: right;
+        .file-info {
+            background-color: rgba(var(--primary-rgb), 0.1);
+            border-radius: 5px;
+            padding: 0.5rem 0.75rem;
+            transition: all 0.3s ease;
         }
 
-        .modal-footer .btn {
-            margin-left: 0.5rem;
+        .file-info:hover {
+            background-color: rgba(var(--primary-rgb), 0.15);
+        }
+
+        /* Progress bar for file uploads */
+        .upload-progress {
+            height: 6px;
+            margin-top: 0.5rem;
+            margin-bottom: 0;
+        }
+
+        /* Browse button styling */
+        .hidden-file-input {
+            display: none;
+        }
+
+        /* Animation for drag over */
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .dropzone.dragover {
+            animation: pulse 1s infinite;
+        }
+
+        .file-selected {
+            border-color: var(--success-color);
+            background-color: rgba(40, 167, 69, 0.05);
         }
     </style>
 </head>
 <body>
-    <header>
-        <div class="header-content">
-            <div class="logo">
-                <h1>Log Analyzer</h1>
-            </div>
-            <nav>
-                <ul>
-                    <li><a href="/"><i class="fas fa-home"></i> Home</a></li>
-                    <li><a href="#" id="dashboard-link" onclick="checkDashboardAccess(event)"><i class="fas fa-chart-line"></i> Dashboard</a></li>
-                    <li><a href="#" onclick="checkReportsAccess(event)"><i class="fas fa-file-alt"></i> Reports</a></li>
-                    <li><a href="{% url 'contact' %}" onclick="showContactModal(event)"><i class="fas fa-envelope"></i> Contact Us</a></li>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg">
+        <div class="container">
+            <a class="navbar-brand" href="/"><i class="fas fa-shield-alt"></i>LogSentry</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'dashboard' %}">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'contact' %}">Contact Us</a>
+                    </li>
                     
                     {% if user.is_authenticated %}
-                    <li class="user-dropdown">
-                        <span class="username">
-                            <i class="fas fa-user"></i> {{ user.username }} <i class="fas fa-chevron-down"></i>
-                        </span>
-                        <div class="dropdown-content">
-                            <a href="{% url 'profile' %}"><i class="fas fa-id-card"></i> Profile</a>
-                            <a href="{% url 'settings' %}"><i class="fas fa-cog"></i> Settings</a>
-                            <a href="{% url 'logout' %}"><i class="fas fa-sign-out-alt"></i> Logout</a>
-                        </div>
+                    <li class="nav-item dropdown ms-lg-3">
+                        <button class="btn btn-outline-primary dropdown-toggle" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-user"></i>
+                            {{ user.username }}
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="userDropdown">
+                            <li><a class="dropdown-item" href="{% url 'dashboard' %}"><i class="fas fa-chart-line"></i> Dashboard</a></li>
+                            <li><a class="dropdown-item" href="{% url 'profile' %}"><i class="fas fa-id-card"></i> My Profile</a></li>
+                            <li><a class="dropdown-item active" href="{% url 'settings' %}"><i class="fas fa-cog"></i> Settings</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'logout' %}"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
+                        </ul>
                     </li>
                     {% else %}
-                    <li><a href="{% url 'login' %}"><i class="fas fa-user-shield"></i> Login</a></li>
+                    <li class="nav-item ms-lg-3">
+                        <a class="btn btn-outline-primary" href="{% url 'login' %}">Sign In</a>
+                    </li>
+                    <li class="nav-item ms-lg-2">
+                        <a class="btn btn-primary" href="{% url 'signup' %}">Sign Up</a>
+                    </li>
                     {% endif %}
                 </ul>
-            </nav>
+            </div>
         </div>
-    </header>
-    
-    <div class="container">
-        <h2><i class="fas fa-cog"></i> Settings</h2>
-        <p>Configure your log analyzer settings and preferences.</p>
+    </nav>
+
+    <div class="container-main">
+        <h1 class="mb-4"><i class="fas fa-cog me-2"></i>Settings</h1>
         
-        <div class="settings-container">
-            <div class="settings-card">
-                <div class="card-header">
-                    <h3><i class="fas fa-bell"></i> Notification Settings</h3>
-                </div>
-                <div class="card-body">
-                    <div class="setting-item">
-                        <div class="setting-info">
-                            <h4>Email Notifications</h4>
-                            <div class="setting-description">Receive security alerts via email</div>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox" checked>
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                    <div class="setting-item">
-                        <div class="setting-info">
-                            <h4>Critical Alerts</h4>
-                            <div class="setting-description">Notifications for critical security events</div>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox" checked>
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                    <div class="setting-item">
-                        <div class="setting-info">
-                            <h4>Warning Alerts</h4>
-                            <div class="setting-description">Notifications for warning-level security events</div>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox" checked>
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                    <div class="setting-item">
-                        <div class="setting-info">
-                            <h4>System Notifications</h4>
-                            <div class="setting-description">Get notified about system status and updates</div>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
+        {% if success_message %}
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="fas fa-check-circle me-2"></i> {{ success_message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endif %}
+        
+        {% if error_message %}
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="fas fa-exclamation-circle me-2"></i> {{ error_message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endif %}
+        
+        <div class="row">
+            <div class="col-lg-3 mb-4">
+                <div class="list-group settings-nav">
+                    <a href="#profile-section" class="list-group-item list-group-item-action active" data-bs-toggle="list">
+                        <i class="fas fa-user me-2"></i> Profile Settings
+                    </a>
+                    <a href="#security-section" class="list-group-item list-group-item-action" data-bs-toggle="list">
+                        <i class="fas fa-lock me-2"></i> Security
+                    </a>
+                    <a href="#notification-section" class="list-group-item list-group-item-action" data-bs-toggle="list">
+                        <i class="fas fa-bell me-2"></i> Notifications
+                    </a>
+                    <a href="#log-section" class="list-group-item list-group-item-action" data-bs-toggle="list">
+                        <i class="fas fa-file-alt me-2"></i> Log Configuration
+                    </a>
+                    <a href="#realtime-section" class="list-group-item list-group-item-action" data-bs-toggle="list">
+                        <i class="fas fa-sync me-2"></i> Real-time Analysis
+                    </a>
                 </div>
             </div>
             
-            <div class="settings-card">
-                <div class="card-header">
-                    <h3><i class="fas fa-shield-alt"></i> Security Settings</h3>
-                </div>
-                <div class="card-body">
-                    <div class="setting-item">
-                        <div class="setting-info">
-                            <h4>Two-Factor Authentication</h4>
-                            <div class="setting-description">Require an additional verification code when logging in</div>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                    <div class="setting-item">
-                        <div class="setting-info">
-                            <h4>Session Timeout</h4>
-                            <div class="setting-description">Automatically log out after inactivity</div>
-                        </div>
-                        <select class="form-control">
-                            <option>15 minutes</option>
-                            <option selected>30 minutes</option>
-                            <option>1 hour</option>
-                            <option>4 hours</option>
-                        </select>
-                    </div>
-                    <div class="setting-item">
-                        <div class="setting-info">
-                            <h4>Login History</h4>
-                            <div class="setting-description">Track all login attempts to your account</div>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox" checked>
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="settings-card">
-                <div class="card-header">
-                    <h3><i class="fas fa-server"></i> Log Collection Settings</h3>
-                </div>
-                <div class="card-body">
-                    <form class="settings-form">
-                        <div>
-                            <div class="form-group">
-                                <label for="apache-log-path">Apache Log Path</label>
-                                <input type="text" id="apache-log-path" value="/var/log/apache2/access.log">
+            <div class="col-lg-9">
+                <div class="tab-content">
+                    <!-- Profile Settings -->
+                    <div class="tab-pane fade show active" id="profile-section">
+                        <div class="settings-card">
+                            <div class="settings-header">
+                                <i class="fas fa-user"></i>
+                                <h5 class="mb-0">Profile Settings</h5>
                             </div>
-                            <div class="form-group">
-                                <label for="mysql-log-path">MySQL Log Path</label>
-                                <input type="text" id="mysql-log-path" value="/var/log/mysql/mysql.log">
+                            <div class="settings-body">
+                                <form method="post" action="{% url 'settings' %}">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="update_profile" value="1">
+                                    
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <div class="form-group">
+                                                <label class="form-label" for="first_name">First Name</label>
+                                                <input type="text" class="form-control" id="first_name" name="first_name" value="{{ user.first_name }}" required>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="form-group">
+                                                <label class="form-label" for="last_name">Last Name</label>
+                                                <input type="text" class="form-control" id="last_name" name="last_name" value="{{ user.last_name }}" required>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label class="form-label" for="email">Email Address</label>
+                                        <input type="email" class="form-control" id="email" name="email" value="{{ user.email }}" required>
+                                    </div>
+                                    
+                                    <div class="settings-footer">
+                                        <button type="submit" class="btn btn-primary">Save Profile</button>
+                                    </div>
+                                </form>
                             </div>
                         </div>
-                        <div>
-                            <div class="form-group">
-                                <label for="log-retention">Log Retention Period</label>
-                                <select id="log-retention">
-                                    <option>7 days</option>
-                                    <option selected>30 days</option>
-                                    <option>90 days</option>
-                                    <option>1 year</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label for="scan-frequency">Log Scan Frequency</label>
-                                <select id="scan-frequency">
-                                    <option>Every 5 minutes</option>
-                                    <option selected>Every 15 minutes</option>
-                                    <option>Every 30 minutes</option>
-                                    <option>Every hour</option>
-                                </select>
-                            </div>
-                        </div>
-                    </form>
-                    <div class="settings-actions">
-                        <button class="btn btn-primary">Save Changes</button>
                     </div>
-                </div>
-            </div>
-            
-            <div class="settings-card">
-                <div class="card-header">
-                    <h3><i class="fas fa-chart-pie"></i> Dashboard Preferences</h3>
-                </div>
-                <div class="card-body">
-                    <div class="setting-item">
-                        <div class="setting-info">
-                            <h4>Default Timeframe</h4>
-                            <div class="setting-description">Set the default time range for dashboard metrics</div>
-                        </div>
-                        <select class="form-control">
-                            <option>Last 24 hours</option>
-                            <option selected>Last 7 days</option>
-                            <option>Last 30 days</option>
-                            <option>Last 90 days</option>
-                        </select>
-                    </div>
-                    <div class="setting-item">
-                        <div class="setting-info">
-                            <h4>Show Threat Severity Distribution</h4>
-                            <div class="setting-description">Display threat severity distribution chart</div>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox" checked>
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                    <div class="setting-item">
-                        <div class="setting-info">
-                            <h4>Show MITRE ATT&CK Framework</h4>
-                            <div class="setting-description">Display MITRE ATT&CK framework data</div>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox" checked>
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                    <div class="setting-item">
-                        <div class="setting-info">
-                            <h4>Auto-refresh Dashboard</h4>
-                            <div class="setting-description">Automatically refresh dashboard data</div>
-                        </div>
-                        <label class="toggle-switch">
-                            <input type="checkbox" checked>
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="settings-card">
-                <div class="card-header">
-                    <h3><i class="fas fa-envelope"></i> SMTP Integration</h3>
-                </div>
-                <div class="card-body">
-                    <form class="settings-form">
-                        <div>
-                            <div class="form-group">
-                                <label for="smtp-server">SMTP Server</label>
-                                <input type="text" id="smtp-server" value="smtp.gmail.com">
+                    
+                    <!-- Security Settings -->
+                    <div class="tab-pane fade" id="security-section">
+                        <div class="settings-card">
+                            <div class="settings-header">
+                                <i class="fas fa-lock"></i>
+                                <h5 class="mb-0">Security Settings</h5>
                             </div>
-                            <div class="form-group">
-                                <label for="smtp-port">SMTP Port</label>
-                                <input type="number" id="smtp-port" value="587">
+                            <div class="settings-body">
+                                <form method="post" action="{% url 'settings' %}">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="change_password" value="1">
+                                    
+                                    <div class="form-group">
+                                        <label class="form-label" for="current_password">Current Password</label>
+                                        <input type="password" class="form-control" id="current_password" name="current_password" required>
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label class="form-label" for="new_password">New Password</label>
+                                        <input type="password" class="form-control" id="new_password" name="new_password" required>
+                                        <div class="form-text">Must be at least 8 characters long</div>
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label class="form-label" for="confirm_password">Confirm New Password</label>
+                                        <input type="password" class="form-control" id="confirm_password" name="confirm_password" required>
+                                    </div>
+                                    
+                                    <div class="settings-footer">
+                                        <button type="submit" class="btn btn-primary">Change Password</button>
+                                    </div>
+                                </form>
                             </div>
                         </div>
-                        <div>
-                            <div class="form-group">
-                                <label for="smtp-username">SMTP Username</label>
-                                <input type="email" id="smtp-username" placeholder="Enter email address">
+                    </div>
+                    
+                    <!-- Notification Settings -->
+                    <div class="tab-pane fade" id="notification-section">
+                        <div class="settings-card">
+                            <div class="settings-header">
+                                <i class="fas fa-bell"></i>
+                                <h5 class="mb-0">Notification Settings</h5>
                             </div>
-                            <div class="form-group">
-                                <label for="smtp-password">SMTP Password</label>
-                                <input type="password" id="smtp-password" placeholder="Enter password">
+                            <div class="settings-body">
+                                <form method="post" action="{% url 'settings' %}">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="notification_settings" value="1">
+                                    
+                                    <div class="form-group">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="email_alerts" name="email_alerts" {% if notification_settings.email_alerts %}checked{% endif %}>
+                                            <label class="form-check-label" for="email_alerts">Email Notifications</label>
+                                        </div>
+                                        <div class="form-text">Receive security alerts via email</div>
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="sms_alerts" name="sms_alerts" {% if notification_settings.sms_alerts %}checked{% endif %}>
+                                            <label class="form-check-label" for="sms_alerts">SMS Notifications</label>
+                                        </div>
+                                        <div class="form-text">Receive critical alerts via SMS</div>
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="slack_alerts" name="slack_alerts" {% if notification_settings.slack_alerts %}checked{% endif %}>
+                                            <label class="form-check-label" for="slack_alerts">Slack Notifications</label>
+                                        </div>
+                                        <div class="form-text">Send alerts to a Slack channel</div>
+                                    </div>
+                                    
+                                    <div class="settings-separator"></div>
+                                    
+                                    <div class="form-group">
+                                        <label class="form-label">Alert Severity Levels</label>
+                                        <div class="form-check mt-2">
+                                            <input class="form-check-input" type="checkbox" id="critical_alerts" name="critical_alerts" checked disabled>
+                                            <label class="form-check-label" for="critical_alerts">Critical Alerts</label>
+                                            <span class="badge bg-danger ms-2">Required</span>
+                                        </div>
+                                        <div class="form-check mt-2">
+                                            <input class="form-check-input" type="checkbox" id="high_alerts" name="high_alerts" checked>
+                                            <label class="form-check-label" for="high_alerts">High Severity Alerts</label>
+                                        </div>
+                                        <div class="form-check mt-2">
+                                            <input class="form-check-input" type="checkbox" id="medium_alerts" name="medium_alerts" checked>
+                                            <label class="form-check-label" for="medium_alerts">Medium Severity Alerts</label>
+                                        </div>
+                                        <div class="form-check mt-2">
+                                            <input class="form-check-input" type="checkbox" id="low_alerts" name="low_alerts">
+                                            <label class="form-check-label" for="low_alerts">Low Severity Alerts</label>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="settings-footer">
+                                        <button type="submit" class="btn btn-primary">Save Notification Settings</button>
+                                    </div>
+                                </form>
                             </div>
                         </div>
-                    </form>
-                    <div class="settings-actions">
-                        <button class="btn btn-primary">Save SMTP Settings</button>
+                    </div>
+                    
+                    <!-- Log Configuration Settings -->
+                    <div class="tab-pane fade" id="log-section">
+                        <div class="settings-card">
+                            <div class="settings-header">
+                                <i class="fas fa-file-alt"></i>
+                                <h5 class="mb-0">Log File Configuration</h5>
+                            </div>
+                            <div class="settings-body">
+                                <form method="post" action="{% url 'settings' %}" id="logPathForm" enctype="multipart/form-data">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="log_path_settings" value="1">
+                                    
+                                    <!-- Apache Log Configuration -->
+                                    <div class="form-group mb-4">
+                                        <label class="form-label fw-bold">Apache Log</label>
+                                        
+                                        <div class="mb-3">
+                                            <label class="form-label">Path to Apache access log file</label>
+                                            <div class="input-group">
+                                                <input type="text" class="form-control" id="apache_log_path" name="apache_log_path" 
+                                                       value="{{ log_settings.apache_log_path|default:'/var/log/apache2/access.log' }}">
+                                                <button class="btn btn-outline-primary" type="button" id="apache_browse_btn">
+                                                    <i class="fas fa-folder-open"></i> Browse
+                                                </button>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label class="form-label">Or upload Apache log file</label>
+                                            <div class="dropzone" id="apache_dropzone">
+                                                <div class="dz-message">
+                                                    <div class="dz-icon mb-3">
+                                                        <i class="fas fa-cloud-upload-alt fa-3x text-muted"></i>
+                                                    </div>
+                                                    <div class="dz-text">
+                                                        <p>Drag & drop Apache log file here</p>
+                                                        <p class="text-muted small">or click to select file</p>
+                                                    </div>
+                                                </div>
+                                                <input type="file" id="apache_log_file" name="apache_log_file" 
+                                                       class="file-input" accept=".log,.txt">
+                                            </div>
+                                            <div id="apache_file_info" class="file-info mt-2 d-none">
+                                                <div class="d-flex align-items-center">
+                                                    <i class="fas fa-file-alt me-2 text-primary"></i>
+                                                    <span class="file-name"></span>
+                                                    <button type="button" class="btn btn-sm btn-link text-danger ms-auto remove-file">
+                                                        <i class="fas fa-times"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- MySQL Log Configuration -->
+                                    <div class="form-group mb-4">
+                                        <label class="form-label fw-bold">MySQL Log</label>
+                                        
+                                        <div class="mb-3">
+                                            <label class="form-label">Path to MySQL error log file</label>
+                                            <div class="input-group">
+                                                <input type="text" class="form-control" id="mysql_log_path" name="mysql_log_path" 
+                                                       value="{{ log_settings.mysql_log_path|default:'/var/log/mysql/mysql.log' }}">
+                                                <button class="btn btn-outline-primary" type="button" id="mysql_browse_btn">
+                                                    <i class="fas fa-folder-open"></i> Browse
+                                                </button>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label class="form-label">Or upload MySQL log file</label>
+                                            <div class="dropzone" id="mysql_dropzone">
+                                                <div class="dz-message">
+                                                    <div class="dz-icon mb-3">
+                                                        <i class="fas fa-cloud-upload-alt fa-3x text-muted"></i>
+                                                    </div>
+                                                    <div class="dz-text">
+                                                        <p>Drag & drop MySQL log file here</p>
+                                                        <p class="text-muted small">or click to select file</p>
+                                                    </div>
+                                                </div>
+                                                <input type="file" id="mysql_log_file" name="mysql_log_file" 
+                                                       class="file-input" accept=".log,.txt">
+                                            </div>
+                                            <div id="mysql_file_info" class="file-info mt-2 d-none">
+                                                <div class="d-flex align-items-center">
+                                                    <i class="fas fa-file-alt me-2 text-primary"></i>
+                                                    <span class="file-name"></span>
+                                                    <button type="button" class="btn btn-sm btn-link text-danger ms-auto remove-file">
+                                                        <i class="fas fa-times"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label class="form-label" for="log_retention">Log Retention Period</label>
+                                        <select class="form-select" id="log_retention" name="log_retention">
+                                            <option value="7" {% if log_settings.log_retention == 7 %}selected{% endif %}>7 days</option>
+                                            <option value="30" {% if log_settings.log_retention == 30 or not log_settings.log_retention %}selected{% endif %}>30 days</option>
+                                            <option value="90" {% if log_settings.log_retention == 90 %}selected{% endif %}>90 days</option>
+                                            <option value="365" {% if log_settings.log_retention == 365 %}selected{% endif %}>1 year</option>
+                                        </select>
+                                        <div class="form-text">How long to keep log data in the database</div>
+                                    </div>
+                                    
+                                    <div class="settings-separator"></div>
+                                    
+                                    <div class="form-group">
+                                        <div class="alert alert-info">
+                                            <i class="fas fa-info-circle me-2"></i> You can either specify a path to existing log files or upload log files directly.
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="settings-footer">
+                                        <button type="button" id="testLogPathBtn" class="btn btn-outline-secondary me-2">Test Log Paths</button>
+                                        <button type="submit" class="btn btn-primary">Save Log Settings</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Real-time Analysis Settings -->
+                    <div class="tab-pane fade" id="realtime-section">
+                        <div class="settings-card">
+                            <div class="settings-header">
+                                <i class="fas fa-sync"></i>
+                                <h5 class="mb-0">Real-time Analysis Settings</h5>
+                            </div>
+                            <div class="settings-body">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <span>Real-time Log Analysis Status:</span>
+                                    <span>
+                                        <span id="refreshStatus" class="refresh-indicator refresh-inactive"></span>
+                                        <span id="refreshStatusText">Inactive</span>
+                                    </span>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label" for="analysis_interval">Analysis Interval (seconds)</label>
+                                    <input type="number" class="form-control" id="analysis_interval" min="10" max="300" value="30">
+                                    <div class="form-text">How often to check for new logs (minimum 10 seconds)</div>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label" for="logs_per_analysis">Logs to Analyze</label>
+                                    <input type="number" class="form-control" id="logs_per_analysis" min="10" max="500" value="50">
+                                    <div class="form-text">Number of most recent log entries to analyze each interval</div>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="enable_realtime" checked>
+                                        <label class="form-check-label" for="enable_realtime">Enable Real-time Analysis</label>
+                                    </div>
+                                    <div class="form-text">Automatically analyze logs at regular intervals</div>
+                                </div>
+                                
+                                <div class="time-display mt-3 text-center">
+                                    Next analysis in <span id="countdown">30</span> seconds - Last run: <span id="lastRunTime">Never</span>
+                                </div>
+                                
+                                <div class="settings-footer">
+                                    <button type="button" id="runAnalysisBtn" class="btn btn-outline-secondary me-2">Run Analysis Now</button>
+                                    <button type="button" id="saveAnalysisBtn" class="btn btn-primary">Save Analysis Settings</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-  
-    <footer>
-        <p>&copy; 2025 Log Detection Platform | Securing your servers 24/7</p>
+    
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 LogSentry | Securing your servers 24/7</p>
+        </div>
     </footer>
 
-    <div id="loginModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Login Required</h3>
-                <button class="close-modal" onclick="closeModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <p>You need to be logged in to access this feature. Please login or create an account to continue.</p>
-            </div>
-            <div class="modal-footer">
-                <a href="{% url 'signup' %}" class="btn">Sign Up</a>
-                <a href="{% url 'login' %}" class="btn">Login</a>
-            </div>
-        </div>
-    </div>
+    <!-- Bootstrap and other scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script>
-        // Check authentication status
-        const isLoggedInValue = "{% if user.is_authenticated %}true{% else %}false{% endif %}";
-        const isLoggedIn = isLoggedInValue === "true";
-        
-        // Redirect to login if not authenticated
-        if (!isLoggedIn) {
-            window.location.href = "/login/?next=" + window.location.pathname;
-        }
-        
-        // Function to check dashboard access
-        function checkDashboardAccess(event) {
-            event.preventDefault();
-            if (isLoggedIn) {
-                window.location.href = "/dashboard/";
-            } else {
-                document.getElementById('loginModal').style.display = "block";
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize settings
+            loadSettings();
+            
+            // Handle tab navigation via URL hash
+            const tabLinks = document.querySelectorAll('.settings-nav a');
+            const tabPanes = document.querySelectorAll('.tab-pane');
+            
+            if (window.location.hash) {
+                const targetTab = document.querySelector(`.settings-nav a[href="${window.location.hash}"]`);
+                if (targetTab) {
+                    tabLinks.forEach(link => link.classList.remove('active'));
+                    tabPanes.forEach(pane => pane.classList.remove('show', 'active'));
+                    
+                    targetTab.classList.add('active');
+                    document.querySelector(window.location.hash).classList.add('show', 'active');
+                }
             }
-        }
-        
-        // Function to check reports access
-        function checkReportsAccess(event) {
-            event.preventDefault();
-            if (isLoggedIn) {
-                window.location.href = "/reports/";
-            } else {
-                document.getElementById('loginModal').style.display = "block";
-            }
-        }
-        
-        // Close the modal when clicking the X
-        function closeModal() {
-            document.getElementById('loginModal').style.display = "none";
-        }
-        
-        // Close the modal if clicking outside of it
-        window.onclick = function(event) {
-            const modal = document.getElementById('loginModal');
-            if (event.target == modal) {
-                modal.style.display = "none";
-            }
-        }
-        
-        // Form submission handling
-        document.querySelectorAll('.btn-primary').forEach(btn => {
-            btn.addEventListener('click', function(e) {
+            
+            // Test log paths button
+            document.getElementById('testLogPathBtn').addEventListener('click', testLogPaths);
+            
+            // Real-time analysis settings
+            const enableRealtimeSwitch = document.getElementById('enable_realtime');
+            const analysisIntervalInput = document.getElementById('analysis_interval');
+            const logsPerAnalysisInput = document.getElementById('logs_per_analysis');
+            
+            document.getElementById('saveAnalysisBtn').addEventListener('click', function() {
+                const analysisInterval = parseInt(analysisIntervalInput.value);
+                const logsPerAnalysis = parseInt(logsPerAnalysisInput.value);
+                const enableRealtime = enableRealtimeSwitch.checked;
+                
+                saveAnalysisSettings(analysisInterval, logsPerAnalysis, enableRealtime);
+            });
+            
+            document.getElementById('runAnalysisBtn').addEventListener('click', runManualAnalysis);
+            
+            // Initialize real-time analysis if enabled
+            setupRealtimeAnalysis();
+
+            // Set up file upload and drag & drop functionality
+            setupFileUpload('apache');
+            setupFileUpload('mysql');
+
+            // Hidden file inputs for the browse buttons
+            document.getElementById('apache_browse_btn').addEventListener('click', function(e) {
                 e.preventDefault();
-                // Get the closest settings card
-                const card = this.closest('.settings-card');
+                e.stopPropagation();
+                document.getElementById('apache_log_file').click();
+                return false;
+            });
+
+            document.getElementById('mysql_browse_btn').addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                document.getElementById('mysql_log_file').click();
+                return false;
+            });
+
+            // Function to set up file upload for a given log type
+            function setupFileUpload(logType) {
+                const dropzone = document.getElementById(`${logType}_dropzone`);
+                const fileInput = document.getElementById(`${logType}_log_file`);
+                const fileInfo = document.getElementById(`${logType}_file_info`);
+                const fileName = fileInfo.querySelector('.file-name');
+                const pathInput = document.getElementById(`${logType}_log_path`);
+                const removeBtn = fileInfo.querySelector('.remove-file');
                 
-                // Flash animation to indicate save
-                card.style.transition = 'background-color 0.3s';
-                card.style.backgroundColor = '#e8f7f9';
+                // Make sure the dropzone only triggers the file input when clicked directly
+                dropzone.addEventListener('click', function(e) {
+                    if (e.target === dropzone || dropzone.contains(e.target)) {
+                        fileInput.click();
+                        e.stopPropagation();
+                    }
+                });
+                
+                // Prevent the file input from capturing clicks outside its area
+                fileInput.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                });
+                
+                // Handle drag and drop events
+                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                    dropzone.addEventListener(eventName, preventDefaults, false);
+                });
+                
+                function preventDefaults(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+                
+                // Add visual feedback when file is dragged over dropzone
+                ['dragenter', 'dragover'].forEach(eventName => {
+                    dropzone.addEventListener(eventName, highlight, false);
+                });
+                
+                ['dragleave', 'drop'].forEach(eventName => {
+                    dropzone.addEventListener(eventName, unhighlight, false);
+                });
+                
+                function highlight() {
+                    dropzone.classList.add('dragover');
+                }
+                
+                function unhighlight() {
+                    dropzone.classList.remove('dragover');
+                }
+                
+                // Handle dropped files
+                dropzone.addEventListener('drop', handleDrop, false);
+                
+                function handleDrop(e) {
+                    const dt = e.dataTransfer;
+                    const files = dt.files;
+                    if (files.length > 0) {
+                        handleFiles(files[0]);
+                    }
+                }
+                
+                // Handle file selection through input
+                fileInput.addEventListener('change', function() {
+                    if (this.files.length > 0) {
+                        handleFiles(this.files[0]);
+                    }
+                });
+                
+                // Process the selected file
+                function handleFiles(file) {
+                    // Update file info display
+                    fileInfo.classList.remove('d-none');
+                    
+                    // Add file details - size and last modified
+                    const fileSize = formatFileSize(file.size);
+                    const lastModified = new Date(file.lastModified).toLocaleString();
+                    
+                    // Mark the dropzone as having a file
+                    dropzone.classList.add('file-selected');
+                    
+                    // Use a PSEUDO PATH for display purposes
+                    const osSeparator = navigator.platform.indexOf('Win') > -1 ? '\\' : '/';
+                    const pseudoPath = logType === 'apache' ? 
+                        `C:${osSeparator}xampp${osSeparator}apache${osSeparator}logs${osSeparator}${file.name}` :
+                        `C:${osSeparator}xampp${osSeparator}mysql${osSeparator}data${osSeparator}${file.name}`;
+                    
+                    // Display pseudo path in the input
+                    pathInput.value = pseudoPath;
+                    
+                    // Show browser security notice
+                    const securityNotice = document.createElement('div');
+                    securityNotice.className = 'alert alert-info mt-2 p-2 small';
+                    securityNotice.innerHTML = `<i class="fas fa-info-circle me-1"></i> 
+                        Browser security prevents accessing the full file path. 
+                        If this isn't the correct path, please type it manually.`;
+                    
+                    // Add security notice after file info
+                    if (!fileInfo.nextElementSibling || !fileInfo.nextElementSibling.classList.contains('alert-info')) {
+                        fileInfo.parentNode.insertBefore(securityNotice, fileInfo.nextSibling);
+                    }
+                    
+                    // Update the file name with additional information
+                    fileName.innerHTML = `<strong>${file.name}</strong> (${fileSize}) - Modified: ${lastModified}`;
+                    
+                    // Store file info for reference
+                    fileInfo.dataset.fileName = file.name;
+                    fileInfo.dataset.fileSize = file.size;
+                    fileInfo.dataset.fileType = file.type || 'text/plain';
+                }
+                
+                // Helper function to format file size
+                function formatFileSize(bytes) {
+                    if (bytes === 0) return '0 Bytes';
+                    const k = 1024;
+                    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                    const i = Math.floor(Math.log(bytes) / Math.log(k));
+                    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+                }
+                
+                // Handle remove button click
+                removeBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    // Clear the file input
+                    fileInput.value = '';
+                    
+                    // Hide the file info
+                    fileInfo.classList.add('d-none');
+                    
+                    // Remove the selected class from dropzone
+                    dropzone.classList.remove('file-selected');
+                    
+                    // Keep the path input value to allow manual editing
+                    // Only clear if it's showing the file name
+                    if (pathInput.value === fileInfo.dataset.fileName) {
+                        const defaultPath = logType === 'apache' ? 
+                            '/var/log/apache2/access.log' : 
+                            '/var/log/mysql/mysql.log';
+                        pathInput.value = defaultPath;
+                    }
+                    
+                    // Clear stored file data
+                    fileInfo.dataset.fileName = '';
+                    fileInfo.dataset.fileSize = '';
+                    fileInfo.dataset.fileType = '';
+                    
+                    return false;
+                });
+                
+                // Allow users to manually type the path
+                pathInput.addEventListener('focus', function() {
+                    // Select all text for easy editing
+                    this.select();
+                });
+            }
+        });
+
+        // Fix the form submission to handle file uploads properly
+        document.getElementById('logPathForm').addEventListener('submit', function(e) {
+            if (!validateLogForm()) {
+                e.preventDefault();
+                return false;
+            }
+            
+            // If there are file inputs with no files selected but with UI showing files,
+            // clear them to avoid ERR_UPLOAD_FILE_CHANGED errors
+            const apacheFileInput = document.getElementById('apache_log_file');
+            const mysqlFileInput = document.getElementById('mysql_log_file');
+            const apacheFileInfo = document.getElementById('apache_file_info');
+            const mysqlFileInfo = document.getElementById('mysql_file_info');
+            
+            if (apacheFileInput.files.length === 0 && !apacheFileInfo.classList.contains('d-none')) {
+                // Remove the file visualization as no file is actually selected
+                apacheFileInfo.classList.add('d-none');
+                // Also remove any security notices that might have been added
+                if (apacheFileInfo.nextElementSibling && apacheFileInfo.nextElementSibling.classList.contains('alert-info')) {
+                    apacheFileInfo.nextElementSibling.remove();
+                }
+            }
+            
+            if (mysqlFileInput.files.length === 0 && !mysqlFileInfo.classList.contains('d-none')) {
+                // Remove the file visualization as no file is actually selected
+                mysqlFileInfo.classList.add('d-none');
+                // Also remove any security notices that might have been added
+                if (mysqlFileInfo.nextElementSibling && mysqlFileInfo.nextElementSibling.classList.contains('alert-info')) {
+                    mysqlFileInfo.nextElementSibling.remove();
+                }
+            }
+            
+            // Show loading state
+            const submitButton = this.querySelector('[type="submit"]');
+            submitButton.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Saving...';
+            submitButton.disabled = true;
+            
+            return true;
+        });
+
+        function validateLogForm() {
+            // Basic validation
+            const apachePath = document.getElementById('apache_log_path').value;
+            const mysqlPath = document.getElementById('mysql_log_path').value;
+            
+            if (!apachePath || !mysqlPath) {
+                showAlert('danger', 'Both log paths are required.');
+                return false;
+            }
+            
+            return true;
+        }
+
+        // Load saved settings from localStorage or server
+        function loadSettings() {
+            // Check if we have saved settings in localStorage
+            const savedAnalysisSettings = localStorage.getItem('analysisSettings');
+            if (savedAnalysisSettings) {
+                const settings = JSON.parse(savedAnalysisSettings);
+                document.getElementById('analysis_interval').value = settings.interval || 30;
+                document.getElementById('logs_per_analysis').value = settings.logsCount || 50;
+                document.getElementById('enable_realtime').checked = settings.enabled !== false;
+            }
+        }
+        
+        // Test if log paths are accessible
+        function testLogPaths() {
+            const apachePath = document.getElementById('apache_log_path').value;
+            const mysqlPath = document.getElementById('mysql_log_path').value;
+            
+            // Display loading indicator
+            document.getElementById('testLogPathBtn').innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Testing...';
+            document.getElementById('testLogPathBtn').disabled = true;
+            
+            fetch('/api/test-log-paths/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify({
+                    apache_path: apachePath,
+                    mysql_path: mysqlPath
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Reset button
+                document.getElementById('testLogPathBtn').innerHTML = 'Test Log Paths';
+                document.getElementById('testLogPathBtn').disabled = false;
+                
+                if (data.success) {
+                    showAlert('success', 'Log paths are valid and accessible.');
+                } else {
+                    showAlert('danger', `Error: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                // Reset button
+                document.getElementById('testLogPathBtn').innerHTML = 'Test Log Paths';
+                document.getElementById('testLogPathBtn').disabled = false;
+                showAlert('danger', `Failed to test log paths: ${error.message}`);
+            });
+        }
+        
+        // Setup real-time analysis
+        function setupRealtimeAnalysis() {
+            const savedAnalysisSettings = localStorage.getItem('analysisSettings');
+            let settings = {
+                interval: 30,
+                logsCount: 50,
+                enabled: true,
+                lastRun: null
+            };
+            
+            if (savedAnalysisSettings) {
+                settings = { ...settings, ...JSON.parse(savedAnalysisSettings) };
+            }
+            
+            // Update UI with settings
+            document.getElementById('analysis_interval').value = settings.interval;
+            document.getElementById('logs_per_analysis').value = settings.logsCount;
+            document.getElementById('enable_realtime').checked = settings.enabled;
+            
+            // Update last run time
+            if (settings.lastRun) {
+                document.getElementById('lastRunTime').textContent = new Date(settings.lastRun).toLocaleTimeString();
+            }
+            
+            // Set initial status
+            updateAnalysisStatus(settings.enabled);
+            
+            // Start countdown if enabled
+            if (settings.enabled) {
+                startAnalysisCountdown(settings.interval);
+            }
+            
+            // Add event listener to toggle switch
+            document.getElementById('enable_realtime').addEventListener('change', function() {
+                updateAnalysisStatus(this.checked);
+                
+                if (this.checked) {
+                    const interval = parseInt(document.getElementById('analysis_interval').value);
+                    startAnalysisCountdown(interval);
+                }
+                
+                saveAnalysisSettings(
+                    parseInt(document.getElementById('analysis_interval').value),
+                    parseInt(document.getElementById('logs_per_analysis').value),
+                    this.checked
+                );
+            });
+        }
+        
+        // Update the UI to reflect the real-time analysis status
+        function updateAnalysisStatus(enabled) {
+            const statusIndicator = document.getElementById('refreshStatus');
+            const statusText = document.getElementById('refreshStatusText');
+            
+            if (enabled) {
+                statusIndicator.className = 'refresh-indicator refresh-active';
+                statusText.textContent = 'Active';
+            } else {
+                statusIndicator.className = 'refresh-indicator refresh-inactive';
+                statusText.textContent = 'Inactive';
+            }
+        }
+        
+        // Save the real-time analysis settings
+        function saveAnalysisSettings(interval, logsCount, enabled) {
+            // Validate inputs
+            interval = Math.max(10, Math.min(300, interval));
+            logsCount = Math.max(10, Math.min(500, logsCount));
+            
+            // Update inputs with validated values
+            document.getElementById('analysis_interval').value = interval;
+            document.getElementById('logs_per_analysis').value = logsCount;
+            
+            // Save settings to localStorage
+            const settings = {
+                interval: interval,
+                logsCount: logsCount,
+                enabled: enabled,
+                lastRun: localStorage.getItem('analysisSettings') ? 
+                    JSON.parse(localStorage.getItem('analysisSettings')).lastRun : null
+            };
+            
+            localStorage.setItem('analysisSettings', JSON.stringify(settings));
+            
+            // Update UI
+            updateAnalysisStatus(enabled);
+            
+            // Restart countdown if enabled
+            if (enabled) {
+                startAnalysisCountdown(interval);
+            }
+            
+            showAlert('success', 'Real-time analysis settings saved.');
+        }
+        
+        // Start the countdown for the next analysis run
+        let countdownInterval;
+        function startAnalysisCountdown(seconds) {
+            // Clear any existing countdown
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+            }
+            
+            // Update countdown display
+            const countdownElement = document.getElementById('countdown');
+            countdownElement.textContent = seconds;
+            
+            // Start new countdown
+            let remaining = seconds;
+            countdownInterval = setInterval(function() {
+                remaining--;
+                countdownElement.textContent = remaining;
+                
+                if (remaining <= 0) {
+                    // Time to run analysis
+                    runLogAnalysis();
+                    
+                    // Restart countdown
+                    remaining = seconds;
+                    countdownElement.textContent = remaining;
+                }
+            }, 1000);
+        }
+        
+        // Run the log analysis
+        function runLogAnalysis() {
+            const settings = JSON.parse(localStorage.getItem('analysisSettings')) || {
+                interval: 30,
+                logsCount: 50,
+                enabled: true
+            };
+            
+            // Only run if enabled
+            if (!settings.enabled) return;
+            
+            fetch('/api/analyze-logs/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify({
+                    logs_count: settings.logsCount
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Update last run time
+                const now = new Date();
+                document.getElementById('lastRunTime').textContent = now.toLocaleTimeString();
+                
+                // Update settings with latest run time
+                settings.lastRun = now.toISOString();
+                localStorage.setItem('analysisSettings', JSON.stringify(settings));
+                
+                // Show notification if there are threats
+                if (data.threats_found > 0) {
+                    showAlert('warning', `Found ${data.threats_found} potential security threat(s) in logs.`);
+                }
+            })
+            .catch(error => {
+                console.error('Log analysis failed:', error);
+            });
+        }
+        
+        // Run analysis manually
+        function runManualAnalysis() {
+            const logsCount = parseInt(document.getElementById('logs_per_analysis').value);
+            
+            // Update button to show loading state
+            const button = document.getElementById('runAnalysisBtn');
+            const originalText = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Analyzing...';
+            button.disabled = true;
+            
+            fetch('/api/analyze-logs/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify({
+                    logs_count: logsCount
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Update last run time
+                const now = new Date();
+                document.getElementById('lastRunTime').textContent = now.toLocaleTimeString();
+                
+                // Update settings with latest run time
+                const settings = JSON.parse(localStorage.getItem('analysisSettings')) || {};
+                settings.lastRun = now.toISOString();
+                localStorage.setItem('analysisSettings', JSON.stringify(settings));
+                
+                // Reset button
+                button.innerHTML = originalText;
+                button.disabled = false;
+                
+                // Show results
+                if (data.threats_found > 0) {
+                    showAlert('warning', `Found ${data.threats_found} potential security threat(s) in ${data.logs_analyzed} logs analyzed.`);
+                } else {
+                    showAlert('success', `No security threats found. Analyzed ${data.logs_analyzed} logs.`);
+                }
+            })
+            .catch(error => {
+                // Reset button
+                button.innerHTML = originalText;
+                button.disabled = false;
+                
+                showAlert('danger', `Analysis failed: ${error.message}`);
+            });
+        }
+        
+        // Show alert message
+        function showAlert(type, message) {
+            let alertsContainer = document.getElementById('alertsContainer');
+            
+            if (!alertsContainer) {
+                alertsContainer = document.createElement('div');
+                alertsContainer.style.position = 'fixed';
+                alertsContainer.style.top = '20px';
+                alertsContainer.style.right = '20px';
+                alertsContainer.style.zIndex = '9999';
+                alertsContainer.style.maxWidth = '400px';
+                alertsContainer.id = 'alertsContainer';
+                document.body.appendChild(alertsContainer);
+            }
+            
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type} alert-dismissible fade show`;
+            alert.role = 'alert';
+            
+            let icon = 'info-circle';
+            if (type === 'success') icon = 'check-circle';
+            if (type === 'danger') icon = 'exclamation-circle';
+            if (type === 'warning') icon = 'exclamation-triangle';
+            
+            alert.innerHTML = `
+                <i class="fas fa-${icon} me-2"></i> ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            `;
+            
+            alertsContainer.appendChild(alert);
+            
+            // Auto-dismiss after 5 seconds
+            setTimeout(() => {
+                alert.classList.remove('show');
                 setTimeout(() => {
-                    card.style.backgroundColor = 'white';
-                }, 500);
+                    alert.remove();
+                }, 150);
+            }, 5000);
+        }
+
+        // Direct fix for security alert banner
+        function fixBanner() {
+            // Find security alert by its text content
+            const securityAlerts = Array.from(document.querySelectorAll('.alert'))
+                .filter(el => el.textContent.includes('Found') && 
+                             el.textContent.includes('potential security threat') && 
+                             el.textContent.includes('in logs'));
+            
+            securityAlerts.forEach(alert => {
+                // Skip if already enhanced
+                if (alert.hasAttribute('data-fixed')) return;
+                alert.setAttribute('data-fixed', 'true');
                 
-                // Show success message (you can expand this)
-                alert('Settings saved successfully!');
+                // Force inline styles with !important
+                alert.style.cssText = `
+                    position: relative !important;
+                    cursor: pointer !important;
+                    padding-right: 35px !important;
+                `;
+                
+                // Make alert clickable
+                alert.addEventListener('click', function(e) {
+                    // Only navigate if not clicking the close button
+                    if (!e.target.classList.contains('btn-close') && !e.target.classList.contains('close') && e.target.tagName !== 'BUTTON') {
+                        window.location.href = '/events/?severity=all&status=new';
+                    }
+                });
+                
+                // Fix the close button
+                const closeBtn = alert.querySelector('.btn-close, .close, [data-bs-dismiss="alert"], [data-dismiss="alert"]');
+                if (closeBtn) {
+                    // Remove original close button
+                    closeBtn.remove();
+                    
+                    // Create new close button with forced inline styles
+                    const newBtn = document.createElement('button');
+                    newBtn.innerHTML = '&times;';
+                    newBtn.setAttribute('aria-label', 'Close');
+                    newBtn.style.cssText = `
+                        position: absolute !important;
+                        top: 8px !important;
+                        right: 10px !important;
+                        background: transparent !important;
+                        border: none !important;
+                        font-size: 14px !important;
+                        font-weight: normal !important;
+                        line-height: 1 !important;
+                        padding: 0 !important;
+                        margin: 0 !important;
+                        width: 16px !important;
+                        height: 16px !important;
+                        text-align: center !important;
+                        cursor: pointer !important;
+                        z-index: 100 !important;
+                    `;
+                    
+                    // Add click handler
+                    newBtn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        alert.style.display = 'none';
+                    });
+                    
+                    alert.appendChild(newBtn);
+                }
+            });
+        }
+
+        // Create MutationObserver to detect when new alerts are added
+        const alertObserver = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.addedNodes && mutation.addedNodes.length > 0) {
+                    // Check if any added nodes match our alert criteria
+                    for (let i = 0; i < mutation.addedNodes.length; i++) {
+                        const node = mutation.addedNodes[i];
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            // Run fixBanner if element was added to the DOM
+                            fixBanner();
+                        }
+                    }
+                }
             });
         });
+
+        // Start observing the document body for DOM changes
+        alertObserver.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
+        // Fix footer spacing and make sure it sits properly at the bottom of the page
+        document.addEventListener('DOMContentLoaded', function() {
+            // Fix footer styling
+            const footer = document.querySelector('.footer');
+            if (footer) {
+                footer.style.marginTop = '30px';
+                footer.style.position = 'relative';
+                footer.style.width = '100%';
+                
+                // Ensure page content has enough height to push footer down
+                const containerMain = document.querySelector('.container-main');
+                if (containerMain) {
+                    containerMain.style.minHeight = 'calc(100vh - 180px)';
+                }
+            }
+            
+            // Make sure fixBanner runs immediately and periodically
+            fixBanner();
+            setInterval(fixBanner, 1000);
+        });
+
+        // Also ensure the banner fix runs when page loads
+        if (document.readyState === 'interactive' || document.readyState === 'complete') {
+            const footer = document.querySelector('.footer');
+            if (footer) {
+                footer.style.marginTop = '30px';
+            }
+            fixBanner();
+        }
     </script>
 </body>
 </html>

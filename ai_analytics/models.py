@@ -1,8 +1,30 @@
 from django.db import models
 from django.utils import timezone
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
 from datetime import timedelta
+
+
+# For default values:
+def get_default_expiry():
+    return timezone.now() + timedelta(hours=24)
+    
+field_name = models.DateTimeField(default=get_default_expiry)
+
+# For validators:
+def validate_positive(value):
+    if value <= 0:
+        raise ValidationError("Value must be positive")
+        
+def sort_by_name(item):
+    return item.name
+
+def get_cache_expiry():
+    """Get cache expiration time based on settings"""
+    hours = getattr(settings, 'AI_REPORT_CACHE_HOURS', 24)
+    return timezone.now() + timedelta(hours=hours)
+
 
 class AIReport(models.Model):
     """AI-generated security reports with caching"""
@@ -48,10 +70,8 @@ class AIReport(models.Model):
     
     # Cache management
     is_cached = models.BooleanField(default=True)
-    cache_valid_until = models.DateTimeField(
-        default=lambda: timezone.now() + timedelta(hours=getattr(settings, 'AI_REPORT_CACHE_HOURS', 24))
-    )
-    tokens_used = models.IntegerField(default=0)
+    cache_valid_until = models.DateTimeField(default=get_cache_expiry)
+    tokens_used = models.IntegerField(default=0, validators=[validate_positive])
     
     # User who requested the report
     created_by = models.ForeignKey(

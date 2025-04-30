@@ -29,14 +29,24 @@
                     <div class="form-actions">
                         <button type="submit">Login</button>
                     </div>
-                    {% if form.errors %}
-                    <div class="error-message">
-                        Your username and password didn't match. Please try again.
-                    </div>
-                    {% endif %}
+                    {% if password_reset_success %}
+<div class="success-message">
+    Password has been reset successfully. Please log in with your new password.
+</div>
+{% endif %}
+
+{% if form.errors %}
+<div class="error-message">
+    Your username and password didn't match. Please try again.
+    <div style="font-size: 10px; margin-top: 5px;">
+        Note: If you just reset your password, make sure you're using the new password.
+    </div>
+</div>
+{% endif %}
                 </form>
                 <div class="signup-link">
                     <p>Don't have an account? <a href="{% url 'signup' %}">Sign up</a></p>
+                    <p style="margin-top: 10px;"><a href="{% url 'password_reset' %}">Forgot your password?</a></p>
                 </div>
             </div>
         </div>

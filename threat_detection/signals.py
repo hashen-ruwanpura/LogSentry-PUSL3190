@@ -8,6 +8,8 @@ from log_ingestion.models import ParsedLog
 from .models import Threat, Incident
 from threat_detection.rules import RuleEngine
 from .integrations import ThreatIntelligence
+# Import our new alert service
+from alerts.services import AlertService
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -108,28 +110,45 @@ def notify_about_threat(sender, instance, created, **kwargs):
     """Send notification about newly detected threats"""
     if created or (kwargs.get('update_fields') and 'severity' in kwargs.get('update_fields')):
         try:
-            # Only notify about high and critical threats
-            if instance.severity in ['high', 'critical']:
+            # Only notify about medium and higher threats
+            if instance.severity in ['medium', 'high', 'critical']:
                 title = f"{instance.severity.upper()} Security Threat Detected"
+                
+                # Build message
                 message = f"Description: {instance.description}\n"
                 message += f"Source IP: {instance.source_ip or 'unknown'}\n"
                 message += f"User: {instance.user_id or 'unknown'}\n"
                 
+                # Add reputation info if available
                 if instance.analysis_data and 'threat_intelligence' in instance.analysis_data:
                     ti = instance.analysis_data['threat_intelligence']
                     if 'abuseipdb' in ti:
                         message += f"Reputation Score: {ti['abuseipdb']['score']}/100\n"
                     elif 'mock' in ti:
                         message += f"Reputation Score: {ti['mock']['score']}/100\n"
+
+                # Add MITRE ATT&CK info if available
+                if hasattr(instance, 'mitre_tactic') and instance.mitre_tactic:
+                    message += f"MITRE ATT&CK Tactic: {instance.mitre_tactic}\n"
                 
-                # Send email notification
+                # Send alert through our integrated service
+                AlertService.send_alert(
+                    title=title,
+                    message=message,
+                    severity=instance.severity,
+                    threat_id=instance.id,
+                    source_ip=instance.source_ip,
+                    affected_system=instance.affected_system if hasattr(instance, 'affected_system') else None
+                )
+                
+                # Keep legacy notification for backward compatibility
                 if has_notifiers:
                     notifiers.email.send_alert(title, message, instance.severity)
                     notifiers.slack.send_alert(title, message, instance.severity)
                 
-                logger.info(f"Sent notification for threat {instance.id}")
+                logger.info(f"Alert notifications sent for threat {instance.id}")
         except Exception as e:
-            logger.error(f"Error sending notification: {e}")
+            logger.error(f"Error sending notifications: {e}")
 
 def check_for_incident(threat):
     """Check if this threat is part of a larger incident"""
@@ -200,3 +219,19 @@ def check_for_incident(threat):
             
             # Add all related threats
             incident.threats.add(threat, *recent_threats)
+
+@receiver(post_save, sender=Incident)
+def notify_about_incident(sender, instance, created, **kwargs):
+    """Send notification about newly created or updated incidents"""
+    try:
+        # Only notify about new incidents or status changes
+        if created or (kwargs.get('update_fields') and 'status' in kwargs.get('update_fields')):
+            # Import AlertService
+            from alerts.services import AlertService
+            
+            # Send incident notification
+            AlertService.send_incident_notification(instance)
+            
+            logger.info(f"Incident notification sent for incident {instance.id}")
+    except Exception as e:
+        logger.error(f"Error sending incident notification: {e}", exc_info=True)

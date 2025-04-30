@@ -1,131 +1,115 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>User Profile - Log Detection Platform</title>
+    <title>My Profile - LogSentry</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         :root {
-            --primary-color: #17a2b8;
-            --primary-dark: #138496;
-            --secondary-color: #343a40;
-            --light-bg: #f8f9fa;
+            --primary-color: #3f51b5;
+            --primary-rgb: 63, 81, 181;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --warning-color: #ffc107;
+            --info-color: #17a2b8;
+            --light-color: #f8f9fa;
+            --dark-color: #343a40;
+            --white: #ffffff;
             --border-color: #dee2e6;
             --text-muted: #6c757d;
+            --navbar-height: 80px;
         }
         
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             line-height: 1.6;
             margin: 0;
             padding: 0;
             color: #333;
-            background-color: var(--light-bg);
+            background-color: var(--light-color);
+            overflow-x: hidden;
         }
         
-        .container {
-            width: 80%;
-            margin: 0 auto;
-            padding: 2rem;
-        }
-        
-        header {
-            background-color: var(--secondary-color);
-            color: #fff;
-            padding: 1rem 0;
-            position: sticky;
+        /* Navigation Bar */
+        .navbar {
+            background-color: var(--white);
+            padding: 0.8rem 1rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            position: fixed;
+            width: 100%;
             top: 0;
-            z-index: 100;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 1000;
+            transition: all 0.3s ease;
+            height: var(--navbar-height);
         }
         
-        .header-content {
+        .navbar.scrolled {
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            height: 70px;
+        }
+        
+        .navbar-brand {
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            width: 80%;
-            margin: 0 auto;
-        }
-        
-        .logo h1 {
-            margin: 0;
+            font-weight: 600;
             font-size: 1.5rem;
-        }
-        
-        nav ul {
-            display: flex;
-            list-style: none;
-            padding: 0;
-        }
-        
-        nav ul li {
-            margin-left: 1.5rem;
-        }
-        
-        nav ul li a {
-            color: #fff;
-            text-decoration: none;
-            transition: color 0.3s;
-        }
-        
-        nav ul li a:hover {
             color: var(--primary-color);
         }
         
-        .user-dropdown {
-            position: relative;
-            display: inline-block;
+        .navbar-brand i {
+            margin-right: 0.5rem;
+            font-size: 1.8rem;
         }
         
-        .dropdown-content {
-            display: none;
-            position: absolute;
-            right: 0;
-            background-color: var(--secondary-color);
-            min-width: 120px;
-            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
-            z-index: 150;
-            border-radius: 4px;
+        .navbar .nav-item {
+            margin: 0 0.2rem;
         }
         
-        .dropdown-content a {
-            color: white;
-            padding: 12px 16px;
-            text-decoration: none;
-            display: block;
-            text-align: left;
+        .navbar .nav-link {
+            color: var(--dark-color);
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            transition: all 0.2s ease;
         }
         
-        .dropdown-content a:hover {
-            background-color: #495057;
+        .navbar .nav-link:hover {
+            color: var(--primary-color);
+            background-color: rgba(var(--primary-rgb), 0.05);
         }
         
-        .user-dropdown:hover .dropdown-content {
-            display: block;
+        .navbar .nav-link.active {
+            color: var(--primary-color);
+            background-color: rgba(var(--primary-rgb), 0.1);
         }
         
-        .username {
-            display: flex;
-            align-items: center;
-            cursor: pointer;
+        /* Main content */
+        .main-content {
+            padding-top: calc(var(--navbar-height) + 2rem);
+            padding-bottom: 3rem;
         }
         
-        .username i {
-            margin-right: 5px;
+        .container {
+            width: 90%;
+            max-width: 1200px;
+            margin: 0 auto;
         }
         
+        /* Profile sections */
         .profile-container {
             display: flex;
             flex-wrap: wrap;
             gap: 2rem;
-            margin-top: 2rem;
+            margin-top: 1rem;
         }
         
         .profile-sidebar {
             flex: 1;
             min-width: 250px;
+            max-width: 350px;
         }
         
         .profile-main {
@@ -133,16 +117,23 @@
             min-width: 300px;
         }
         
-        .profile-card, .activity-card, .settings-card {
+        .card {
             background-color: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
             margin-bottom: 2rem;
             overflow: hidden;
+            border: 1px solid rgba(0,0,0,0.05);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
         }
         
         .profile-header {
-            background-color: var(--primary-color);
+            background: linear-gradient(135deg, var(--primary-color) 0%, #5c6bc0 100%);
             color: white;
             padding: 2rem;
             text-align: center;
@@ -161,6 +152,7 @@
             font-size: 3rem;
             color: var(--primary-color);
             border: 4px solid white;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
         }
         
         .profile-name {
@@ -170,7 +162,12 @@
         
         .profile-role {
             font-size: 0.9rem;
-            opacity: 0.8;
+            opacity: 0.9;
+            background: rgba(255,255,255,0.2);
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 50px;
+            margin-top: 0.5rem;
         }
         
         .profile-info {
@@ -209,17 +206,27 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            background-color: var(--white);
         }
         
         .card-header h3 {
             margin: 0;
             font-size: 1.2rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+        }
+        
+        .card-header h3 i {
+            margin-right: 0.75rem;
+            color: var(--primary-color);
         }
         
         .card-body {
             padding: 1.5rem;
         }
         
+        /* Stats grid */
         .stat-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -227,11 +234,12 @@
         }
         
         .stat-item {
-            background-color: var(--light-bg);
+            background-color: var(--light-color);
             padding: 1.2rem;
             border-radius: 8px;
             text-align: center;
             transition: transform 0.2s, box-shadow 0.2s;
+            border: 1px solid rgba(0,0,0,0.05);
         }
         
         .stat-item:hover {
@@ -251,6 +259,7 @@
             margin-top: 0.5rem;
         }
         
+        /* Activity list */
         .activity-list {
             list-style: none;
             padding: 0;
@@ -272,12 +281,13 @@
             width: 40px;
             height: 40px;
             border-radius: 50%;
-            background-color: rgba(23, 162, 184, 0.1);
+            background-color: rgba(var(--primary-rgb), 0.1);
             display: flex;
             justify-content: center;
             align-items: center;
             margin-right: 1rem;
             color: var(--primary-color);
+            flex-shrink: 0;
         }
         
         .activity-content {
@@ -294,6 +304,7 @@
             color: var(--text-muted);
         }
         
+        /* Forms and fields */
         .settings-form {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -301,7 +312,7 @@
         }
         
         .form-group {
-            margin-bottom: 1rem;
+            margin-bottom: 1.5rem;
         }
         
         .form-group label {
@@ -312,35 +323,32 @@
         
         .form-group input, .form-group select {
             width: 100%;
-            padding: 0.6rem;
+            padding: 0.75rem;
             border: 1px solid var(--border-color);
-            border-radius: 4px;
+            border-radius: 5px;
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
         }
         
-        .settings-actions {
-            margin-top: 1.5rem;
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 0.2rem rgba(var(--primary-rgb), 0.25);
+        }
+        
+        .form-text {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+        
+        .settings-footer {
+            padding-top: 1rem;
+            border-top: 1px solid rgba(0,0,0,0.05);
             text-align: right;
         }
         
-        .btn {
-            display: inline-block;
-            padding: 0.6rem 1.5rem;
-            border-radius: 4px;
-            text-decoration: none;
-            font-weight: 500;
-            cursor: pointer;
-            border: 0;
-        }
-        
-        .btn-primary {
-            background-color: var(--primary-color);
-            color: white;
-        }
-        
-        .btn-primary:hover {
-            background-color: var(--primary-dark);
-        }
-        
+        /* Notification settings */
         .notification-settings {
             list-style: none;
             padding: 0;
@@ -354,6 +362,10 @@
             border-bottom: 1px solid var(--border-color);
         }
         
+        .notification-item:last-child {
+            border-bottom: none;
+        }
+        
         .notification-info h4 {
             margin: 0 0 0.3rem 0;
             font-size: 1rem;
@@ -364,6 +376,7 @@
             font-size: 0.9rem;
         }
         
+        /* Toggle switch */
         .toggle-switch {
             position: relative;
             display: inline-block;
@@ -408,254 +421,445 @@
         input:checked + .slider:before {
             transform: translateX(24px);
         }
-
-        footer {
+        
+        /* Buttons */
+        .btn {
+            display: inline-block;
+            font-weight: 500;
             text-align: center;
-            margin-top: 2rem;
-            padding: 1.5rem 0;
-            color: #6c757d;
-            background-color: #343a40;
+            white-space: nowrap;
+            vertical-align: middle;
+            user-select: none;
+            border: 1px solid transparent;
+            padding: 0.75rem 1.5rem;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            border-radius: 5px;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+        
+        .btn-primary {
             color: #fff;
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+            box-shadow: 0 2px 5px rgba(var(--primary-rgb), 0.3);
+        }
+        
+        .btn-primary:hover {
+            color: #fff;
+            background-color: #3a4bb0;
+            border-color: #3a4bb0;
+            transform: translateY(-1px);
+            box-shadow: 0 5px 10px rgba(var(--primary-rgb), 0.35);
+        }
+        
+        .btn-outline-primary {
+            color: var(--primary-color);
+            background-color: transparent;
+            border-color: var(--primary-color);
+            padding: 0.75rem 1.5rem;
+            font-weight: 500;
+        }
+        
+        .btn-outline-primary:hover {
+            color: #fff;
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+            transform: translateY(-1px);
+        }
+        
+        /* User dropdown */
+        .user-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            right: 0;
+            background-color: white;
+            min-width: 200px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            z-index: 100;
+            border-radius: 5px;
+            overflow: hidden;
+            border: 1px solid rgba(0,0,0,0.05);
+            margin-top: 0.5rem;
+        }
+        
+        .user-dropdown:hover .dropdown-content {
+            display: block;
+        }
+        
+        .dropdown-content a {
+            display: block;
+            padding: 0.75rem 1rem;
+            text-decoration: none;
+            color: var(--dark-color);
+            transition: all 0.2s;
+        }
+        
+        .dropdown-content a:not(:last-child) {
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+        }
+        
+        .dropdown-content a:hover {
+            background-color: rgba(var(--primary-rgb), 0.05);
+            color: var(--primary-color);
+        }
+        
+        .dropdown-content a i {
+            margin-right: 0.5rem;
+            opacity: 0.7;
+        }
+        
+        /* Alerts */
+        .alert {
+            border-radius: 5px;
+            padding: 1rem 1.5rem;
+            margin-bottom: 1.5rem;
+            border: none;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .alert-danger {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        /* Footer */
+        .footer {
+            background-color: var(--dark-color);
+            color: rgba(255,255,255,0.7);
+            padding: 3rem 0 1.5rem;
+            text-align: center;
+        }
+        
+        .footer p {
+            margin: 0;
+            opacity: 0.7;
+        }
+        
+        /* Animation */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .animate {
+            opacity: 0;
+            animation: fadeIn 0.8s forwards;
+        }
+        
+        .delay-1 {
+            animation-delay: 0.2s;
+        }
+        
+        .delay-2 {
+            animation-delay: 0.4s;
+        }
+        
+        /* Responsive */
+        @media (max-width: 992px) {
+            .profile-container {
+                flex-direction: column;
+            }
+            
+            .profile-sidebar {
+                max-width: 100%;
+            }
         }
         
         @media (max-width: 768px) {
             .container {
                 width: 95%;
-                padding: 1rem;
+                padding: 0 1rem;
             }
             
-            .profile-container {
-                flex-direction: column;
+            .navbar-brand {
+                font-size: 1.2rem;
             }
             
-            .header-content {
-                flex-direction: column;
-                width: 95%;
+            .navbar-brand i {
+                font-size: 1.5rem;
             }
             
-            nav ul {
-                margin-top: 1rem;
-            }
-            
-            nav ul li {
-                margin-left: 1rem;
-                margin-right: 1rem;
+            .btn {
+                padding: 0.5rem 1rem;
             }
         }
     </style>
 </head>
 <body>
-    <header>
-        <div class="header-content">
-            <div class="logo">
-                <h1>Log Analyzer</h1>
-            </div>
-            <nav>
-                <ul>
-                    <li><a href="/"><i class="fas fa-home"></i> Home</a></li>
-                    <li><a href="#" id="dashboard-link" onclick="checkDashboardAccess(event)"><i class="fas fa-chart-line"></i> Dashboard</a></li>
-                    <li><a href="#" onclick="checkReportsAccess(event)"><i class="fas fa-file-alt"></i> Reports</a></li>
-                    <li><a href="{% url 'contact' %}" onclick="showContactModal(event)"><i class="fas fa-envelope"></i> Contact Us</a></li>
+    <!-- Navigation - Updated to match contact.html -->
+    <nav class="navbar navbar-expand-lg">
+        <div class="container">
+            <a class="navbar-brand" href="/"><i class="fas fa-shield-alt"></i>LogSentry</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'dashboard' %}">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'contact' %}">Contact Us</a>
+                    </li>
                     
                     {% if user.is_authenticated %}
-                    <li class="user-dropdown">
-                        <span class="username">
-                            <i class="fas fa-user"></i> {{ user.username }} <i class="fas fa-chevron-down"></i>
-                        </span>
-                        <div class="dropdown-content">
-                            <a href="{% url 'profile' %}"><i class="fas fa-id-card"></i> Profile</a>
-                            <a href="{% url 'settings' %}"><i class="fas fa-cog"></i> Settings</a>
-                            <a href="{% url 'logout' %}"><i class="fas fa-sign-out-alt"></i> Logout</a>
-                        </div>
+                    <li class="nav-item dropdown ms-lg-3">
+                        <button class="btn btn-outline-primary dropdown-toggle" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-user"></i>
+                            {{ user.username }}
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="userDropdown">
+                            <li><a class="dropdown-item" href="{% url 'dashboard' %}"><i class="fas fa-chart-line"></i> Dashboard</a></li>
+                            <li><a class="dropdown-item active" href="{% url 'profile' %}"><i class="fas fa-id-card"></i> My Profile</a></li>
+                            <li><a class="dropdown-item" href="{% url 'settings' %}"><i class="fas fa-cog"></i> Settings</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'logout' %}"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
+                        </ul>
                     </li>
                     {% else %}
-                    <li><a href="{% url 'login' %}"><i class="fas fa-user-shield"></i> Login</a></li>
+                    <li class="nav-item ms-lg-3">
+                        <a class="btn btn-outline-primary" href="{% url 'login' %}">Sign In</a>
+                    </li>
+                    <li class="nav-item ms-lg-2">
+                        <a class="btn btn-primary" href="{% url 'signup' %}">Sign Up</a>
+                    </li>
                     {% endif %}
                 </ul>
-            </nav>
-        </div>
-    </header>
-    
-    <div class="container">
-        <div class="profile-container">
-            <div class="profile-sidebar">
-                <div class="profile-card">
-                    <div class="profile-header">
-                        <div class="profile-avatar">
-                            <i class="fas fa-user"></i>
-                        </div>
-                        <h2 class="profile-name">{{ user.username }}</h2>
-                        <div class="profile-role">System Administrator</div>
-                    </div>
-                    <div class="profile-info">
-                        <div class="info-group">
-                            <span class="info-label">Email</span>
-                            <div class="info-value">
-                                <i class="fas fa-envelope"></i>
-                                {{ user.email }}
-                            </div>
-                        </div>
-                        <div class="info-group">
-                            <span class="info-label">Member Since</span>
-                            <div class="info-value">
-                                <i class="fas fa-calendar-alt"></i>
-                                {{ user.date_joined|date:"F d, Y" }}
-                            </div>
-                        </div>
-                        <div class="info-group">
-                            <span class="info-label">Status</span>
-                            <div class="info-value">
-                                <i class="fas fa-check-circle"></i>
-                                Active
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <div class="container">
+            <!-- Alert Messages -->
+            {% if success_message %}
+            <div class="alert alert-success alert-dismissible fade show animate" role="alert">
+                <i class="fas fa-check-circle me-2"></i> {{ success_message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            {% endif %}
             
-            <div class="profile-main">
-                <div class="activity-card">
-                    <div class="card-header">
-                        <h3><i class="fas fa-chart-bar"></i> Monitoring Statistics</h3>
-                    </div>
-                    <div class="card-body">
-                        <div class="stat-grid">
-                            <div class="stat-item">
-                                <div class="stat-value">256</div>
-                                <div class="stat-label">Threats Detected</div>
+            {% if error_message %}
+            <div class="alert alert-danger alert-dismissible fade show animate" role="alert">
+                <i class="fas fa-exclamation-circle me-2"></i> {{ error_message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            {% endif %}
+
+            <div class="profile-container">
+                <!-- Profile Sidebar - No changes needed -->
+                <div class="profile-sidebar animate">
+                    <div class="card">
+                        <div class="profile-header">
+                            <div class="profile-avatar">
+                                <i class="fas fa-user"></i>
                             </div>
-                            <div class="stat-item">
-                                <div class="stat-value">58</div>
-                                <div class="stat-label">Logs Analyzed</div>
+                            <h2 class="profile-name">{{ user.username }}</h2>
+                            <div class="profile-role">
+                                {% if user.is_superuser %}
+                                System Administrator
+                                {% elif user.is_staff %}
+                                Staff Member
+                                {% else %}
+                                Regular User
+                                {% endif %}
                             </div>
-                            <div class="stat-item">
-                                <div class="stat-value">94%</div>
-                                <div class="stat-label">Detection Rate</div>
+                        </div>
+                        <div class="profile-info">
+                            <div class="info-group">
+                                <span class="info-label">Email</span>
+                                <div class="info-value">
+                                    <i class="fas fa-envelope"></i>
+                                    {{ user.email|default:"Not provided" }}
+                                </div>
+                            </div>
+                            <div class="info-group">
+                                <span class="info-label">Full Name</span>
+                                <div class="info-value">
+                                    <i class="fas fa-user"></i>
+                                    {% if user.first_name or user.last_name %}
+                                        {{ user.first_name }} {{ user.last_name }}
+                                    {% else %}
+                                        Not provided
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="info-group">
+                                <span class="info-label">Member Since</span>
+                                <div class="info-value">
+                                    <i class="fas fa-calendar-alt"></i>
+                                    {{ user.date_joined|date:"F d, Y" }}
+                                </div>
+                            </div>
+                            <div class="info-group">
+                                <span class="info-label">Last Login</span>
+                                <div class="info-value">
+                                    <i class="fas fa-clock"></i>
+                                    {{ user.last_login|date:"F d, Y H:i" }}
+                                </div>
+                            </div>
+                            <div class="info-group">
+                                <span class="info-label">Status</span>
+                                <div class="info-value">
+                                    <i class="fas fa-circle" style="color: {% if user.is_active %}#28a745{% else %}#dc3545{% endif %}"></i>
+                                    {% if user.is_active %}Active{% else %}Inactive{% endif %}
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
                 
-                <div class="activity-card">
-                    <div class="card-header">
-                        <h3><i class="fas fa-history"></i> Recent Activity</h3>
-                    </div>
-                    <div class="card-body">
-                        <ul class="activity-list">
-                            <li class="activity-item">
-                                <div class="activity-icon">
-                                    <i class="fas fa-shield-alt"></i>
+                <!-- Profile Main Content -->
+                <div class="profile-main">
+                    <!-- Monitoring Statistics - Updated to use real data -->
+                    <div class="card animate">
+                        <div class="card-header">
+                            <h3><i class="fas fa-chart-bar"></i> Monitoring Statistics</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="stat-grid">
+                                <div class="stat-item">
+                                    <div class="stat-value">{{ threats_detected }}</div>
+                                    <div class="stat-label">Threats Detected</div>
                                 </div>
-                                <div class="activity-content">
-                                    <div class="activity-title">SQL Injection Attempt Detected</div>
-                                    <div class="activity-time">Today at 10:45 AM</div>
+                                <div class="stat-item">
+                                    <div class="stat-value">{{ logs_analyzed }}</div>
+                                    <div class="stat-label">Logs Analyzed</div>
                                 </div>
-                            </li>
-                            <li class="activity-item">
-                                <div class="activity-icon">
-                                    <i class="fas fa-file-alt"></i>
-                                </div>
-                                <div class="activity-content">
-                                    <div class="activity-title">Weekly Security Report Generated</div>
-                                    <div class="activity-time">Yesterday at 9:30 PM</div>
-                                </div>
-                            </li>
-                            <li class="activity-item">
-                                <div class="activity-icon">
-                                    <i class="fas fa-user-shield"></i>
-                                </div>
-                                <div class="activity-content">
-                                    <div class="activity-title">Account Login from New Location</div>
-                                    <div class="activity-time">March 29, 2025 at 3:15 PM</div>
-                                </div>
-                            </li>
-                            <li class="activity-item">
-                                <div class="activity-icon">
-                                    <i class="fas fa-cog"></i>
-                                </div>
-                                <div class="activity-content">
-                                    <div class="activity-title">System Configuration Updated</div>
-                                    <div class="activity-time">March 28, 2025 at 11:20 AM</div>
-                                </div>
-                            </li>
-                        </ul>
-                    </div>
-                </div>
-                
-                <div class="settings-card">
-                    <div class="card-header">
-                        <h3><i class="fas fa-bell"></i> Notification Settings</h3>
-                    </div>
-                    <div class="card-body">
-                        <ul class="notification-settings">
-                            <li class="notification-item">
-                                <div class="notification-info">
-                                    <h4>Critical Security Alerts</h4>
-                                    <div class="notification-description">Get notified immediately about critical security threats</div>
-                                </div>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" checked>
-                                    <span class="slider"></span>
-                                </label>
-                            </li>
-                            <li class="notification-item">
-                                <div class="notification-info">
-                                    <h4>Suspicious Activity</h4>
-                                    <div class="notification-description">Notifications about potentially suspicious activities</div>
-                                </div>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" checked>
-                                    <span class="slider"></span>
-                                </label>
-                            </li>
-                            <li class="notification-item">
-                                <div class="notification-info">
-                                    <h4>System Updates</h4>
-                                    <div class="notification-description">Get notified about system maintenance and updates</div>
-                                </div>
-                                <label class="toggle-switch">
-                                    <input type="checkbox">
-                                    <span class="slider"></span>
-                                </label>
-                            </li>
-                            <li class="notification-item">
-                                <div class="notification-info">
-                                    <h4>Weekly Reports</h4>
-                                    <div class="notification-description">Receive weekly summary reports of security events</div>
-                                </div>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" checked>
-                                    <span class="slider"></span>
-                                </label>
-                            </li>
-                        </ul>
-                    </div>
-                </div>
-                
-                <div class="settings-card">
-                    <div class="card-header">
-                        <h3><i class="fas fa-user-lock"></i> Security Settings</h3>
-                    </div>
-                    <div class="card-body">
-                        <form class="settings-form">
-                            <div>
-                                <div class="form-group">
-                                    <label for="current-password">Current Password</label>
-                                    <input type="password" id="current-password" placeholder="Enter current password">
-                                </div>
-                                <div class="form-group">
-                                    <label for="new-password">New Password</label>
-                                    <input type="password" id="new-password" placeholder="Enter new password">
-                                </div>
-                                <div class="form-group">
-                                    <label for="confirm-password">Confirm New Password</label>
-                                    <input type="password" id="confirm-password" placeholder="Confirm new password">
+                                <div class="stat-item">
+                                    <div class="stat-value">{{ detection_rate }}</div>
+                                    <div class="stat-label">Detection Rate</div>
                                 </div>
                             </div>
-                           
-                        </form>
-                        <div class="settings-actions">
-                            <button class="btn btn-primary">Save Changes</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Recent Activity - Updated to show real activity data -->
+                    <div class="card animate delay-1">
+                        <div class="card-header">
+                            <h3><i class="fas fa-history"></i> Recent Activity</h3>
+                        </div>
+                        <div class="card-body">
+                            <ul class="activity-list">
+                                {% if recent_activities %}
+                                    {% for activity in recent_activities %}
+                                    <li class="activity-item">
+                                        <div class="activity-icon">
+                                            <i class="{{ activity.icon|default:'fas fa-info-circle' }}"></i>
+                                        </div>
+                                        <div class="activity-content">
+                                            <div class="activity-title">{{ activity.title }}</div>
+                                            <div class="activity-time">{{ activity.timestamp }}</div>
+                                        </div>
+                                    </li>
+                                    {% endfor %}
+                                {% else %}
+                                    <li class="activity-item">
+                                        <div class="activity-icon">
+                                            <i class="fas fa-exclamation-triangle"></i>
+                                        </div>
+                                        <div class="activity-content">
+                                            <div class="activity-title">No recent activities found</div>
+                                            <div class="activity-time">Check back later for updates</div>
+                                        </div>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <!-- Notification Settings - Updated to show only supported notifications -->
+                    <div class="card animate delay-2">
+                        <div class="card-header">
+                            <h3><i class="fas fa-bell"></i> Notification Settings</h3>
+                        </div>
+                        <div class="card-body">
+                            <form id="notificationForm" method="post" action="{% url 'settings' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="notification_settings" value="1">
+                                <ul class="notification-settings">
+                                    <li class="notification-item">
+                                        <div class="notification-info">
+                                            <h4>Critical Security Alerts</h4>
+                                            <div class="notification-description">Get notified immediately about critical security threats</div>
+                                        </div>
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" name="critical_alerts" checked disabled>
+                                            <span class="slider"></span>
+                                        </label>
+                                    </li>
+                                    <li class="notification-item">
+                                        <div class="notification-info">
+                                            <h4>Suspicious Activity</h4>
+                                            <div class="notification-description">Notifications about potentially suspicious activities</div>
+                                        </div>
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" name="high_alerts" {% if notification_settings.high_alerts %}checked{% endif %}>
+                                            <span class="slider"></span>
+                                        </label>
+                                    </li>
+                                    <li class="notification-item">
+                                        <div class="notification-info">
+                                            <h4>Weekly Reports</h4>
+                                            <div class="notification-description">Receive weekly summary reports of security events</div>
+                                        </div>
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" name="low_alerts" {% if notification_settings.low_alerts %}checked{% endif %}>
+                                            <span class="slider"></span>
+                                        </label>
+                                    </li>
+                                </ul>
+                                <div class="settings-footer">
+                                    <button type="submit" class="btn btn-primary">Save Notification Settings</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                    
+                    <!-- Security Settings -->
+                    <div class="card animate delay-2">
+                        <div class="card-header">
+                            <h3><i class="fas fa-user-lock"></i> Security Settings</h3>
+                        </div>
+                        <div class="card-body">
+                            <form class="settings-form" method="post" action="{% url 'settings' %}" id="passwordChangeForm">
+                                {% csrf_token %}
+                                <input type="hidden" name="change_password" value="1">
+                                <div>
+                                    <div class="form-group">
+                                        <label for="current_password">Current Password</label>
+                                        <input type="password" id="current_password" name="current_password" placeholder="Enter current password" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="new_password">New Password</label>
+                                        <input type="password" id="new_password" name="new_password" placeholder="Enter new password" required>
+                                        <div class="form-text">Must be at least 8 characters long</div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="confirm_password">Confirm New Password</label>
+                                        <input type="password" id="confirm_password" name="confirm_password" placeholder="Confirm new password" required>
+                                    </div>
+                                </div>
+                                <div class="settings-footer">
+                                    <button type="submit" class="btn btn-primary">Change Password</button>
+                                </div>
+                            </form>
                         </div>
                     </div>
                 </div>
@@ -663,8 +867,150 @@
         </div>
     </div>
     
-    <footer>
-        <p>&copy; 2025 Log Detection Platform | Securing your servers 24/7</p>
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; {% now "Y" %} LogSentry | Securing your servers 24/7</p>
+        </div>
     </footer>
+
+    <!-- Bootstrap and custom scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Password change form validation
+            const passwordForm = document.getElementById('passwordChangeForm');
+            if (passwordForm) {
+                passwordForm.addEventListener('submit', function(e) {
+                    const newPassword = document.getElementById('new_password').value;
+                    const confirmPassword = document.getElementById('confirm_password').value;
+                    
+                    if (newPassword !== confirmPassword) {
+                        e.preventDefault();
+                        showAlert('danger', 'Passwords do not match. Please try again.');
+                        return false;
+                    }
+                    
+                    if (newPassword.length < 8) {
+                        e.preventDefault();
+                        showAlert('danger', 'Password must be at least 8 characters long.');
+                        return false;
+                    }
+                });
+            }
+            
+            // Notification form automatic submission on toggle
+            document.querySelectorAll('.toggle-switch input').forEach(toggle => {
+                toggle.addEventListener('change', function() {
+                    // Auto-save notification settings when toggled
+                    document.getElementById('notificationForm').submit();
+                });
+            });
+            
+            // Animate elements when they come into view
+            const animateElements = document.querySelectorAll('.animate');
+            
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.style.opacity = 1;
+                    }
+                });
+            }, {
+                threshold: 0.1
+            });
+            
+            animateElements.forEach(element => {
+                observer.observe(element);
+            });
+            
+            // Navbar scroll effect
+            window.addEventListener('scroll', function() {
+                const navbar = document.querySelector('.navbar');
+                if (window.scrollY > 50) {
+                    navbar.classList.add('scrolled');
+                } else {
+                    navbar.classList.remove('scrolled');
+                }
+            });
+        });
+        
+        // Show alert message
+        function showAlert(type, message) {
+            // Create alert container if it doesn't exist
+            const container = document.querySelector('.container');
+            let alertsContainer = document.createElement('div');
+            alertsContainer.className = `alert alert-${type} alert-dismissible fade show animate`;
+            alertsContainer.role = 'alert';
+            
+            // Add icon based on type
+            let icon = 'info-circle';
+            if (type === 'success') icon = 'check-circle';
+            if (type === 'danger') icon = 'exclamation-circle';
+            if (type === 'warning') icon = 'exclamation-triangle';
+            
+            alertsContainer.innerHTML = `
+                <i class="fas fa-${icon} me-2"></i> ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            `;
+            
+            // Insert at top of container
+            container.insertBefore(alertsContainer, container.firstChild);
+            
+            // Auto-dismiss after 5 seconds
+            setTimeout(() => {
+                alertsContainer.classList.remove('show');
+                setTimeout(() => {
+                    alertsContainer.remove();
+                }, 150);
+            }, 5000);
+        }
+    </script>
+    <script>
+    // Function to fetch real-time profile statistics
+    function fetchProfileStats() {
+        fetch('/api/profile-stats/')
+            .then(response => response.json())
+            .then(data => {
+                // Update statistics
+                document.querySelectorAll('.stat-value')[0].textContent = data.threats_detected;
+                document.querySelectorAll('.stat-value')[1].textContent = data.logs_analyzed;
+                document.querySelectorAll('.stat-value')[2].textContent = data.detection_rate;
+                
+                // Update recent activities
+                const activityList = document.querySelector('.activity-list');
+                if (activityList && data.recent_activities && data.recent_activities.length > 0) {
+                    // Clear existing content and "no activities" message
+                    activityList.innerHTML = '';
+                    
+                    // Add each activity
+                    data.recent_activities.forEach(activity => {
+                        const li = document.createElement('li');
+                        li.className = 'activity-item';
+                        li.innerHTML = `
+                            <div class="activity-icon">
+                                <i class="${activity.icon || 'fas fa-info-circle'}"></i>
+                            </div>
+                            <div class="activity-content">
+                                <div class="activity-title">${activity.title}</div>
+                                <div class="activity-time">${activity.timestamp}</div>
+                            </div>
+                        `;
+                        activityList.appendChild(li);
+                    });
+                }
+            })
+            .catch(error => console.error('Error fetching profile stats:', error));
+    }
+    
+    // Start auto-refresh
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initial fetch
+        fetchProfileStats();
+        
+        // Set interval to refresh every 60 seconds
+        setInterval(fetchProfileStats, 60000);
+    });
+</script>
 </body>
 </html>

@@ -3,491 +3,1351 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Log Detection Platform</title>
+    <title>LogSentry - Vigilant log analysis for enterprise security</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
+        :root {
+            --primary-color: #3f51b5;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --warning-color: #ffc107;
+            --info-color: #17a2b8;
+            --light-color: #f8f9fa;
+            --dark-color: #343a40;
+            --white: #ffffff;
+            --primary-rgb: 63, 81, 181;
+            --navbar-height: 80px;
+        }
+        
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             line-height: 1.6;
             margin: 0;
             padding: 0;
             color: #333;
-            background-color: #f8f9fa;
+            background-color: var(--light-color);
+            overflow-x: hidden;
         }
-        .container {
-            width: 80%;
-            margin: 0 auto;
-            padding: 2rem;
-        }
-        header {
-            background-color: #343a40;
-            color: #fff;
-            padding: 1rem 0;
-            position: sticky;
+        
+        /* Navigation Bar */
+        .navbar {
+            background-color: var(--white);
+            padding: 0.8rem 1rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            position: fixed;
+            width: 100%;
             top: 0;
-            z-index: 100;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 1000;
+            transition: all 0.3s ease;
+            height: var(--navbar-height);
         }
-        .header-content {
+        
+        .navbar.scrolled {
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            height: 70px;
+        }
+        
+        .navbar-brand {
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            width: 80%;
+            font-weight: 600;
+            font-size: 1.5rem;
+            color: var(--primary-color);
+        }
+        
+        .navbar-brand i {
+            margin-right: 0.5rem;
+            font-size: 1.8rem;
+        }
+        
+        .navbar .nav-item {
+            margin: 0 0.2rem;
+        }
+        
+        .navbar .nav-link {
+            color: var(--dark-color);
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            transition: all 0.2s ease;
+        }
+        
+        .navbar .nav-link:hover {
+            color: var(--primary-color);
+            background-color: rgba(var(--primary-rgb), 0.05);
+        }
+        
+        .navbar .nav-link.active {
+            color: var(--primary-color);
+            background-color: rgba(var(--primary-rgb), 0.1);
+        }
+        
+        .navbar .btn-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+            padding: 0.5rem 1.5rem;
+            font-weight: 500;
+            box-shadow: 0 2px 5px rgba(var(--primary-rgb), 0.3);
+        }
+        
+        .navbar .btn-primary:hover {
+            background-color: #3a4bb0;
+            border-color: #3a4bb0;
+            transform: translateY(-1px);
+        }
+        
+        /* Hero Section */
+        .hero-section {
+            padding: calc(var(--navbar-height) + 3rem) 0 5rem;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e6ecf8 100%);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .hero-content {
+            position: relative;
+            z-index: 2;
+        }
+        
+        .hero-title {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            line-height: 1.2;
+            color: var(--dark-color);
+        }
+        
+        .hero-subtitle {
+            font-size: 1.25rem;
+            color: var(--secondary-color);
+            margin-bottom: 2rem;
+            max-width: 600px;
+        }
+        
+        .hero-image {
+            position: relative;
+            z-index: 2;
+        }
+        
+        .hero-image img {
+            width: 100%;
+            border-radius: 10px;
+            box-shadow: 0 15px 30px rgba(0,0,0,0.1);
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+        
+        .hero-shape {
+            position: absolute;
+            bottom: -10%;
+            right: -5%;
+            width: 300px;
+            height: 300px;
+            background-color: rgba(var(--primary-rgb), 0.05);
+            border-radius: 50%;
+            z-index: 1;
+        }
+        
+        .hero-shape-2 {
+            position: absolute;
+            top: 10%;
+            left: -5%;
+            width: 200px;
+            height: 200px;
+            background-color: rgba(var(--primary-rgb), 0.05);
+            border-radius: 50%;
+            z-index: 1;
+        }
+        
+        /* Features Section */
+        .features-section {
+            padding: 5rem 0;
+            background-color: var(--white);
+        }
+        
+        .section-title {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+        
+        .section-title h2 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--dark-color);
+            margin-bottom: 1rem;
+        }
+        
+        .section-title p {
+            color: var(--secondary-color);
+            max-width: 700px;
             margin: 0 auto;
         }
-        .logo h1 {
-            margin: 0;
-            font-size: 1.5rem;
+        
+        .feature-card {
+            background-color: var(--white);
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+            margin-bottom: 2rem;
+            transition: all 0.3s ease;
+            height: 100%;
+            border: 1px solid rgba(0,0,0,0.05);
         }
-        nav ul {
+        
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+        }
+        
+        .feature-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
             display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1.5rem;
+            font-size: 1.8rem;
+        }
+        
+        .feature-icon.blue {
+            background-color: rgba(var(--primary-rgb), 0.1);
+            color: var(--primary-color);
+        }
+        
+        .feature-icon.green {
+            background-color: rgba(40, 167, 69, 0.1);
+            color: var(--success-color);
+        }
+        
+        .feature-icon.red {
+            background-color: rgba(220, 53, 69, 0.1);
+            color: var(--danger-color);
+        }
+        
+        .feature-icon.yellow {
+            background-color: rgba(255, 193, 7, 0.1);
+            color: var(--warning-color);
+        }
+        
+        .feature-icon.teal {
+            background-color: rgba(23, 162, 184, 0.1);
+            color: var(--info-color);
+        }
+        
+        .feature-icon.purple {
+            background-color: rgba(111, 66, 193, 0.1);
+            color: #6f42c1;
+        }
+        
+        .feature-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--dark-color);
+        }
+        
+        .feature-description {
+            color: var(--secondary-color);
+            font-size: 0.95rem;
+        }
+        
+        /* Dashboard Preview Section */
+        .dashboard-preview {
+            padding: 5rem 0;
+            background-color: #f5f7fa;
+            position: relative;
+        }
+        
+        .dashboard-image {
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 15px 30px rgba(0,0,0,0.1);
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+        
+        .dashboard-image img {
+            width: 100%;
+           
+        }
+        
+        .dashboard-feature-item {
+            padding: 1rem 0;
+            display: flex;
+            align-items: flex-start;
+        }
+        
+        .dashboard-feature-icon {
+            margin-right: 1rem;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 1.2rem;
+            background-color: rgba(var(--primary-rgb), 0.1);
+            color: var(--primary-color);
+        }
+        
+        .dashboard-feature-content h4 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--dark-color);
+        }
+        
+        .dashboard-feature-content p {
+            color: var(--secondary-color);
+            font-size: 0.9rem;
+            margin-bottom: 0;
+        }
+        
+        /* How It Works Section */
+        .how-it-works {
+            padding: 5rem 0;
+            background-color: var(--white);
+        }
+        
+        .step-card {
+            background-color: var(--white);
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+            margin-bottom: 2rem;
+            position: relative;
+            height: 100%;
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+        
+        .step-number {
+            position: absolute;
+            top: -15px;
+            left: 20px;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background-color: var(--primary-color);
+            color: var(--white);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            box-shadow: 0 2px 5px rgba(var(--primary-rgb), 0.3);
+        }
+        
+        .step-icon {
+            margin-bottom: 1.5rem;
+            font-size: 2rem;
+            color: var(--primary-color);
+        }
+        
+        .step-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--dark-color);
+        }
+        
+        .step-description {
+            color: var(--secondary-color);
+            font-size: 0.95rem;
+        }
+        
+        /* Stats Section */
+        .stats-section {
+            padding: 4rem 0;
+            background: linear-gradient(135deg, #3f51b5 0%, #6d5bde 100%);
+            color: white;
+        }
+        
+        .stats-card {
+            text-align: center;
+            padding: 1.5rem;
+        }
+        
+        .stats-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            color: rgba(255,255,255,0.8);
+        }
+        
+        .stats-number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stats-label {
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            opacity: 0.8;
+        }
+        
+        /* Testimonial Section */
+        .testimonial-section {
+            padding: 5rem 0;
+            background-color: #f5f7fa;
+        }
+        
+        .testimonial-card {
+            background-color: var(--white);
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+            margin-bottom: 2rem;
+            border: 1px solid rgba(0,0,0,0.05);
+            height: 100%;
+        }
+        
+        .testimonial-content {
+            font-style: italic;
+            margin-bottom: 1.5rem;
+            color: var(--dark-color);
+            position: relative;
+        }
+        
+        .testimonial-content:before {
+            content: '\201C';
+            font-size: 4rem;
+            position: absolute;
+            left: -1.5rem;
+            top: -1.5rem;
+            color: rgba(var(--primary-rgb), 0.1);
+            font-family: sans-serif;
+        }
+        
+        .testimonial-author {
+            display: flex;
+            align-items: center;
+        }
+        
+        .testimonial-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            overflow: hidden;
+            margin-right: 1rem;
+        }
+        
+        .testimonial-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .testimonial-name {
+            font-weight: 600;
+            color: var(--dark-color);
+            margin-bottom: 0.25rem;
+        }
+        
+        .testimonial-position {
+            color: var(--secondary-color);
+            font-size: 0.9rem;
+        }
+        
+        /* FAQ Section */
+        .faq-section {
+            padding: 5rem 0;
+            background-color: var(--white);
+        }
+        
+        .accordion-item {
+            border: none;
+            margin-bottom: 1rem;
+            border-radius: 10px !important;
+            overflow: hidden;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.05);
+        }
+        
+        .accordion-button {
+            background-color: var(--white);
+            box-shadow: none;
+            padding: 1.25rem;
+            font-weight: 600;
+            color: var(--dark-color);
+        }
+        
+        .accordion-button:not(.collapsed) {
+            background-color: rgba(var(--primary-rgb), 0.05);
+            color: var(--primary-color);
+        }
+        
+        .accordion-button:focus {
+            box-shadow: none;
+            border-color: rgba(var(--primary-rgb), 0.1);
+        }
+        
+        .accordion-body {
+            padding: 1.25rem;
+            color: var(--secondary-color);
+        }
+        
+        /* CTA Section */
+        .cta-section {
+            padding: 5rem 0;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e6ecf8 100%);
+        }
+        
+        .cta-box {
+            background-color: var(--white);
+            padding: 3rem;
+            border-radius: 10px;
+            box-shadow: 0 15px 30px rgba(0,0,0,0.1);
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .cta-box h2 {
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            color: var(--dark-color);
+        }
+        
+        .cta-box p {
+            color: var(--secondary-color);
+            margin-bottom: 2rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .cta-shape {
+            position: absolute;
+            bottom: -50px;
+            right: -50px;
+            width: 200px;
+            height: 200px;
+            background-color: rgba(var(--primary-rgb), 0.05);
+            border-radius: 50%;
+        }
+        
+        /* Footer */
+        .footer {
+            background-color: var(--dark-color);
+            color: rgba(255,255,255,0.7);
+            padding: 4rem 0 2rem;
+        }
+        
+        .footer-brand {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 1rem;
+            display: block;
+        }
+        
+        .footer-brand i {
+            margin-right: 0.5rem;
+        }
+        
+        .footer-description {
+            margin-bottom: 2rem;
+            opacity: 0.7;
+        }
+        
+        .footer h5 {
+            font-size: 1.1rem;
+            margin-bottom: 1.5rem;
+            color: white;
+            font-weight: 600;
+        }
+        
+        .footer-links {
             list-style: none;
             padding: 0;
         }
-        nav ul li {
-            margin-left: 1.5rem;
+        
+        .footer-links li {
+            margin-bottom: 0.75rem;
         }
-        nav ul li a {
-            color: #fff;
+        
+        .footer-links a {
+            color: rgba(255,255,255,0.7);
             text-decoration: none;
-            transition: color 0.3s;
+            transition: all 0.3s;
         }
-        nav ul li a:hover {
-            color: #17a2b8;
-        }
-        .content {
-            background-color: #fff;
-            padding: 2rem;
-            border-radius: 5px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            margin-top: 2rem;
-        }
-        .hero {
-            text-align: center;
-            padding: 3rem 0;
-        }
-        .hero h2 {
-            font-size: 2.5rem;
-            margin-bottom: 1rem;
-            color: #343a40;
-        }
-        .hero p {
-            font-size: 1.2rem;
-            max-width: 800px;
-            margin: 0 auto 2rem;
-            color: #6c757d;
-        }
-        .cta-button {
-            display: inline-block;
-            background-color: #17a2b8;
+        
+        .footer-links a:hover {
             color: white;
-            padding: 0.8rem 1.5rem;
+        }
+        
+        .footer-links i {
+            margin-right: 0.5rem;
+            opacity: 0.6;
+        }
+        
+        .footer hr {
+            border-color: rgba(255,255,255,0.1);
+            margin: 3rem 0 2rem;
+        }
+        
+        .copyright {
+            color: rgba(255,255,255,0.5);
+            text-align: center;
+        }
+        
+        .social-links {
+            display: flex;
+            margin-bottom: 1.5rem;
+        }
+        
+        .social-links a {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: rgba(255,255,255,0.1);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             text-decoration: none;
-            border-radius: 5px;
-            font-weight: bold;
-            transition: background-color 0.3s;
+            margin-right: 0.75rem;
+            transition: all 0.3s;
         }
-        .cta-button:hover {
-            background-color: #138496;
+        
+        .social-links a:hover {
+            background-color: var(--primary-color);
+            transform: translateY(-3px);
         }
-        .features {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: space-between;
-            margin-top: 2rem;
+        
+        /* Utility Classes */
+        .btn-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+            padding: 0.75rem 1.5rem;
+            font-weight: 500;
+            box-shadow: 0 2px 5px rgba(var(--primary-rgb), 0.3);
         }
-        .feature-box {
-            flex-basis: 48%;
-            background-color: #f1f1f1;
-            padding: 1.5rem;
-            border-radius: 5px;
-            margin-bottom: 1.5rem;
-            transition: transform 0.3s, box-shadow 0.3s;
-            display: flex;
-            align-items: flex-start;
+        
+        .btn-primary:hover {
+            background-color: #3a4bb0;
+            border-color: #3a4bb0;
+            transform: translateY(-1px);
+            box-shadow: 0 5px 10px rgba(var(--primary-rgb), 0.35);
         }
-        .feature-box:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        
+        .btn-outline-primary {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+            padding: 0.75rem 1.5rem;
+            font-weight: 500;
         }
-        .feature-icon {
-            font-size: 2rem;
-            color: #17a2b8;
-            margin-right: 1rem;
-            min-width: 2.5rem;
-            text-align: center;
+        
+        .btn-outline-primary:hover {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+            transform: translateY(-1px);
         }
-        .feature-content h3 {
-            margin-top: 0;
-            color: #343a40;
+        
+        .btn-lg {
+            padding: 1rem 2.5rem;
         }
-
-        .features-container {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 2rem;
-            gap: 2rem;
-        }
-
-        .features-column {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
+        
+        .bg-gradient-primary {
+            background: linear-gradient(135deg, var(--primary-color) 0%, #6d5bde 100%);
         }
 
-        .feature-box {
-            flex-grow: 1;
-            background-color: #f1f1f1;
-            padding: 1.5rem;
-            border-radius: 5px;
-            margin-bottom: 1.5rem;
-            transition: transform 0.3s, box-shadow 0.3s;
-            display: flex;
-            align-items: flex-start;
-        }
-        footer {
-            text-align: center;
-            margin-top: 2rem;
-            padding: 1.5rem 0;
-            color: #6c757d;
-            background-color: #343a40;
-            color: #fff;
-        }
-        .stats-section {
-            background-color: #17a2b8;
-            padding: 2rem 0;
+        .badge-success {
+            background-color: var(--success-color);
             color: white;
-            text-align: center;
-            margin: 3rem 0 0;
+            padding: 0.5em 1em;
+            border-radius: 50px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            margin-left: 1rem;
         }
-        .stats-container {
-            display: flex;
-            justify-content: space-around;
-            max-width: 1000px;
-            margin: 0 auto;
-            flex-wrap: wrap;
-        }
-        .stat-item {
-            flex: 1;
-            min-width: 200px;
-            margin: 1rem;
-        }
-        .stat-number {
-            font-size: 2.5rem;
-            font-weight: bold;
-            margin-bottom: 0.5rem;
-        }
-        .dashboard-showcase {
-            margin: 3rem 0;
-            text-align: center;
-            padding: 2rem 0;
-            background-color: #f8f9fa;
-            border-radius: 5px;
-        }
-        .dashboard-showcase h2 {
-            color: #343a40;
-            margin-bottom: 2rem;
-        }
-        .dashboard-img {
-            max-width: 90%;
-            height: auto;
-            border-radius: 8px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-            border: 1px solid #ddd;
-        }
-
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-        }
-
-        .modal-content {
-            background-color: #fff;
-            margin: 15% auto;
-            padding: 2rem;
-            border-radius: 5px;
-            max-width: 400px;
-            animation: modalFade 0.3s ease;
-        }
-
-        @keyframes modalFade {
-            from { opacity: 0; transform: translateY(-20px); }
+        
+        /* Animation */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
             to { opacity: 1; transform: translateY(0); }
         }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-        }
-
-        .modal-header h3 {
-            margin: 0;
-            color: #343a40;
-        }
-
-        .close-modal {
-            background: none;
-            border: none;
-            font-size: 1.5rem;
-            cursor: pointer;
-            color: #aaa;
-        }
-
-        .close-modal:hover {
-            color: #333;
-        }
-
-        .modal-body {
-            margin-bottom: 1.5rem;
-        }
-
-        .modal-footer {
-            text-align: right;
-        }
-
-        .modal-footer .btn {
-            display: inline-block;
-            background-color: #17a2b8;
-            color: white;
-            padding: 0.6rem 1rem;
-            text-decoration: none;
-            border-radius: 5px;
-            font-weight: bold;
-            transition: background-color 0.3s;
-            margin-left: 0.5rem;
-        }
-
-        .modal-footer .btn:hover {
-            background-color: #138496;
-        }
-
-        .user-dropdown {
-        position: relative;
-        display: inline-block;
-    }
-    
-    .dropdown-content {
-        display: none;
-        position: absolute;
-        right: 0;
-        background-color: #343a40;
-        min-width: 120px;
-        box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
-        z-index: 150;
-        border-radius: 4px;
-    }
-    
-    .dropdown-content a {
-        color: white;
-        padding: 12px 16px;
-        text-decoration: none;
-        display: block;
-        text-align: left;
-    }
-    
-    .dropdown-content a:hover {
-        background-color: #495057;
-    }
-    
-    .user-dropdown:hover .dropdown-content {
-        display: block;
-    }
-    
-    .username {
-        display: flex;
-        align-items: center;
-        cursor: pointer;
-    }
-    
-    .username i {
-        margin-right: 5px;
-    }
-    
-    .username .fa-chevron-down {
-        margin-left: 5px;
-        font-size: 0.8rem;
-    }
         
-        @media (max-width: 768px) {
-            .container {
-                width: 95%;
-                padding: 1rem;
-            }
-            .feature-box {
-                flex-basis: 100%;
-            }
-            .header-content {
-                flex-direction: column;
-                width: 95%;
-            }
-            nav ul {
-                margin-top: 1rem;
-            }
-            nav ul li {
-                margin-left: 1rem;
-                margin-right: 1rem;
-            }
-            .dashboard-img {
-                max-width: 100%;
-            }
-
-            .features-container {
-                flex-direction: column;
+        .animate {
+            opacity: 0;
+            animation: fadeIn 0.8s forwards;
+        }
+        
+        .delay-1 {
+            animation-delay: 0.2s;
+        }
+        
+        .delay-2 {
+            animation-delay: 0.4s;
+        }
+        
+        .delay-3 {
+            animation-delay: 0.6s;
+        }
+        
+        /* Responsive Adjustments */
+        @media (max-width: 992px) {
+            .hero-title {
+                font-size: 2.5rem;
             }
             
-    }
+            .hero-section {
+                padding-top: calc(var(--navbar-height) + 2rem);
+            }
+            
+            .hero-image {
+                margin-top: 2rem;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .hero-title {
+                font-size: 2rem;
+            }
+            
+            .section-title h2 {
+                font-size: 2rem;
+            }
+            
+            .stats-number {
+                font-size: 2rem;
+            }
+            
+            .cta-box {
+                padding: 2rem;
+            }
+        }
+        
+        /* User dropdown */
+        .user-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .user-dropdown .dropdown-content {
+            display: none;
+            position: absolute;
+            right: 0;
+            background-color: white;
+            min-width: 200px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            border-radius: 5px;
+            z-index: 100;
+            border: 1px solid rgba(0,0,0,0.05);
+            margin-top: 0.5rem;
+        }
+        
+        .user-dropdown:hover .dropdown-content {
+            display: block;
+        }
+        
+        .dropdown-content a {
+            display: block;
+            padding: 0.75rem 1rem;
+            text-decoration: none;
+            color: var(--dark-color);
+            transition: all 0.2s;
+        }
+        
+        .dropdown-content a:not(:last-child) {
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+        }
+        
+        .dropdown-content a:hover {
+            background-color: rgba(var(--primary-rgb), 0.05);
+            color: var(--primary-color);
+        }
+        
+        .dropdown-content a i {
+            margin-right: 0.5rem;
+            opacity: 0.7;
+        }
+        
+        .user-dropdown .btn {
+            display: flex;
+            align-items: center;
+        }
+        
+        .user-dropdown .btn i.fa-user {
+            margin-right: 0.5rem;
+        }
+        
+        .user-dropdown .btn i.fa-chevron-down {
+            font-size: 0.75rem;
+            margin-left: 0.5rem;
+        }
+        
+        /* Modal */
+        .modal-content {
+            border-radius: 10px;
+            overflow: hidden;
+            border: none;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .modal-header {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 1.5rem;
+            border: none;
+        }
+        
+        .modal-title {
+            font-weight: 600;
+        }
+        
+        .modal-header .btn-close {
+            color: white;
+            opacity: 1;
+        }
+        
+        .modal-body {
+            padding: 2rem 1.5rem;
+        }
+        
+        .modal-footer {
+            border-top: 1px solid rgba(0,0,0,0.05);
+            padding: 1rem 1.5rem;
+        }
+
+        /* Standardize the width of sign in/up buttons */
+        .navbar .auth-btn {
+            min-width: 100px;
+            width: auto;
+            text-align: center;
+            padding-left: 0.75rem;
+            padding-right: 0.75rem;
+            display: inline-block;
+        }
     </style>
 </head>
 <body>
-    <header>
-        <div class="header-content">
-            <div class="logo">
-                <h1>Log Analyzer</h1>
-            </div>
-            <nav>
-                <ul>
-                    <li><a href="/"><i class="fas fa-home"></i> Home</a></li>
-                    <li><a href="#" id="dashboard-link" onclick="checkDashboardAccess(event)"><i class="fas fa-chart-line"></i> Dashboard</a></li>
-                    <li><a href="#" onclick="checkReportsAccess(event)"><i class="fas fa-file-alt"></i> Reports</a></li>
-                    <li><a href="{% url 'contact' %}" onclick="showContactModal(event)"><i class="fas fa-envelope"></i> Contact Us</a></li>
-                    
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg">
+        <div class="container">
+            <a class="navbar-brand" href="/"><i class="fas fa-shield-alt"></i>LogSentry</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#features">Features</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#how-it-works">How It Works</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#testimonials">Testimonials</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#faq">FAQ</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'contact' %}">Contact Us</a>
+                    </li>
                     {% if user.is_authenticated %}
-                    <li class="user-dropdown">
-                        <span class="username">
-                            <i class="fas fa-user"></i> {{ user.username }} <i class="fas fa-chevron-down"></i>
-                        </span>
-                        <div class="dropdown-content">
-                            <a href="{% url 'profile' %}"><i class="fas fa-id-card"></i> Profile</a>
-                            <a href="{% url 'settings' %}"><i class="fas fa-cog"></i> Settings</a>
-                            <a href="{% url 'logout' %}"><i class="fas fa-sign-out-alt"></i> Logout</a>
-                        </div>
+                    <li class="nav-item dropdown ms-lg-3">
+                        <button class="btn btn-outline-primary dropdown-toggle" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-user"></i>
+                            {{ user.username }}
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="userDropdown">
+                            <li><a class="dropdown-item" href="{% url 'dashboard' %}"><i class="fas fa-chart-line"></i> Dashboard</a></li>
+                            <li><a class="dropdown-item" href="{% url 'profile' %}"><i class="fas fa-id-card"></i> My Profile</a></li>
+                            <li><a class="dropdown-item" href="{% url 'settings' %}"><i class="fas fa-cog"></i> Settings</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'logout' %}"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
+                        </ul>
                     </li>
                     {% else %}
-                    <li><a href="{% url 'login' %}"><i class="fas fa-user-shield"></i> Login</a></li>
+                    <li class="nav-item ms-lg-3">
+                        <a class="btn btn-outline-primary" style="min-width: 100px; text-align: center; padding-left: 0.75rem; padding-right: 0.75rem;" href="{% url 'login' %}">Sign In</a>
+                    </li>
+                    <li class="nav-item ms-lg-2">
+                        <a class="btn btn-primary" style="min-width: 100px; text-align: center; padding-left: 0.75rem; padding-right: 0.75rem;" href="{% url 'signup' %}">Sign Up</a>
+                    </li>
                     {% endif %}
                 </ul>
-            </nav>
-        </div>
-    </header>
-    
-    <div class="container">
-        <div class="content">
-            <div class="hero">
-                <h2>Log Detection and Threat Analysis Platform</h2>
-                <p>A comprehensive solution for analyzing Apache and MySQL server logs to detect and notify about potential security threats in real-time.</p>
-                <a href="#" id="get-started-btn" onclick="handleGetStarted(event)" class="cta-button">Get Started <i class="fas fa-arrow-right"></i></a>
             </div>
-            
-            <div class="features-container">
-                <div class="features-column">
-                    <div class="feature-box">
-                        <div class="feature-icon">
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero-section">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-lg-6 hero-content">
+                    <div class="animate">
+                        <h1 class="hero-title">Detect & Respond to Server Threats in Real-time</h1>
+                        <p class="hero-subtitle">Comprehensive log analysis platform that monitors your Apache and MySQL servers for security threats and provides instant alerts.</p>
+                        <div class="d-flex align-items-center">
+                            <a href="{% if user.is_authenticated %}{% url 'dashboard' %}{% else %}{% url 'signup' %}{% endif %}" class="btn btn-primary btn-lg me-3">Get Started</a>
+                            <a href="#how-it-works" class="btn btn-outline-primary btn-lg">How It Works</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6 hero-image">
+                    <div class="animate delay-1">
+                        <img src="/static/images/dashboardprev1.png" alt="Dashboard Preview" class="img-fluid">
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="hero-shape"></div>
+        <div class="hero-shape-2"></div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features-section" id="features">
+        <div class="container">
+            <div class="section-title">
+                <h2>Powerful Security Features</h2>
+                <p>Our platform provides comprehensive security monitoring and analysis for your server infrastructure</p>
+            </div>
+            <div class="row">
+                <div class="col-md-6 col-lg-4 animate">
+                    <div class="feature-card">
+                        <div class="feature-icon blue">
                             <i class="fas fa-search"></i>
                         </div>
-                        <div class="feature-content">
-                            <h3>Log Analysis</h3>
-                            <p>Automatically analyze server logs to detect unusual patterns and potential security threats with advanced AI algorithms.</p>
-                        </div>
+                        <h3 class="feature-title">Advanced Log Analysis</h3>
+                        <p class="feature-description">Automatically analyze Apache and MySQL server logs using pattern recognition and machine learning to identify potential threats.</p>
                     </div>
-                    <div class="feature-box">
-                        <div class="feature-icon">
+                </div>
+                <div class="col-md-6 col-lg-4 animate delay-1">
+                    <div class="feature-card">
+                        <div class="feature-icon red">
                             <i class="fas fa-bell"></i>
                         </div>
-                        <div class="feature-content">
-                            <h3>Real-time Notifications</h3>
-                            <p>Get immediate notifications when suspicious activities are detected in your server logs through multiple channels.</p>
+                        <h3 class="feature-title">Real-time Alerts</h3>
+                        <p class="feature-description">Get instant notifications when suspicious activities are detected, with configurable alert thresholds and delivery methods.</p>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4 animate delay-2">
+                    <div class="feature-card">
+                        <div class="feature-icon green">
+                            <i class="fas fa-shield-alt"></i>
+                        </div>
+                        <h3 class="feature-title">MITRE ATT&CK Integration</h3>
+                        <p class="feature-description">Map detected threats to the MITRE ATT&CK framework for standardized threat classification and response guidance.</p>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4 animate">
+                    <div class="feature-card">
+                        <div class="feature-icon yellow">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <h3 class="feature-title">Comprehensive Dashboard</h3>
+                        <p class="feature-description">Visualize server activity, threats, and security metrics through intuitive dashboards with customizable widgets.</p>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4 animate delay-1">
+                    <div class="feature-card">
+                        <div class="feature-icon purple">
+                            <i class="fas fa-robot"></i>
+                        </div>
+                        <h3 class="feature-title">AI-Powered Analysis</h3>
+                        <p class="feature-description">Leverage machine learning algorithms to detect anomalies and potential security issues before they become critical threats.</p>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4 animate delay-2">
+                    <div class="feature-card">
+                        <div class="feature-icon teal">
+                            <i class="fas fa-file-alt"></i>
+                        </div>
+                        <h3 class="feature-title">Detailed Reports</h3>
+                        <p class="feature-description">Generate comprehensive security reports with actionable insights for compliance requirements and security reviews.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Dashboard Preview Section -->
+    <section class="dashboard-preview" id="dashboard">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-lg-6 animate">
+                    <h2 class="mb-4">Powerful Analytics Dashboard</h2>
+                    <p class="mb-4">Our intuitive dashboard gives you a complete overview of your server security status and threat landscape at a glance.</p>
+                    
+                    <div class="dashboard-feature-item">
+                        <div class="dashboard-feature-icon">
+                            <i class="fas fa-chart-bar"></i>
+                        </div>
+                        <div class="dashboard-feature-content">
+                            <h4>Visual Analytics</h4>
+                            <p>Visualize threat patterns and server activity with interactive charts and graphs.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="dashboard-feature-item">
+                        <div class="dashboard-feature-icon">
+                            <i class="fas fa-filter"></i>
+                        </div>
+                        <div class="dashboard-feature-content">
+                            <h4>Advanced Filtering</h4>
+                            <p>Filter logs and events by type, severity, time range, and more for targeted analysis.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="dashboard-feature-item">
+                        <div class="dashboard-feature-icon">
+                            <i class="fas fa-globe"></i>
+                        </div>
+                        <div class="dashboard-feature-content">
+                            <h4>Geographic Threat Mapping</h4>
+                            <p>View threat origins on an interactive world map to identify geographic attack patterns.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <a href="{% if user.is_authenticated %}{% url 'dashboard' %}{% else %}{% url 'signup' %}{% endif %}" class="btn btn-primary">Explore Dashboard</a>
+                    </div>
+                </div>
+                <div class="col-lg-6 animate delay-1">
+                    <div class="dashboard-image">
+                        <img src="/static/images/dashboardprev2.png" alt="Dashboard Interface">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section class="how-it-works" id="how-it-works">
+        <div class="container">
+            <div class="section-title">
+                <h2>How It Works</h2>
+                <p>Four simple steps to secure your server infrastructure with our platform</p>
+            </div>
+            <div class="row">
+                <div class="col-md-6 col-lg-3 animate">
+                    <div class="step-card">
+                        <div class="step-number">1</div>
+                        <div class="step-icon">
+                            <i class="fas fa-plug"></i>
+                        </div>
+                        <h3 class="step-title">Connect Servers</h3>
+                        <p class="step-description">Easily integrate our platform with your Apache and MySQL servers using our secure connector.</p>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-3 animate delay-1">
+                    <div class="step-card">
+                        <div class="step-number">2</div>
+                        <div class="step-icon">
+                            <i class="fas fa-cogs"></i>
+                        </div>
+                        <h3 class="step-title">Configure Settings</h3>
+                        <p class="step-description">Customize detection rules, alert thresholds, and notification preferences to fit your needs.</p>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-3 animate delay-2">
+                    <div class="step-card">
+                        <div class="step-number">3</div>
+                        <div class="step-icon">
+                            <i class="fas fa-radar"></i>
+                        </div>
+                        <h3 class="step-title">Monitor Threats</h3>
+                        <p class="step-description">Our system continuously monitors your logs and analyzes them for suspicious activity.</p>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-3 animate delay-3">
+                    <div class="step-card">
+                        <div class="step-number">4</div>
+                        <div class="step-icon">
+                            <i class="fas fa-shield-check"></i>
+                        </div>
+                        <h3 class="step-title">Respond & Report</h3>
+                        <p class="step-description">Receive alerts, take action on threats, and generate detailed security reports.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats Section -->
+    <section class="stats-section">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-3 animate">
+                    <div class="stats-card">
+                        <div class="stats-icon">
+                            <i class="fas fa-shield-alt"></i>
+                        </div>
+                        <div class="stats-number">10M+</div>
+                        <div class="stats-label">Threats Detected</div>
+                    </div>
+                </div>
+                <div class="col-md-3 animate delay-1">
+                    <div class="stats-card">
+                        <div class="stats-icon">
+                            <i class="fas fa-server"></i>
+                        </div>
+                        <div class="stats-number">50K+</div>
+                        <div class="stats-label">Servers Protected</div>
+                    </div>
+                </div>
+                <div class="col-md-3 animate delay-2">
+                    <div class="stats-card">
+                        <div class="stats-icon">
+                            <i class="fas fa-users"></i>
+                        </div>
+                        <div class="stats-number">5,000+</div>
+                        <div class="stats-label">Active Users</div>
+                    </div>
+                </div>
+                <div class="col-md-3 animate delay-3">
+                    <div class="stats-card">
+                        <div class="stats-icon">
+                            <i class="fas fa-chart-pie"></i>
+                        </div>
+                        <div class="stats-number">99.9%</div>
+                        <div class="stats-label">Detection Accuracy</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Testimonial Section -->
+    <section class="testimonial-section" id="testimonials">
+        <div class="container">
+            <div class="section-title">
+                <h2>What Our Users Say</h2>
+                <p>Organizations worldwide trust our platform to protect their server infrastructure</p>
+            </div>
+            <div class="row">
+                <div class="col-md-6 col-lg-4 animate">
+                    <div class="testimonial-card">
+                        <div class="testimonial-content">
+                            The log analysis capabilities are impressive. We've caught several intrusion attempts that would have gone unnoticed with our previous solution.
+                        </div>
+                        <div class="testimonial-author">
+                            <div class="testimonial-avatar">
+                                <img src="https://randomuser.me/api/portraits/men/32.jpg" alt="John D.">
+                            </div>
+                            <div>
+                                <div class="testimonial-name">John D.</div>
+                                <div class="testimonial-position">Security Manager, TechCorp</div>
+                            </div>
                         </div>
                     </div>
                 </div>
-                
-                <div class="features-column">
-                    <div class="feature-box">
-                        <div class="feature-icon">
-                            <i class="fas fa-tachometer-alt"></i>
+                <div class="col-md-6 col-lg-4 animate delay-1">
+                    <div class="testimonial-card">
+                        <div class="testimonial-content">
+                            The MITRE ATT&CK integration gives us valuable context about threats and helps us prioritize our security response efforts effectively.
                         </div>
-                        <div class="feature-content">
-                            <h3>Dashboard</h3>
-                            <p>Visualize threats and monitoring data through an intuitive dashboard interface with customizable widgets.</p>
+                        <div class="testimonial-author">
+                            <div class="testimonial-avatar">
+                                <img src="https://randomuser.me/api/portraits/women/44.jpg" alt="Sarah M.">
+                            </div>
+                            <div>
+                                <div class="testimonial-name">Sarah M.</div>
+                                <div class="testimonial-position">CISO, Global Finance</div>
+                            </div>
                         </div>
                     </div>
-                    <div class="feature-box">
-                        <div class="feature-icon">
-                            <i class="fas fa-file-shield"></i>
+                </div>
+                <div class="col-md-6 col-lg-4 animate delay-2">
+                    <div class="testimonial-card">
+                        <div class="testimonial-content">
+                            Setting up the platform was surprisingly easy, and the AI-powered analysis has dramatically improved our security posture.
                         </div>
-                        <div class="feature-content">
-                            <h3>Security Reports</h3>
-                            <p>Generate detailed reports about detected threats and system security status with actionable insights.</p>
+                        <div class="testimonial-author">
+                            <div class="testimonial-avatar">
+                                <img src="https://randomuser.me/api/portraits/men/67.jpg" alt="Robert L.">
+                            </div>
+                            <div>
+                                <div class="testimonial-name">Robert L.</div>
+                                <div class="testimonial-position">IT Director, E-commerce Inc</div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-            
-            <div class="dashboard-showcase">
-                <h2>Powerful Dashboard Interface</h2>
-                <img src="/static/images/Wdashboard.png" alt="Dashboard Interface" class="dashboard-img">
+        </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section class="faq-section" id="faq">
+        <div class="container">
+            <div class="section-title">
+                <h2>Frequently Asked Questions</h2>
+                <p>Find answers to common questions about our platform</p>
+            </div>
+            <div class="row justify-content-center">
+                <div class="col-lg-10">
+                    <div class="accordion accordion-flush" id="faqAccordion">
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="faqHeading1">
+                                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#faqCollapse1" aria-expanded="true" aria-controls="faqCollapse1">
+                                    How does the platform detect security threats?
+                                </button>
+                            </h2>
+                            <div id="faqCollapse1" class="accordion-collapse collapse show" aria-labelledby="faqHeading1" data-bs-parent="#faqAccordion">
+                                <div class="accordion-body">
+                                    Our platform uses a combination of pattern matching, anomaly detection, and machine learning algorithms to analyze your Apache and MySQL server logs. It identifies suspicious patterns such as repeated failed login attempts, SQL injection attempts, unusual database queries, and more. The system continuously learns from your server's normal behavior to improve detection accuracy over time.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="faqHeading2">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faqCollapse2" aria-expanded="false" aria-controls="faqCollapse2">
+                                    Is the platform difficult to set up?
+                                </button>
+                            </h2>
+                            <div id="faqCollapse2" class="accordion-collapse collapse" aria-labelledby="faqHeading2" data-bs-parent="#faqAccordion">
+                                <div class="accordion-body">
+                                    Not at all! Our platform is designed for easy setup. You can integrate it with your servers in minutes using our connector that installs with minimal configuration. Most users are up and running in less than 30 minutes. We also provide detailed documentation and support for custom configurations if needed.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="faqHeading3">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faqCollapse3" aria-expanded="false" aria-controls="faqCollapse3">
+                                    How are alerts delivered?
+                                </button>
+                            </h2>
+                            <div id="faqCollapse3" class="accordion-collapse collapse" aria-labelledby="faqHeading3" data-bs-parent="#faqAccordion">
+                                <div class="accordion-body">
+                                    You can customize how you receive alerts based on severity and type. Options include email notifications, SMS alerts, webhook integrations with platforms like Slack or Microsoft Teams, and in-dashboard notifications. You can also set up different notification methods for different team members based on their roles.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="faqHeading4">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faqCollapse4" aria-expanded="false" aria-controls="faqCollapse4">
+                                    Does the platform support custom rules?
+                                </button>
+                            </h2>
+                            <div id="faqCollapse4" class="accordion-collapse collapse" aria-labelledby="faqHeading4" data-bs-parent="#faqAccordion">
+                                <div class="accordion-body">
+                                    Yes, you can create custom detection rules based on your specific requirements. Our platform provides a rule editor where you can define patterns, thresholds, and conditions for threat detection. You can also import rule sets from popular security frameworks or share rules with other organizations in your industry.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="faqHeading5">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faqCollapse5" aria-expanded="false" aria-controls="faqCollapse5">
+                                    Is my log data secure?
+                                </button>
+                            </h2>
+                            <div id="faqCollapse5" class="accordion-collapse collapse" aria-labelledby="faqHeading5" data-bs-parent="#faqAccordion">
+                                <div class="accordion-body">
+                                    Absolutely. Security is our priority. All communication between your servers and our platform is encrypted using TLS 1.3. Log data is stored with AES-256 encryption, and you have full control over data retention policies. We're compliant with major security standards including SOC 2, GDPR, and HIPAA where applicable.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
-    </div>
-    
-    <div class="stats-section">
-        <div class="stats-container">
-            <div class="stat-item">
-                <div class="stat-number">10M+</div>
-                <div class="stat-label">Threats Detected</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-number">5,000+</div>
-                <div class="stat-label">Active Users</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-number">99.9%</div>
-                <div class="stat-label">Detection Accuracy</div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta-section">
+        <div class="container">
+            <div class="cta-box">
+                <h2>Ready to Secure Your Servers?</h2>
+                <p>Start protecting your Apache and MySQL servers from threats today with our advanced log detection platform.</p>
+                <a href="{% if user.is_authenticated %}{% url 'dashboard' %}{% else %}{% url 'signup' %}{% endif %}" class="btn btn-primary btn-lg">Get Started Now</a>
+                <div class="cta-shape"></div>
             </div>
         </div>
-    </div>
-    
-    <footer>
-        <p>&copy; 2025 Log Detection Platform | Securing your servers 24/7</p>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-4 mb-4">
+                    <a href="/" class="footer-brand"><i class="fas fa-shield-alt"></i>LogSentry</a>
+                    <p class="footer-description">Advanced log analysis and threat detection platform for Apache and MySQL servers.</p>
+                    <div class="social-links">
+                        <a href="#"><i class="fab fa-twitter"></i></a>
+                        <a href="#"><i class="fab fa-linkedin-in"></i></a>
+                        <a href="#"><i class="fab fa-github"></i></a>
+                        <a href="#"><i class="fab fa-facebook-f"></i></a>
+                    </div>
+                </div>
+                <div class="col-6 col-md-4 col-lg-3 mb-4">
+                    <h5>Product</h5>
+                    <ul class="footer-links">
+                        <li><a href="#features"><i class="fas fa-check"></i> Features</a></li>
+                        <li><a href="#how-it-works"><i class="fas fa-check"></i> How It Works</a></li>
+                        <li><a href="#"><i class="fas fa-check"></i> Pricing</a></li>
+                        <li><a href="#"><i class="fas fa-check"></i> Integrations</a></li>
+                    </ul>
+                </div>
+                <div class="col-6 col-md-4 col-lg-3 mb-4">
+                    <h5>Resources</h5>
+                    <ul class="footer-links">
+                        <li><a href="#"><i class="fas fa-file-alt"></i> Documentation</a></li>
+                        <li><a href="#"><i class="fas fa-book"></i> Knowledge Base</a></li>
+                        <li><a href="#"><i class="fas fa-video"></i> Tutorials</a></li>
+                    </ul>
+                </div>
+                <div class="col-6 col-md-4 col-lg-2 mb-4">
+                    <h5>Legal</h5>
+                    <ul class="footer-links">
+                        <li><a href="#"><i class="fas fa-lock"></i> Privacy Policy</a></li>
+                        <li><a href="#"><i class="fas fa-gavel"></i> Terms of Service</a></li>
+                        <li><a href="#"><i class="fas fa-cookie"></i> Cookie Policy</a></li>
+                        <li><a href="#"><i class="fas fa-shield-alt"></i> Security</a></li>
+                    </ul>
+                </div>
+            </div>
+            <hr>
+            <div class="copyright">
+                <p>&copy; 2025 LogSentry. All rights reserved.</p>
+            </div>
+        </div>
     </footer>
 
-    <!-- Login Required Modal -->
-    <div id="loginModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Login Required</h3>
-                <button class="close-modal" onclick="closeModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <p>You need to be logged in to access this feature. Please login or create an account to continue.</p>
-            </div>
-            <div class="modal-footer">
-                <a href="/signup/" class="btn">Sign Up</a>
-                <a href="/login/" class="btn">Login</a>
+    <!-- Login Modal -->
+    <div class="modal fade" id="loginModal" tabindex="-1" aria-labelledby="loginModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="loginModalLabel">Login Required</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>You need to be logged in to access this feature. Please login or create an account to continue.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <a href="{% url 'signup' %}" class="btn btn-outline-primary">Sign Up</a>
+                    <a href="{% url 'login' %}" class="btn btn-primary">Login</a>
+                </div>
             </div>
         </div>
     </div>
-    
+
+    <!-- Bootstrap and other scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // Store authentication as string values
-    const isLoggedInValue = "{% if user.is_authenticated %}true{% else %}false{% endif %}";
-    // Convert to actual boolean
-    const isLoggedIn = isLoggedInValue === "true";
+        const isLoggedInValue = "{% if user.is_authenticated %}true{% else %}false{% endif %}";
+        
+        // Convert to actual boolean
+        const isLoggedIn = isLoggedInValue === "true";
         
         // Function to check dashboard access
         function checkDashboardAccess(event) {
-        event.preventDefault();
+            event.preventDefault();
             if (isLoggedIn) {
                 window.location.href = "/dashboard/";
             } else {
-                document.getElementById('loginModal').style.display = "block";
+                const loginModal = new bootstrap.Modal(document.getElementById('loginModal'));
+                loginModal.show();
             }
         }
         
@@ -497,32 +1357,55 @@
             if (isLoggedIn) {
                 window.location.href = "{% url 'reports' %}";
             } else {
-                document.getElementById('loginModal').style.display = "block";
+                const loginModal = new bootstrap.Modal(document.getElementById('loginModal'));
+                loginModal.show();
             }
         }
         
-        // Close the modal when clicking the X
-        function closeModal() {
-            document.getElementById('loginModal').style.display = "none";
-        }
-        
-        // Close the modal if clicking outside of it
-        window.onclick = function(event) {
-            const modal = document.getElementById('loginModal');
-            if (event.target == modal) {
-                modal.style.display = "none";
-            }
-        }
-
-        function handleGetStarted(event) {
-            event.preventDefault();
-            if (isLoggedIn) {
-                window.location.href = "/dashboard/";
+        // Navbar scroll effect
+        window.addEventListener('scroll', function() {
+            const navbar = document.querySelector('.navbar');
+            if (window.scrollY > 50) {
+                navbar.classList.add('scrolled');
             } else {
-                window.location.href = "/login/?next=/dashboard/";
+                navbar.classList.remove('scrolled');
             }
-        }
+        });
+        
+        // Animate elements when they come into view
+        const animateElements = document.querySelectorAll('.animate');
+        
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = 1;
+                }
+            });
+        }, {
+            threshold: 0.1
+        });
+        
+        animateElements.forEach(element => {
+            observer.observe(element);
+        });
+        
+        // Smooth scrolling for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                
+                const targetId = this.getAttribute('href');
+                if (targetId === '#') return;
+                
+                const targetElement = document.querySelector(targetId);
+                if (targetElement) {
+                    window.scrollTo({
+                        top: targetElement.offsetTop - 100,
+                        behavior: 'smooth'
+                    });
+                }
+            });
+        });
     </script>
-
 </body>
 </html>

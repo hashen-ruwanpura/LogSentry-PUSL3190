@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'log_ingestion',
     'threat_detection',
     'incident_detection',
+    'channels',  # For WebSockets
     'alerts',
     'reports',
     'authentication',
@@ -150,14 +151,28 @@ LOGIN_REDIRECT_URL = '/'  # Redirect to homepage after login
 LOGOUT_REDIRECT_URL = '/login/'  # Redirect to login page after logout
 SIGNUP_REDIRECT_URL = '/login/'  # Redirect to login page after signup
 
-# Email settings for account verification (if needed)
+# WebSocket settings
+ASGI_APPLICATION = "routing.application"
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer"
+        # For production, consider using Redis:
+        # "BACKEND": "channels_redis.core.RedisChannelLayer",
+        # "CONFIG": {
+        #     "hosts": [("127.0.0.1", 6379)],
+        # },
+    },
+}
+
+from decouple import config
+
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'  # Update with your SMTP server
+EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = ''  
-EMAIL_HOST_PASSWORD = ''
-
+EMAIL_HOST_USER = 'noreply.loganalyzer@gmail.com'
+EMAIL_HOST_PASSWORD = 'qcpcpelgixghuumm'
+DEFAULT_FROM_EMAIL = 'Log Analyzer <noreply.loganalyzer@gmail.com>'
 
 # Threat Intelligence API keys - replace with your actual API keys
 # ABUSEIPDB_API_KEY = 'your-api-key'
@@ -178,4 +193,15 @@ AI_REPORT_CACHE_HOURS = 24  # How long to cache reports before regenerating
 # Site Configuration
 SITE_NAME = 'Log Detection Platform'
 
+OPENAI_API_KEY = 'placeholder'  # Not used directly, but prevents warning
+
+# Add these lines to your settings.py
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher',
+    'django.contrib.auth.hashers.Argon2PasswordHasher',
+    'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
+]
+
+ENABLE_REALTIME_LOG_PROCESSING = True
 

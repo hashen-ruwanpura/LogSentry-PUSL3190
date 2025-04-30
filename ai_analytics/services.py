@@ -13,7 +13,7 @@ from django.db.models import Q
 from .models import AIReport, AIReportFeedback
 from log_ingestion.models import ParsedLog, RawLog
 from threat_detection.models import Threat, Incident, BlacklistedIP
-from siem.models import ApacheLogEntry, MySQLLogEntry  # Note: MySQLLogEntry with correct capitalization
+from siem.models import ApacheLogEntry, MySQLLogEntry  # Correctly capitalized
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -371,7 +371,7 @@ class AIReportGenerator:
                 
             # Get MySQL logs
             if source_filter in ('all', 'mysql'):
-                mysql_logs = MysqlLogEntry.objects.filter(mysql_filter).order_by('-timestamp')[:100]
+                mysql_logs = MySQLLogEntry.objects.filter(mysql_filter).order_by('-timestamp')[:100]
                 data['mysql_logs'] = [
                     {
                         'timestamp': log.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
@@ -383,7 +383,7 @@ class AIReportGenerator:
                     }
                     for log in mysql_logs
                 ]
-                data['stats']['total_mysql_logs'] = MysqlLogEntry.objects.filter(mysql_filter).count()
+                data['stats']['total_mysql_logs'] = MySQLLogEntry.objects.filter(mysql_filter).count()
             
             # Get threats
             threats = Threat.objects.filter(threat_filter).order_by('-created_at')[:50]
