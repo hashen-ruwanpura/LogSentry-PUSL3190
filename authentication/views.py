@@ -38,6 +38,7 @@ from django.conf import settings
 
 from threat_detection.models import Threat, ThreatAnalysis
 from ai_analytics.services import AlertAnalysisService
+from alerts.models import NotificationPreference
 
 logger = logging.getLogger(__name__)
 
@@ -1580,10 +1581,10 @@ def settings_view(request):
         sms_alerts = request.POST.get('sms_alerts') == 'on'
         slack_alerts = request.POST.get('slack_alerts') == 'on'
         
-        # Update user notification settings in UserProfile or similar model
+        # Update user notification settings in NotificationPreference
         try:
             # Get or create user profile
-            profile, created = UserProfile.objects.get_or_create(user=user)
+            profile, created = NotificationPreference.objects.get_or_create(user=user)
             profile.email_alerts = email_alerts
             profile.sms_alerts = sms_alerts
             profile.slack_alerts = slack_alerts
@@ -1594,13 +1595,13 @@ def settings_view(request):
     
     # Get current notification settings
     try:
-        profile = UserProfile.objects.get(user=user)
+        profile = NotificationPreference.objects.get(user=user)
         notification_settings = {
             'email_alerts': profile.email_alerts,
             'sms_alerts': profile.sms_alerts,
             'slack_alerts': profile.slack_alerts,
         }
-    except UserProfile.DoesNotExist:
+    except NotificationPreference.DoesNotExist:
         # Default settings if profile doesn't exist yet
         notification_settings = {
             'email_alerts': True,
@@ -1622,7 +1623,7 @@ def settings_view(request):
         'error_message': error_message,
     }
     
-    return render(request, 'authentication/settings.html', context)
+    return render(request, 'settings.html', context)
 
 @login_required
 def alerts_details_view(request):
