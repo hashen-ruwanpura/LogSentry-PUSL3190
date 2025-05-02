@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 import json
 from django.utils import timezone
+from django.core.serializers.json import DjangoJSONEncoder
 
 class SystemSettings(models.Model):
     """Model for storing system settings"""
@@ -85,3 +86,11 @@ class SystemSettings(models.Model):
     
     def __str__(self):
         return f"{self.section}.{self.settings_key}"
+
+class UserPreference(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='preferences')
+    settings = models.JSONField(default=dict, encoder=DjangoJSONEncoder)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.user.username}'s preferences"

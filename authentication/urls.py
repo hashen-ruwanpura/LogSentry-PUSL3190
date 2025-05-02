@@ -3,6 +3,7 @@ from django.contrib.auth import views as auth_views
 from . import views
 from . import views_reports
 from .reset_views import CustomPasswordResetConfirmView  # Import the custom view
+from . import views_settings
 
 urlpatterns = [
     # ... existing URL patterns ...
@@ -45,12 +46,20 @@ urlpatterns = [
          ), 
          name='password_reset_complete'),
     
-    
+        
     path('settings/', views.settings_view, name='settings'),
     
     # New API endpoints
-    path('api/test-log-paths/', views.test_log_paths, name='test_log_paths'),
-    path('api/analyze-logs/', views.analyze_logs_api, name='analyze_logs'),
+    path('api/test-log-paths/', views_settings.test_log_paths, name='test_log_paths'),
+    path('api/validate-file-path/', views_settings.validate_file_path, name='validate_file_path'),
+    path('api/analyze-logs/', views_settings.analyze_logs_api, name='analyze_logs'),
+    path('api/run-analysis-now/', views_settings.run_analysis_now, name='run_analysis_now'),
+    path('api/toggle-analysis/', views_settings.toggle_analysis, name='toggle_analysis'),
+    path('api/analysis-status/', views_settings.get_analysis_status, name='analysis_status'),
+    path('api/force-analyze-logs/', views_settings.force_analyze_all_logs, name='force_analyze_logs'),
+    path('api/generate-test-logs/', views_settings.generate_test_logs, name='generate_test_logs'),
+    path('api/debug-log-status/', views_settings.debug_log_status, name='debug_log_status'),
+    path('api/import-threat-test-logs/', views_settings.import_threat_test_logs, name='import_threat_test_logs'),
     
     path('api/dashboard-data/', views.dashboard_data_api, name='dashboard_data_api'),
     path('api/profile-stats/', views.profile_stats_api, name='profile_stats_api'),
