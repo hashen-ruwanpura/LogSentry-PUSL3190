@@ -3,50 +3,79 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard | Threat Detection Platform</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <title>Admin Dashboard | LogSentry</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         :root {
-            --primary-color: #3a6ea5;
-            --secondary-color: #004e8a;
-            --accent-color: #ff6b6b;
+            --primary-color: #3f51b5;
+            --primary-dark: #303f9f;
+            --primary-light: #c5cae9;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --warning-color: #ffc107;
+            --info-color: #17a2b8;
             --light-bg: #f8f9fa;
-            --dark-bg: #343a40;
+            --dark-bg: #2c3e50;
+            --white: #ffffff;
+            --card-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+            --transition: all 0.3s ease;
         }
         
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f5f5f5;
+            background-color: #f5f7fa;
+            margin: 0;
+            color: #333;
         }
         
         .sidebar {
-            background-color: var(--dark-bg);
+            background: linear-gradient(180deg, var(--primary-dark) 0%, var(--dark-bg) 100%);
             min-height: 100vh;
             color: white;
             position: fixed;
             width: 250px;
             z-index: 100;
+            box-shadow: 3px 0 10px rgba(0, 0, 0, 0.1);
         }
         
         .logo {
-            padding: 20px 15px;
+            padding: 25px 20px;
             font-size: 1.5rem;
             font-weight: bold;
             border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.1);
+        }
+        
+        .logo i {
+            margin-right: 10px;
+            background: var(--primary-light);
+            color: var(--primary-dark);
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         
         .nav-link {
             color: rgba(255,255,255,0.8);
             padding: 12px 20px;
-            margin: 4px 0;
-            border-radius: 4px;
-            transition: all 0.3s;
+            margin: 5px 10px;
+            border-radius: 8px;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
         }
         
         .nav-link:hover, .nav-link.active {
             background-color: var(--primary-color);
             color: white;
+            transform: translateX(5px);
         }
         
         .nav-link i {
@@ -57,42 +86,113 @@
         
         .main-content {
             margin-left: 250px;
-            padding: 20px;
+            padding: 25px;
         }
         
         .card {
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            transition: transform 0.3s;
-            margin-bottom: 20px;
+            border: none;
+            border-radius: 12px;
+            box-shadow: var(--card-shadow);
+            transition: var(--transition);
+            margin-bottom: 25px;
+            overflow: hidden;
         }
         
         .card:hover {
             transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.12);
         }
         
         .card-stat {
-            border-left: 4px solid var(--primary-color);
+            position: relative;
+            z-index: 1;
+        }
+        
+        .card-stat::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background-color: var(--primary-color);
+            z-index: -1;
+        }
+        
+        .card-stat.critical::before {
+            background-color: var(--danger-color);
+        }
+        
+        .card-stat.monitoring::before {
+            background-color: var(--success-color);
+        }
+        
+        .card-stat.users::before {
+            background-color: var(--warning-color);
         }
         
         .alert-count {
-            font-size: 2rem;
-            font-weight: bold;
+            font-size: 2.2rem;
+            font-weight: 700;
+            color: #333;
+            line-height: 1;
+        }
+        
+        .trend-indicator {
+            font-size: 0.8rem;
+            padding: 3px 8px;
+            border-radius: 20px;
+            display: inline-flex;
+            align-items: center;
+            margin-top: 5px;
+        }
+        
+        .trend-indicator i {
+            margin-right: 5px;
+        }
+        
+        .trend-up {
+            background-color: rgba(40, 167, 69, 0.1);
+            color: var(--success-color);
+        }
+        
+        .trend-down {
+            background-color: rgba(220, 53, 69, 0.1);
+            color: var(--danger-color);
         }
         
         .top-bar {
             background-color: white;
-            padding: 15px 20px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-            border-radius: 8px;
+            padding: 18px 25px;
+            border-radius: 12px;
+            box-shadow: var(--card-shadow);
+            margin-bottom: 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         
         .chart-container {
             background-color: white;
-            border-radius: 10px;
+            border-radius: 12px;
             padding: 20px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            box-shadow: var(--card-shadow);
+            position: relative;
+        }
+        
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .chart-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
         }
         
         .status-indicator {
@@ -100,52 +200,221 @@
             width: 10px;
             height: 10px;
             border-radius: 50%;
-            margin-right: 5px;
+            margin-right: 8px;
         }
         
         .status-active {
-            background-color: #2ecc71;
+            background-color: var(--success-color);
         }
         
         .status-warning {
-            background-color: #f39c12;
+            background-color: var(--warning-color);
         }
         
         .status-danger {
-            background-color: #e74c3c;
-        }
-        
-        .recent-alerts-table {
-            font-size: 0.9rem;
+            background-color: var(--danger-color);
         }
         
         .severity-high {
-            color: #e74c3c;
+            color: var(--danger-color);
             font-weight: bold;
         }
         
         .severity-medium {
-            color: #f39c12;
+            color: var(--warning-color);
         }
         
         .severity-low {
-            color: #3498db;
+            color: var(--info-color);
         }
-
+        
         .dropdown-item {
             display: flex;
             align-items: center;
-            padding: 0.5rem 1rem;
+            padding: 10px 15px;
+            transition: var(--transition);
+            font-size: 0.9rem;
         }
         
         .dropdown-item:hover {
-            background-color: rgba(58, 110, 165, 0.1);
+            background-color: rgba(63, 81, 181, 0.05);
         }
         
         .dropdown-item i {
-            font-size: 1.1rem;
-            width: 20px;
-            text-align: center;
+            font-size: 1rem;
+            width: 24px;
+            color: var(--primary-color);
+        }
+        
+        .action-btn {
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+            border: none;
+        }
+        
+        .action-btn i {
+            margin-right: 8px;
+        }
+        
+        .action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .action-btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .action-btn-primary:hover {
+            background-color: var(--primary-dark);
+        }
+        
+        .action-btn-outline {
+            background-color: transparent;
+            color: var(--primary-color);
+            border: 1px solid var(--primary-color);
+        }
+        
+        .action-btn-outline:hover {
+            background-color: rgba(63, 81, 181, 0.05);
+        }
+        
+        .status-card {
+            border-radius: 12px;
+            margin-bottom: 15px;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            padding: 16px;
+            background: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        
+        .status-card:hover {
+            transform: translateX(5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        }
+        
+        .status-icon {
+            min-width: 45px;
+            height: 45px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            font-size: 1.2rem;
+            color: white;
+        }
+        
+        .status-icon.online {
+            background-color: var(--success-color);
+        }
+        
+        .status-icon.warning {
+            background-color: var(--warning-color);
+        }
+        
+        .status-icon.offline {
+            background-color: var(--danger-color);
+        }
+        
+        .status-details {
+            flex: 1;
+        }
+        
+        .status-server {
+            font-weight: 600;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        
+        .status-metrics {
+            display: flex;
+            align-items: center;
+            font-size: 12px;
+            color: var(--secondary-color);
+        }
+        
+        .status-metrics span:not(:last-child) {
+            margin-right: 15px;
+        }
+        
+        .progress {
+            height: 8px;
+            margin-top: 8px;
+            border-radius: 4px;
+            background-color: #eaecef;
+        }
+        
+        .progress-bar {
+            border-radius: 4px;
+        }
+        
+        .system-metrics {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .metric-item {
+            padding: 16px;
+            border-radius: 10px;
+            background-color: white;
+            box-shadow: var(--card-shadow);
+            transition: var(--transition);
+        }
+        
+        .metric-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+        }
+        
+        .metric-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        
+        .metric-name {
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        .metric-value {
+            font-weight: 700;
+            font-size: 14px;
+        }
+        
+        .toast-container {
+            z-index: 9999;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 992px) {
+            .main-content {
+                margin-left: 0;
+                padding: 15px;
+            }
+            
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+            }
+            
+            .sidebar.show {
+                transform: translateX(0);
+            }
+            
+            .mobile-toggle {
+                display: block;
+            }
         }
     </style>
 </head>
@@ -153,7 +422,7 @@
     <!-- Sidebar -->
     <div class="sidebar">
         <div class="logo">
-            <i class="fas fa-shield-alt"></i> ThreatGuard
+            <i class="fas fa-shield-alt"></i> LogSentry
         </div>
         <div class="mt-4">
             <a href="/admin-home/" class="nav-link active">
@@ -171,6 +440,9 @@
             <a href="/admin-panel/users/" class="nav-link">
                 <i class="fas fa-users"></i> User Management
             </a>
+            <a href="/admin-panel/user-support/" class="nav-link">
+                <i class="fas fa-headset"></i> User Support
+            </a>
             <a href="/admin-panel/settings/" class="nav-link">
                 <i class="fas fa-cog"></i> Settings
             </a>
@@ -182,79 +454,84 @@
 
     <!-- Main Content -->
     <div class="main-content">
-        <div class="top-bar d-flex justify-content-between align-items-center">
-            <h4 class="mb-0">Admin Dashboard</h4>
-            <div>
-                <button id="refreshDashboardBtn" class="btn btn-sm btn-outline-primary me-3">
+        <div class="top-bar">
+            <h4 class="mb-0 d-flex align-items-center">
+                <i class="fas fa-shield-alt text-primary me-2"></i> Admin Dashboard
+            </h4>
+            <div class="d-flex align-items-center">
+                <button id="refreshDashboardBtn" class="action-btn action-btn-outline me-3">
                     <i class="fas fa-sync-alt"></i> Refresh Data
                 </button>
-                <span class="me-3">Welcome, Admin</span>
-                <span class="badge bg-primary"><i class="fas fa-clock"></i> Last refresh: <span id="last-refresh-time">Just now</span></span>
+                <span class="me-3 d-none d-md-inline">Welcome, Admin</span>
+                <span class="badge bg-primary d-flex align-items-center">
+                    <i class="fas fa-clock me-1"></i> 
+                    <span id="last-refresh-time">Just now</span>
+                </span>
             </div>
         </div>
 
         <!-- Stats Row -->
         <div class="row mb-4">
-            <div class="col-md-3">
+            <div class="col-md-3 col-sm-6 mb-3 mb-md-0">
                 <div class="card card-stat">
                     <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <h6 class="card-subtitle mb-2 text-muted">Total Alerts</h6>
-                                <h2 class="alert-count">127</h2>
-                                <p class="mb-0 text-success"><i class="fas fa-arrow-up"></i> 12% from last week</p>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="card-subtitle text-muted">Total Alerts</h6>
+                            <div class="bg-primary bg-opacity-10 p-2 rounded-circle">
+                                <i class="fas fa-bell text-primary"></i>
                             </div>
-                            <div class="bg-primary bg-opacity-10 p-3 rounded">
-                                <i class="fas fa-bell text-primary fa-2x"></i>
-                            </div>
+                        </div>
+                        <h2 class="alert-count">127</h2>
+                        <div class="trend-indicator trend-up">
+                            <i class="fas fa-arrow-up"></i> 12% from last week
                         </div>
                     </div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card card-stat" style="border-left-color: #e74c3c;">
+            <div class="col-md-3 col-sm-6 mb-3 mb-md-0">
+                <div class="card card-stat critical">
                     <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <h6 class="card-subtitle mb-2 text-muted">Critical Threats</h6>
-                                <h2 class="alert-count text-danger">14</h2>
-                                <p class="mb-0 text-danger"><i class="fas fa-arrow-up"></i> 5% from last week</p>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="card-subtitle text-muted">Critical Threats</h6>
+                            <div class="bg-danger bg-opacity-10 p-2 rounded-circle">
+                                <i class="fas fa-radiation-alt text-danger"></i>
                             </div>
-                            <div class="bg-danger bg-opacity-10 p-3 rounded">
-                                <i class="fas fa-radiation-alt text-danger fa-2x"></i>
-                            </div>
+                        </div>
+                        <h2 class="alert-count">14</h2>
+                        <div class="trend-indicator trend-down">
+                            <i class="fas fa-arrow-down"></i> 5% from last week
                         </div>
                     </div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card card-stat" style="border-left-color: #2ecc71;">
+            <div class="col-md-3 col-sm-6 mb-3 mb-md-0">
+                <div class="card card-stat monitoring">
                     <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <h6 class="card-subtitle mb-2 text-muted">Servers Monitored</h6>
-                                <h2 class="alert-count">8</h2>
-                                <p class="mb-0 text-success"><i class="fas fa-check"></i> All online</p>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="card-subtitle text-muted">Servers Monitored</h6>
+                            <div class="bg-success bg-opacity-10 p-2 rounded-circle">
+                                <i class="fas fa-server text-success"></i>
                             </div>
-                            <div class="bg-success bg-opacity-10 p-3 rounded">
-                                <i class="fas fa-server text-success fa-2x"></i>
-                            </div>
+                        </div>
+                        <h2 class="alert-count">8</h2>
+                        <div class="trend-indicator trend-up">
+                            <i class="fas fa-check"></i> All online
                         </div>
                     </div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card card-stat" style="border-left-color: #f39c12;">
+            <div class="col-md-3 col-sm-6">
+                <div class="card card-stat users">
                     <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <h6 class="card-subtitle mb-2 text-muted">Active Users</h6>
-                                <h2 class="alert-count">42</h2>
-                                <p class="mb-0 text-success"><i class="fas fa-arrow-up"></i> 8% from last month</p>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="card-subtitle text-muted">Active Users</h6>
+                            <div class="bg-warning bg-opacity-10 p-2 rounded-circle">
+                                <i class="fas fa-users text-warning"></i>
                             </div>
-                            <div class="bg-warning bg-opacity-10 p-3 rounded">
-                                <i class="fas fa-users text-warning fa-2x"></i>
-                            </div>
+                        </div>
+                        <h2 class="alert-count">42</h2>
+                        <div class="trend-indicator trend-up">
+                            <i class="fas fa-arrow-up"></i> 8% from last month
                         </div>
                     </div>
                 </div>
@@ -263,174 +540,199 @@
 
         <!-- Charts Row -->
         <div class="row mb-4">
-            <div class="col-md-8">
-                <div class="chart-container">
-                    <h5>Threat Activity (Last 7 Days)</h5>
+            <div class="col-md-8 mb-4 mb-md-0">
+                <div class="chart-container h-100">
+                    <div class="chart-header">
+                        <div class="chart-title">
+                            <i class="fas fa-chart-line text-primary me-2"></i> Threat Activity (Last 7 Days)
+                        </div>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-sm btn-outline-secondary active" data-period="week">Week</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" data-period="month">Month</button>
+                        </div>
+                    </div>
                     <canvas id="threatActivityChart" height="250"></canvas>
                 </div>
             </div>
             <div class="col-md-4">
-                <div class="chart-container">
-                    <h5>Alert Distribution</h5>
+                <div class="chart-container h-100">
+                    <div class="chart-header">
+                        <div class="chart-title">
+                            <i class="fas fa-chart-pie text-primary me-2"></i> Alert Distribution
+                        </div>
+                    </div>
                     <canvas id="alertDistributionChart" height="250"></canvas>
                 </div>
             </div>
         </div>
 
-        <!-- Recent Alerts and Server Status Row -->
+        <!-- Server Status and System Health Row -->
         <div class="row">
-            <div class="col-md-8">
-                <div class="card">
-                    <div class="card-header bg-white">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">Recent Alerts</h5>
-                            <a href="/admin-panel/alerts/" class="btn btn-sm btn-primary">View All</a>
+            <div class="col-lg-6 mb-4 mb-lg-0">
+                <div class="chart-container h-100">
+                    <div class="chart-header">
+                        <div class="chart-title">
+                            <i class="fas fa-server text-primary me-2"></i> Server Status
                         </div>
+                        <button class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-cog"></i> Manage
+                        </button>
                     </div>
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-hover recent-alerts-table">
-                                <thead>
-                                    <tr>
-                                        <th>Time</th>
-                                        <th>Source</th>
-                                        <th>Alert Type</th>
-                                        <th>Severity</th>
-                                        <th>Status</th>
-                                        <th>Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td>Today, 14:25</td>
-                                        <td>Apache Server</td>
-                                        <td>Multiple 403 Forbidden</td>
-                                        <td><span class="severity-high">High</span></td>
-                                        <td><span class="badge bg-danger">New</span></td>
-                                        <td><button class="btn btn-sm btn-outline-primary">Details</button></td>
-                                    </tr>
-                                    <tr>
-                                        <td>Today, 12:18</td>
-                                        <td>MySQL Server</td>
-                                        <td>Failed Login Attempts</td>
-                                        <td><span class="severity-medium">Medium</span></td>
-                                        <td><span class="badge bg-warning text-dark">Investigating</span></td>
-                                        <td><button class="btn btn-sm btn-outline-primary">Details</button></td>
-                                    </tr>
-                                    <tr>
-                                        <td>Today, 10:45</td>
-                                        <td>Apache Server</td>
-                                        <td>SQL Injection Attempt</td>
-                                        <td><span class="severity-high">High</span></td>
-                                        <td><span class="badge bg-success">Resolved</span></td>
-                                        <td><button class="btn btn-sm btn-outline-primary">Details</button></td>
-                                    </tr>
-                                    <tr>
-                                        <td>Today, 09:12</td>
-                                        <td>MySQL Server</td>
-                                        <td>Database Connection Spike</td>
-                                        <td><span class="severity-low">Low</span></td>
-                                        <td><span class="badge bg-success">Resolved</span></td>
-                                        <td><button class="btn btn-sm btn-outline-primary">Details</button></td>
-                                    </tr>
-                                    <tr>
-                                        <td>Yesterday, 22:38</td>
-                                        <td>Apache Server</td>
-                                        <td>Directory Traversal Attempt</td>
-                                        <td><span class="severity-high">High</span></td>
-                                        <td><span class="badge bg-success">Resolved</span></td>
-                                        <td><button class="btn btn-sm btn-outline-primary">Details</button></td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                    
+                    <div class="server-status-container">
+                        <div class="status-card">
+                            <div class="status-icon online">
+                                <i class="fas fa-globe"></i>
+                            </div>
+                            <div class="status-details">
+                                <div class="status-server">Web Server (Apache)</div>
+                                <div class="status-metrics">
+                                    <span><i class="fas fa-check-circle text-success me-1"></i> Online</span>
+                                    <span><i class="fas fa-tachometer-alt me-1"></i> Load: 42%</span>
+                                </div>
+                                <div class="progress">
+                                    <div class="progress-bar bg-success" role="progressbar" style="width: 42%" aria-valuenow="42" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="status-card">
+                            <div class="status-icon online">
+                                <i class="fas fa-database"></i>
+                            </div>
+                            <div class="status-details">
+                                <div class="status-server">Database Server (MySQL)</div>
+                                <div class="status-metrics">
+                                    <span><i class="fas fa-check-circle text-success me-1"></i> Online</span>
+                                    <span><i class="fas fa-tachometer-alt me-1"></i> Load: 38%</span>
+                                </div>
+                                <div class="progress">
+                                    <div class="progress-bar bg-success" role="progressbar" style="width: 38%" aria-valuenow="38" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="status-card">
+                            <div class="status-icon warning">
+                                <i class="fas fa-cogs"></i>
+                            </div>
+                            <div class="status-details">
+                                <div class="status-server">Application Server</div>
+                                <div class="status-metrics">
+                                    <span><i class="fas fa-exclamation-triangle text-warning me-1"></i> High Load</span>
+                                    <span><i class="fas fa-tachometer-alt me-1"></i> Load: 78%</span>
+                                </div>
+                                <div class="progress">
+                                    <div class="progress-bar bg-warning" role="progressbar" style="width: 78%" aria-valuenow="78" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="status-card">
+                            <div class="status-icon online">
+                                <i class="fas fa-hdd"></i>
+                            </div>
+                            <div class="status-details">
+                                <div class="status-server">Backup Server</div>
+                                <div class="status-metrics">
+                                    <span><i class="fas fa-check-circle text-success me-1"></i> Online</span>
+                                    <span><i class="fas fa-tachometer-alt me-1"></i> Load: 12%</span>
+                                </div>
+                                <div class="progress">
+                                    <div class="progress-bar bg-success" role="progressbar" style="width: 12%" aria-valuenow="12" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="status-card">
+                            <div class="status-icon online">
+                                <i class="fas fa-search"></i>
+                            </div>
+                            <div class="status-details">
+                                <div class="status-server">Log Analysis Service</div>
+                                <div class="status-metrics">
+                                    <span><i class="fas fa-check-circle text-success me-1"></i> Active</span>
+                                    <span><i class="fas fa-clock me-1"></i> Last run: 5m ago</span>
+                                </div>
+                                <div class="progress">
+                                    <div class="progress-bar bg-info" role="progressbar" style="width: 100%" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-            <div class="col-md-4">
-                <div class="card">
-                    <div class="card-header bg-white">
-                        <h5 class="mb-0">Server Status</h5>
-                    </div>
-                    <div class="card-body">
-                        <ul class="list-group list-group-flush">
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                <div>
-                                    <span class="status-indicator status-active"></span>
-                                    Web Server (Apache)
+            
+            <div class="col-lg-6">
+                <div class="row">
+                    <div class="col-md-12 mb-4">
+                        <div class="chart-container">
+                            <div class="chart-header">
+                                <div class="chart-title">
+                                    <i class="fas fa-heartbeat text-primary me-2"></i> System Health
                                 </div>
-                                <div>
-                                    <span class="badge bg-success">Online</span>
-                                    <small class="text-muted ms-2">Load: 42%</small>
-                                </div>
-                            </li>
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                <div>
-                                    <span class="status-indicator status-active"></span>
-                                    Database Server (MySQL)
-                                </div>
-                                <div>
-                                    <span class="badge bg-success">Online</span>
-                                    <small class="text-muted ms-2">Load: 38%</small>
-                                </div>
-                            </li>
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                <div>
-                                    <span class="status-indicator status-warning"></span>
-                                    Application Server
-                                </div>
-                                <div>
-                                    <span class="badge bg-warning text-dark">High Load</span>
-                                    <small class="text-muted ms-2">Load: 78%</small>
-                                </div>
-                            </li>
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                <div>
-                                    <span class="status-indicator status-active"></span>
-                                    Backup Server
-                                </div>
-                                <div>
-                                    <span class="badge bg-success">Online</span>
-                                    <small class="text-muted ms-2">Load: 12%</small>
-                                </div>
-                            </li>
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                <div>
-                                    <span class="status-indicator status-active"></span>
-                                    Log Analysis Service
-                                </div>
-                                <div>
-                                    <span class="badge bg-success">Active</span>
-                                    <small class="text-muted ms-2">Last run: 5m ago</small>
-                                </div>
-                            </li>
-                        </ul>
-                    </div>
-                </div>
-
-                <div class="card mt-4">
-                    <div class="card-header bg-white">
-                        <h5 class="mb-0">Quick Actions</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="d-grid gap-2">
-                            <button id="runLogAnalysisBtn" class="btn btn-primary mb-2">
-                                <i class="fas fa-sync-alt me-2"></i> Run Log Analysis
-                            </button>
-                            <div class="dropdown d-grid">
-                                <button id="exportReportBtn" class="btn btn-outline-primary mb-2 dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                    <i class="fas fa-file-export me-2"></i> Export Report
-                                </button>
-                                <ul class="dropdown-menu w-100" aria-labelledby="exportReportBtn">
-                                    <li><h6 class="dropdown-header">Select Format</h6></li>
-                                    <li><a class="dropdown-item" href="#" data-format="pdf"><i class="fas fa-file-pdf text-danger me-2"></i> PDF Document</a></li>
-                                    <li><a class="dropdown-item" href="#" data-format="xlsx"><i class="fas fa-file-excel text-success me-2"></i> Excel Spreadsheet</a></li>
-                                    <li><a class="dropdown-item" href="#" data-format="csv"><i class="fas fa-file-csv text-primary me-2"></i> CSV File</a></li>
-                                </ul>
                             </div>
-                            <a href="/admin-panel/settings/" id="configureAlertsBtn" class="btn btn-outline-primary">
-                                <i class="fas fa-bell me-2"></i> Configure Alerts
-                            </a>
+                            <div class="system-metrics">
+                                <div class="metric-item">
+                                    <div class="metric-header">
+                                        <div class="metric-name">CPU Usage</div>
+                                        <div class="metric-value">32%</div>
+                                    </div>
+                                    <div class="progress">
+                                        <div class="progress-bar bg-success" role="progressbar" style="width: 32%" aria-valuenow="32" aria-valuemin="0" aria-valuemax="100"></div>
+                                    </div>
+                                </div>
+                                <div class="metric-item">
+                                    <div class="metric-header">
+                                        <div class="metric-name">Memory Usage</div>
+                                        <div class="metric-value">45%</div>
+                                    </div>
+                                    <div class="progress">
+                                        <div class="progress-bar bg-success" role="progressbar" style="width: 45%" aria-valuenow="45" aria-valuemin="0" aria-valuemax="100"></div>
+                                    </div>
+                                </div>
+                                <div class="metric-item">
+                                    <div class="metric-header">
+                                        <div class="metric-name">Disk Space</div>
+                                        <div class="metric-value">63%</div>
+                                    </div>
+                                    <div class="progress">
+                                        <div class="progress-bar bg-warning" role="progressbar" style="width: 63%" aria-valuenow="63" aria-valuemin="0" aria-valuemax="100"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-12">
+                        <div class="chart-container">
+                            <div class="chart-header">
+                                <div class="chart-title">
+                                    <i class="fas fa-bolt text-primary me-2"></i> Quick Actions
+                                </div>
+                            </div>
+                            <div class="d-grid gap-3">
+                                <button id="runLogAnalysisBtn" class="action-btn action-btn-primary">
+                                    <i class="fas fa-sync-alt"></i> Run Log Analysis
+                                </button>
+                                <div class="dropdown w-100">
+                                    <button id="exportReportBtn" class="action-btn action-btn-outline dropdown-toggle w-100" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                        <i class="fas fa-file-export"></i> Export Report
+                                    </button>
+                                    <ul class="dropdown-menu w-100 shadow-sm border-0" aria-labelledby="exportReportBtn">
+                                        <li><h6 class="dropdown-header">Select Format</h6></li>
+                                        <li><a class="dropdown-item" href="#" data-format="pdf"><i class="fas fa-file-pdf text-danger"></i> PDF Document</a></li>
+                                        <li><a class="dropdown-item" href="#" data-format="xlsx"><i class="fas fa-file-excel text-success"></i> Excel Spreadsheet</a></li>
+                                        <li><a class="dropdown-item" href="#" data-format="csv"><i class="fas fa-file-csv text-primary"></i> CSV File</a></li>
+                                    </ul>
+                                </div>
+                                <a href="/admin-panel/settings/" id="configureAlertsBtn" class="action-btn action-btn-outline">
+                                    <i class="fas fa-bell"></i> Configure Alerts
+                                </a>
+                                <a href="/admin-panel/logs/" class="action-btn action-btn-outline">
+                                    <i class="fas fa-search"></i> View Detailed Logs
+                                </a>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -441,7 +743,6 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
-
         // Initialize charts when the DOM is loaded
         document.addEventListener('DOMContentLoaded', function() {
             // Fetch dashboard data from backend
@@ -450,6 +751,18 @@
             // Update last refresh time
             updateRefreshTime();
             setInterval(updateRefreshTime, 60000); // Update every minute
+            
+            // Add period selector functionality for charts
+            document.querySelectorAll('[data-period]').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    // Remove active class from all buttons
+                    document.querySelectorAll('[data-period]').forEach(b => b.classList.remove('active'));
+                    // Add active class to clicked button
+                    this.classList.add('active');
+                    // Fetch data for selected period
+                    fetchDashboardData(this.dataset.period);
+                });
+            });
         });
 
         function updateRefreshTime() {
@@ -458,67 +771,78 @@
             document.getElementById('last-refresh-time').textContent = timeString;
         }
 
-        // Replace or update the fetchDashboardData function:
-        function fetchDashboardData() {
-            // Show loading spinners or indicators
+        // Replace the existing fetchDashboardData function with this improved version
+
+        function fetchDashboardData(period = 'week') {
+            // Show loading spinner
             document.getElementById('refreshDashboardBtn').innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Loading...';
             
-            console.log('Fetching dashboard data...');
-            return fetch('/api/admin/dashboard-data/')
-                .then(response => {
-                    console.log('API response status:', response.status);
-                    if (!response.ok) {
-                        // Your existing error handling code
-                        if (response.status === 500) {
-                            console.error('Server error: The dashboard data API returned a 500 error');
-                            return response.json().then(errorData => {
-                                throw new Error(`Server error: ${errorData.error || 'Unknown server error'}`);
-                            });
-                        }
-                        if (response.status === 404) {
-                            throw new Error('API endpoint not found: Check URL configuration');
-                        }
-                        if (response.status === 403) {
-                            throw new Error('Access denied: You might not have permission to access this resource');
-                        }
-                        throw new Error('Network response was not ok');
+            console.log('Fetching dashboard data for period:', period);
+            
+            // Add cache-busting parameter to prevent cached responses
+            const timestamp = new Date().getTime();
+            return fetch(`/api/admin/dashboard-data/?timeframe=${period}&_=${timestamp}`, {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Cache-Control': 'no-cache'
+                },
+                credentials: 'same-origin' // Include cookies for authentication
+            })
+            .then(response => {
+                console.log('API response status:', response.status);
+                if (!response.ok) {
+                    if (response.status === 500) {
+                        return response.json().then(errorData => {
+                            throw new Error(`Server error: ${errorData.error || 'Unknown server error'}`);
+                        });
                     }
-                    return response.json();
-                })
-                .then(data => {
-                    console.log('Dashboard data received:', data);
-                    
-                    // Check data structure
-                    if (!data.counts) console.warn('Missing counts data');
-                    if (!data.threat_activity) console.warn('Missing threat_activity data');
-                    if (!data.alert_distribution) console.warn('Missing alert_distribution data');
-                    if (!data.recent_alerts) console.warn('Missing recent_alerts data');
-                    if (!data.server_status) console.warn('Missing server_status data');
-                    
-                    // Update dashboard with fetched data
-                    updateCounts(data.counts || {});
-                    updateThreatActivityChart(data.threat_activity || {});
-                    updateAlertDistributionChart(data.alert_distribution || {});
-                    updateRecentAlerts(data.recent_alerts || []);
-                    updateServerStatus(data.server_status || []);
-                    
-                    // Update last refresh time
-                    updateRefreshTime();
-                    
-                    // Reset the refresh button
-                    document.getElementById('refreshDashboardBtn').innerHTML = '<i class="fas fa-sync-alt"></i> Refresh Data';
-                    
-                    return data; // Return data for any further processing
-                })
-                .catch(error => {
-                    console.error('Error fetching dashboard data:', error);
-                    // Show error message to the user
-                    alert(`Failed to load dashboard data: ${error.message}`);
-                    // Use existing hardcoded data as fallback
-                    initializeChartsWithHardcodedData();
-                    // Reset the refresh button
-                    document.getElementById('refreshDashboardBtn').innerHTML = '<i class="fas fa-sync-alt"></i> Refresh Data';
-                });
+                    if (response.status === 404) {
+                        throw new Error('API endpoint not found: Check URL configuration');
+                    }
+                    if (response.status === 403) {
+                        throw new Error('Access denied: You might not have permission to access this resource');
+                    }
+                    if (response.status === 401) {
+                        // Redirect to login page if not authenticated
+                        window.location.href = '/login/?next=' + encodeURIComponent(window.location.pathname);
+                        throw new Error('Authentication required');
+                    }
+                    throw new Error(`HTTP error: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Dashboard data received:', data);
+                
+                // Check data structure and log warnings for missing data
+                if (!data.counts) console.warn('Missing counts data');
+                if (!data.threat_activity) console.warn('Missing threat_activity data');
+                if (!data.alert_distribution) console.warn('Missing alert_distribution data');
+                if (!data.server_status) console.warn('Missing server_status data');
+                
+                // Update dashboard with fetched data
+                updateCounts(data.counts || {});
+                updateThreatActivityChart(data.threat_activity || {});
+                updateAlertDistributionChart(data.alert_distribution || {});
+                updateServerStatus(data.server_status || []);
+                
+                // Reset the refresh button
+                document.getElementById('refreshDashboardBtn').innerHTML = '<i class="fas fa-sync-alt"></i> Refresh Data';
+                
+                return data; // Return data for any further processing
+            })
+            .catch(error => {
+                console.error('Error fetching dashboard data:', error);
+                
+                // Show error message to the user
+                showToast('Error', `Failed to load dashboard data: ${error.message}`, 'error');
+                
+                // Reset the refresh button
+                document.getElementById('refreshDashboardBtn').innerHTML = '<i class="fas fa-sync-alt"></i> Refresh Data';
+                
+                throw error; // Rethrow for further handling if needed
+            });
         }
 
         function updateCounts(counts) {
@@ -546,26 +870,29 @@
                         {
                             label: 'High Severity',
                             data: threatActivity.high_severity,
-                            borderColor: '#e74c3c',
-                            backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                            borderColor: '#dc3545',
+                            backgroundColor: 'rgba(220, 53, 69, 0.1)',
                             tension: 0.4,
-                            fill: true
+                            fill: true,
+                            borderWidth: 2
                         },
                         {
                             label: 'Medium Severity',
                             data: threatActivity.medium_severity,
-                            borderColor: '#f39c12',
-                            backgroundColor: 'rgba(243, 156, 18, 0.1)',
+                            borderColor: '#ffc107',
+                            backgroundColor: 'rgba(255, 193, 7, 0.1)',
                             tension: 0.4,
-                            fill: true
+                            fill: true,
+                            borderWidth: 2
                         },
                         {
                             label: 'Low Severity',
                             data: threatActivity.low_severity,
-                            borderColor: '#3498db',
-                            backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                            borderColor: '#17a2b8',
+                            backgroundColor: 'rgba(23, 162, 184, 0.1)',
                             tension: 0.4,
-                            fill: true
+                            fill: true,
+                            borderWidth: 2
                         }
                     ]
                 },
@@ -574,12 +901,32 @@
                     plugins: {
                         legend: {
                             position: 'top',
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                            padding: 10,
+                            cornerRadius: 4
                         }
                     },
                     scales: {
                         y: {
-                            beginAtZero: true
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            }
                         }
+                    },
+                    interaction: {
+                        mode: 'nearest',
+                        axis: 'x',
+                        intersect: false
                     }
                 }
             });
@@ -605,13 +952,13 @@
             
             console.log('Alert Distribution Chart Data:', { labels, data });
             
-            // Use default colors if not enough data points
+            // Use custom colors
             const colors = [
-                '#3a6ea5',
-                '#e74c3c',
-                '#f39c12',
-                '#2ecc71',
-                '#9b59b6'
+                '#3f51b5',
+                '#dc3545',
+                '#ffc107',
+                '#28a745',
+                '#6f42c1'
             ];
             
             // Create new chart with real data
@@ -622,7 +969,8 @@
                     datasets: [{
                         data: data.length > 0 ? data : [1],
                         backgroundColor: colors.slice(0, labels.length || 1),
-                        borderWidth: 1
+                        borderWidth: 0,
+                        hoverOffset: 5
                     }]
                 },
                 options: {
@@ -630,126 +978,128 @@
                     plugins: {
                         legend: {
                             position: 'bottom',
+                            labels: {
+                                boxWidth: 12,
+                                padding: 15
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                            padding: 10,
+                            cornerRadius: 4,
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || 0;
+                                    const total = context.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+                                    const percentage = Math.round((value / total) * 100);
+                                    return `${label}: ${value} (${percentage}%)`;
+                                }
+                            }
                         }
+                    },
+                    cutout: '65%',
+                    animation: {
+                        animateRotate: true,
+                        animateScale: true
                     }
                 }
             });
         }
 
-        function updateRecentAlerts(alerts) {
-            const tbody = document.querySelector('.recent-alerts-table tbody');
-            if (!tbody) {
-                console.error('Recent alerts table body not found');
-                return;
-            }
-            
-            // If no alerts, show a message
-            if (!alerts || !alerts.length) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center">No recent alerts</td></tr>';
-                return;
-            }
-            
-            tbody.innerHTML = ''; // Clear existing rows
-            
-            alerts.forEach(alert => {
-                // Ensure alert has id property
-                const alertId = alert.id || '';
-                
-                // Determine severity class
-                let severityClass = 'severity-low';
-                if (alert.severity === 'high') {
-                    severityClass = 'severity-high';
-                } else if (alert.severity === 'medium') {
-                    severityClass = 'severity-medium';
-                }
-                
-                // Determine status badge
-                let statusBadge = '';
-                switch(alert.status) {
-                    case 'new':
-                        statusBadge = '<span class="badge bg-danger">New</span>';
-                        break;
-                    case 'investigating':
-                        statusBadge = '<span class="badge bg-warning text-dark">Investigating</span>';
-                        break;
-                    case 'resolved':
-                        statusBadge = '<span class="badge bg-success">Resolved</span>';
-                        break;
-                    default:
-                        statusBadge = `<span class="badge bg-secondary">${alert.status || 'Unknown'}</span>`;
-                }
-                
-                // Format timestamp
-                const timestamp = new Date(alert.timestamp);
-                const today = new Date();
-                let timeDisplay;
-                
-                if (isNaN(timestamp.getTime())) {
-                    timeDisplay = alert.timestamp || 'Unknown date';
-                } else if (timestamp.toDateString() === today.toDateString()) {
-                    timeDisplay = 'Today, ' + timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                } else if (timestamp.toDateString() === new Date(today - 86400000).toDateString()) {
-                    timeDisplay = 'Yesterday, ' + timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                } else {
-                    timeDisplay = timestamp.toLocaleDateString() + ', ' + timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                }
-                
-                // Create and append row
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${timeDisplay}</td>
-                    <td>${alert.source || 'Unknown'}</td>
-                    <td>${alert.type || 'Unknown'}</td>
-                    <td><span class="${severityClass}">${alert.severity || 'Unknown'}</span></td>
-                    <td>${statusBadge}</td>
-                    <td>
-                        <button class="btn btn-sm btn-outline-primary" onclick="showAlertDetails('${alertId}')">Details</button>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
-        }
+        // Replace the existing updateServerStatus function with this fully dynamic implementation
 
         function updateServerStatus(servers) {
-            const listGroup = document.querySelector('.card .list-group');
-            if (!listGroup || !servers.length) return;
+            const container = document.querySelector('.server-status-container');
+            if (!container) return;
             
-            listGroup.innerHTML = ''; // Clear existing items
+            // If no server data, keep existing content
+            if (!servers || !servers.length) return;
+            
+            // Clear existing content and create new cards
+            container.innerHTML = '';
             
             servers.forEach(server => {
-                // Determine status indicator class
-                let statusClass = 'status-active';
-                let statusBadge = '<span class="badge bg-success">Online</span>';
-                let statusInfo = '';
+                // Determine status class
+                let statusClass = 'online';
+                let statusIcon = 'check-circle';
+                let statusText = 'Online';
+                let progressBarClass = 'bg-success';
                 
-                if (server.status === 'high_load') {
-                    statusClass = 'status-warning';
-                    statusBadge = '<span class="badge bg-warning text-dark">High Load</span>';
-                    statusInfo = `<small class="text-muted ms-2">Load: ${server.load}%</small>`;
-                } else if (server.status === 'offline') {
-                    statusClass = 'status-danger';
-                    statusBadge = '<span class="badge bg-danger">Offline</span>';
+                if (server.status === 'high_load' || server.status === 'warning') {
+                    statusClass = 'warning';
+                    statusIcon = 'exclamation-triangle';
+                    statusText = 'High Load';
+                    progressBarClass = 'bg-warning';
+                } else if (server.status === 'offline' || server.status === 'error') {
+                    statusClass = 'offline';
+                    statusIcon = 'times-circle';
+                    statusText = 'Offline';
+                    progressBarClass = 'bg-danger';
                 } else if (server.status === 'active') {
-                    statusBadge = '<span class="badge bg-success">Active</span>';
-                    statusInfo = `<small class="text-muted ms-2">Last run: ${server.last_run}</small>`;
-                } else {
-                    statusInfo = `<small class="text-muted ms-2">Load: ${server.load}%</small>`;
+                    statusIcon = 'check-circle';
+                    statusText = 'Active';
+                    progressBarClass = 'bg-info';
                 }
                 
-                // Create and append list item
-                const item = document.createElement('li');
-                item.className = 'list-group-item d-flex justify-content-between align-items-center';
-                item.innerHTML = `
-                    <div>
-                        <span class="status-indicator ${statusClass}"></span>
-                        ${server.name}
-                    </div>
-                    <div>
-                        ${statusBadge}
-                        ${statusInfo}
-                    </div>
-                `;
-                listGroup.appendChild(item);
+                // Determine server icon
+                let serverIcon = 'server';
+                if (server.name.toLowerCase().includes('web') || server.name.toLowerCase().includes('apache')) {
+                    serverIcon = 'globe';
+                } else if (server.name.toLowerCase().includes('database') || server.name.toLowerCase().includes('mysql')) {
+                    serverIcon = 'database';
+                } else if (server.name.toLowerCase().includes('backup')) {
+                    serverIcon = 'hdd';
+                } else if (server.name.toLowerCase().includes('log') || server.name.toLowerCase().includes('analysis')) {
+                    serverIcon = 'search';
+                } else if (server.name.toLowerCase().includes('application')) {
+                    serverIcon = 'cogs';
+                }
+                
+                // Create status card
+                const card = document.createElement('div');
+                card.className = 'status-card';
+                
+                // For load-based servers
+                if (server.load !== undefined) {
+                    card.innerHTML = `
+                        <div class="status-icon ${statusClass}">
+                            <i class="fas fa-${serverIcon}"></i>
+                        </div>
+                        <div class="status-details">
+                            <div class="status-server">${server.name}</div>
+                            <div class="status-metrics">
+                                <span><i class="fas fa-${statusIcon} text-${statusClass === 'online' ? 'success' : statusClass === 'warning' ? 'warning' : 'danger'} me-1"></i> ${statusText}</span>
+                                <span><i class="fas fa-tachometer-alt me-1"></i> Load: ${server.load}%</span>
+                            </div>
+                            <div class="progress">
+                                <div class="progress-bar ${progressBarClass}" role="progressbar" style="width: ${server.load}%" 
+                                    aria-valuenow="${server.load}" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                        </div>
+                    `;
+                } 
+                // For services with last run time
+                else if (server.last_run) {
+                    card.innerHTML = `
+                        <div class="status-icon ${statusClass}">
+                            <i class="fas fa-${serverIcon}"></i>
+                        </div>
+                        <div class="status-details">
+                            <div class="status-server">${server.name}</div>
+                            <div class="status-metrics">
+                                <span><i class="fas fa-${statusIcon} text-${statusClass === 'online' ? 'success' : statusClass === 'warning' ? 'warning' : 'danger'} me-1"></i> ${statusText}</span>
+                                <span><i class="fas fa-clock me-1"></i> Last run: ${server.last_run}</span>
+                            </div>
+                            <div class="progress">
+                                <div class="progress-bar ${progressBarClass}" role="progressbar" style="width: 100%" 
+                                    aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                container.appendChild(card);
             });
         }
 
@@ -773,26 +1123,29 @@
                         {
                             label: 'High Severity',
                             data: [4, 3, 2, 5, 3, 1, 4],
-                            borderColor: '#e74c3c',
-                            backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                            borderColor: '#dc3545',
+                            backgroundColor: 'rgba(220, 53, 69, 0.1)',
                             tension: 0.4,
-                            fill: true
+                            fill: true,
+                            borderWidth: 2
                         },
                         {
                             label: 'Medium Severity',
                             data: [7, 6, 8, 9, 6, 5, 7],
-                            borderColor: '#f39c12',
-                            backgroundColor: 'rgba(243, 156, 18, 0.1)',
+                            borderColor: '#ffc107',
+                            backgroundColor: 'rgba(255, 193, 7, 0.1)',
                             tension: 0.4,
-                            fill: true
+                            fill: true,
+                            borderWidth: 2
                         },
                         {
                             label: 'Low Severity',
                             data: [12, 10, 13, 8, 11, 9, 14],
-                            borderColor: '#3498db',
-                            backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                            borderColor: '#17a2b8',
+                            backgroundColor: 'rgba(23, 162, 184, 0.1)',
                             tension: 0.4,
-                            fill: true
+                            fill: true,
+                            borderWidth: 2
                         }
                     ]
                 },
@@ -805,7 +1158,15 @@
                     },
                     scales: {
                         y: {
-                            beginAtZero: true
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            }
                         }
                     }
                 }
@@ -820,12 +1181,12 @@
                     datasets: [{
                         data: [45, 30, 15, 10],
                         backgroundColor: [
-                            '#3a6ea5',
-                            '#e74c3c',
-                            '#f39c12',
-                            '#2ecc71'
+                            '#3f51b5',
+                            '#dc3545',
+                            '#ffc107',
+                            '#28a745'
                         ],
-                        borderWidth: 1
+                        borderWidth: 0
                     }]
                 },
                 options: {
@@ -833,16 +1194,15 @@
                     plugins: {
                         legend: {
                             position: 'bottom',
+                            labels: {
+                                boxWidth: 12,
+                                padding: 15
+                            }
                         }
-                    }
+                    },
+                    cutout: '65%'
                 }
             });
-        }
-
-        // Function to show alert details
-        function showAlertDetails(alertId) {
-            // In a real implementation, fetch alert details and show in modal
-            window.location.href = `/admin-panel/alerts/details/${alertId}/`;
         }
 
         document.getElementById('refreshDashboardBtn').addEventListener('click', function() {
@@ -858,8 +1218,6 @@
             });
         });
 
-        // Add this code after the existing event listeners
-
         // Quick Actions Event Listeners
         document.addEventListener('DOMContentLoaded', function() {
             // Run Log Analysis Button
@@ -873,8 +1231,6 @@
                     exportDashboardReport(format);
                 });
             });
-            
-            // Configure Alerts Button is already an <a> tag so no JavaScript needed for navigation
         });
 
         // Function to run log analysis
@@ -883,27 +1239,39 @@
             
             // Disable button and show loading state
             button.disabled = true;
-            button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Running Analysis...';
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running Analysis...';
             
             // Make API call to trigger log analysis
             fetch('/api/admin/run-log-analysis/', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': getCsrfToken()
-                }
+                    'X-CSRFToken': getCsrfToken(),
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                credentials: 'same-origin'
             })
             .then(response => {
                 if (!response.ok) {
-                    throw new Error('Failed to start log analysis');
+                    if (response.status === 403) {
+                        throw new Error('Permission denied. You might need to refresh your session.');
+                    }
+                    return response.text().then(text => {
+                        try {
+                            const errorData = JSON.parse(text);
+                            throw new Error(errorData.error || 'Failed to start log analysis');
+                        } catch (e) {
+                            throw new Error(`Failed to start log analysis (Status: ${response.status})`);
+                        }
+                    });
                 }
                 return response.json();
             })
             .then(data => {
                 // Show success message
-                button.classList.remove('btn-primary');
+                button.classList.remove('action-btn-primary');
                 button.classList.add('btn-success');
-                button.innerHTML = '<i class="fas fa-check me-2"></i> Analysis Complete';
+                button.innerHTML = '<i class="fas fa-check"></i> Analysis Complete';
                 
                 // Show toast notification
                 showToast('Log Analysis', 'Analysis completed successfully. New threats detected: ' + (data.threats_detected || 0), 'success');
@@ -914,8 +1282,8 @@
                     // Reset button after 3 seconds
                     setTimeout(() => {
                         button.classList.remove('btn-success');
-                        button.classList.add('btn-primary');
-                        button.innerHTML = '<i class="fas fa-sync-alt me-2"></i> Run Log Analysis';
+                        button.classList.add('action-btn-primary');
+                        button.innerHTML = '<i class="fas fa-sync-alt"></i> Run Log Analysis';
                         button.disabled = false;
                     }, 3000);
                 }, 1000);
@@ -924,9 +1292,9 @@
                 console.error('Error running log analysis:', error);
                 
                 // Show error state
-                button.classList.remove('btn-primary');
+                button.classList.remove('action-btn-primary');
                 button.classList.add('btn-danger');
-                button.innerHTML = '<i class="fas fa-exclamation-circle me-2"></i> Analysis Failed';
+                button.innerHTML = '<i class="fas fa-exclamation-circle"></i> Analysis Failed';
                 
                 // Show error toast
                 showToast('Log Analysis', 'Failed to complete analysis: ' + error.message, 'error');
@@ -934,14 +1302,15 @@
                 // Reset button after 3 seconds
                 setTimeout(() => {
                     button.classList.remove('btn-danger');
-                    button.classList.add('btn-primary');
-                    button.innerHTML = '<i class="fas fa-sync-alt me-2"></i> Run Log Analysis';
+                    button.classList.add('action-btn-primary');
+                    button.innerHTML = '<i class="fas fa-sync-alt"></i> Run Log Analysis';
                     button.disabled = false;
                 }, 3000);
             });
         }
 
-        // Function to export dashboard report
+        // Replace the existing exportDashboardReport function with this enhanced version
+
         function exportDashboardReport(format) {
             // Get button element
             const button = document.getElementById('exportReportBtn');
@@ -954,24 +1323,26 @@
             
             // Disable button and show loading state
             button.disabled = true;
-            button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Generating Report...';
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating Report...';
             
             // Make API call to generate report
             fetch(`/api/admin/export-report/?format=${format.toLowerCase()}`, {
                 headers: {
-                    'X-CSRFToken': getCsrfToken()
-                }
+                    'X-CSRFToken': getCsrfToken(),
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                credentials: 'same-origin'
             })
             .then(response => {
                 if (!response.ok) {
-                    throw new Error('Failed to generate report');
+                    throw new Error(`Failed to generate report (Status: ${response.status})`);
                 }
                 
                 // Check if it's a download or just a response
                 const contentType = response.headers.get('Content-Type');
                 if (contentType && (contentType.includes('application/pdf') || 
-                                   contentType.includes('text/csv') || 
-                                   contentType.includes('application/vnd.openxmlformats'))) {
+                                    contentType.includes('text/csv') || 
+                                    contentType.includes('application/vnd.openxmlformats'))) {
                     return response.blob().then(blob => {
                         // Create download link and trigger download
                         const url = window.URL.createObjectURL(blob);
@@ -989,9 +1360,9 @@
             })
             .then(data => {
                 // Show success message
-                button.classList.remove('btn-outline-primary');
+                button.classList.remove('action-btn-outline');
                 button.classList.add('btn-success');
-                button.innerHTML = '<i class="fas fa-check me-2"></i> Report Generated';
+                button.innerHTML = '<i class="fas fa-check"></i> Report Generated';
                 
                 // Show success toast
                 showToast('Report Export', 'Report generated and downloaded successfully', 'success');
@@ -999,8 +1370,8 @@
                 // Reset button after 3 seconds
                 setTimeout(() => {
                     button.classList.remove('btn-success');
-                    button.classList.add('btn-outline-primary');
-                    button.innerHTML = '<i class="fas fa-file-export me-2"></i> Export Report';
+                    button.classList.add('action-btn-outline');
+                    button.innerHTML = '<i class="fas fa-file-export"></i> Export Report';
                     button.disabled = false;
                 }, 3000);
             })
@@ -1008,9 +1379,9 @@
                 console.error('Error exporting report:', error);
                 
                 // Show error state
-                button.classList.remove('btn-outline-primary');
+                button.classList.remove('action-btn-outline');
                 button.classList.add('btn-danger');
-                button.innerHTML = '<i class="fas fa-exclamation-circle me-2"></i> Export Failed';
+                button.innerHTML = '<i class="fas fa-exclamation-circle"></i> Export Failed';
                 
                 // Show error toast
                 showToast('Report Export', 'Failed to generate report: ' + error.message, 'error');
@@ -1018,20 +1389,38 @@
                 // Reset button after 3 seconds
                 setTimeout(() => {
                     button.classList.remove('btn-danger');
-                    button.classList.add('btn-outline-primary');
-                    button.innerHTML = '<i class="fas fa-file-export me-2"></i> Export Report';
+                    button.classList.add('action-btn-outline');
+                    button.innerHTML = '<i class="fas fa-file-export"></i> Export Report';
                     button.disabled = false;
                 }, 3000);
             });
         }
 
-        // Helper function to get CSRF token
+        // Replace the existing getCsrfToken function with this more robust version
+
         function getCsrfToken() {
-            const cookieValue = document.cookie
-                .split('; ')
-                .find(row => row.startsWith('csrftoken='))
-                ?.split('=')[1];
-            return cookieValue || '';
+            // Try to get token from cookie
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, 10) === 'csrftoken=') {
+                        cookieValue = decodeURIComponent(cookie.substring(10));
+                        break;
+                    }
+                }
+            }
+            
+            // If not found in cookie, try to get from meta tag
+            if (!cookieValue) {
+                const meta = document.querySelector('meta[name="csrf-token"]');
+                if (meta) {
+                    cookieValue = meta.getAttribute('content');
+                }
+            }
+            
+            return cookieValue;
         }
 
         // Helper function to show toast notifications
@@ -1048,7 +1437,7 @@
                 
                 // Create toast element
                 const toastElement = document.createElement('div');
-                toastElement.className = `toast align-items-center text-white bg-${type === 'error' ? 'danger' : 'success'} border-0`;
+                toastElement.className = `toast align-items-center text-white bg-${type === 'error' ? 'danger' : 'success'} border-0 shadow`;
                 toastElement.setAttribute('role', 'alert');
                 toastElement.setAttribute('aria-live', 'assertive');
                 toastElement.setAttribute('aria-atomic', 'true');
@@ -1067,7 +1456,9 @@
                 toastContainer.appendChild(toastElement);
                 
                 // Initialize and show toast
-                const toast = new bootstrap.Toast(toastElement);
+                const toast = new bootstrap.Toast(toastElement, {
+                    delay: 5000
+                });
                 toast.show();
                 
                 // Remove after it's hidden

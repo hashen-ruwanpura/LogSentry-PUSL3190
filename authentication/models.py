@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 import json
 from django.utils import timezone
 from django.core.serializers.json import DjangoJSONEncoder
+from django.conf import settings
 
 class SystemSettings(models.Model):
     """Model for storing system settings"""
@@ -94,3 +95,30 @@ class UserPreference(models.Model):
     
     def __str__(self):
         return f"{self.user.username}'s preferences"
+
+class ContactMessage(models.Model):
+    name = models.CharField(max_length=100)
+    email = models.EmailField()
+    subject = models.CharField(max_length=200)
+    message = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_read = models.BooleanField(default=False)
+    is_replied = models.BooleanField(default=False)
+    
+    def __str__(self):
+        return f"{self.name}: {self.subject}"
+    
+    class Meta:
+        ordering = ['-created_at']
+
+class AdminReply(models.Model):
+    contact_message = models.ForeignKey(ContactMessage, on_delete=models.CASCADE, related_name='replies')
+    admin_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    reply_text = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"Reply to {self.contact_message.name}"
+    
+    class Meta:
+        ordering = ['created_at']

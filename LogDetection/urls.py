@@ -31,6 +31,7 @@ from analytics import views as analytics_views
 from django.shortcuts import redirect
 from authentication import views_admin
 from authentication import views_reports  # Import the new views
+from authentication import views_settings  # Add this import
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -56,7 +57,7 @@ urlpatterns = [
     path('apache-logs/', views.apache_logs_view, name='apache_logs'),
     path('mysql-logs/', views.mysql_logs_view, name='mysql_logs'),
     path('reports/', views.generate_report, name='reports'),
-    path('settings/', views.settings_view, name='settings'),
+    path('settings/', views_settings.settings_view, name='settings'),  # NEW
     path('explore-agent/', views.explore_agent_view, name='explore_agent'),
     path('generate-report/', views.generate_report, name='generate_report'),
     path('alerts-details/', views.alerts_details_view, name='alerts_details'),
@@ -141,3 +142,4 @@ urlpatterns += [
 
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

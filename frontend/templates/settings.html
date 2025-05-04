@@ -434,33 +434,21 @@
                                 <h5 class="mb-0">Profile Settings</h5>
                             </div>
                             <div class="settings-body">
-                                <form method="post" action="{% url 'settings' %}">
+                                <form method="post" action="{% url 'update_profile' %}">
                                     {% csrf_token %}
-                                    <input type="hidden" name="update_profile" value="1">
-                                    
-                                    <div class="row mb-3">
-                                        <div class="col-md-6">
-                                            <div class="form-group">
-                                                <label class="form-label" for="first_name">First Name</label>
-                                                <input type="text" class="form-control" id="first_name" name="first_name" value="{{ user.first_name }}" required>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-6">
-                                            <div class="form-group">
-                                                <label class="form-label" for="last_name">Last Name</label>
-                                                <input type="text" class="form-control" id="last_name" name="last_name" value="{{ user.last_name }}" required>
-                                            </div>
-                                        </div>
+                                    <div class="form-group mb-4">
+                                        <label for="first_name">First Name</label>
+                                        <input type="text" class="form-control" id="first_name" name="first_name" value="{{ user.first_name }}" required>
                                     </div>
-                                    
-                                    <div class="form-group">
-                                        <label class="form-label" for="email">Email Address</label>
+                                    <div class="form-group mb-4">
+                                        <label for="last_name">Last Name</label>
+                                        <input type="text" class="form-control" id="last_name" name="last_name" value="{{ user.last_name }}" required>
+                                    </div>
+                                    <div class="form-group mb-4">
+                                        <label for="email">Email</label>
                                         <input type="email" class="form-control" id="email" name="email" value="{{ user.email }}" required>
                                     </div>
-                                    
-                                    <div class="settings-footer">
-                                        <button type="submit" class="btn btn-primary">Save Profile</button>
-                                    </div>
+                                    <button type="submit" class="btn btn-primary">Update Profile</button>
                                 </form>
                             </div>
                         </div>
@@ -474,29 +462,21 @@
                                 <h5 class="mb-0">Security Settings</h5>
                             </div>
                             <div class="settings-body">
-                                <form method="post" action="{% url 'settings' %}">
+                                <form method="post" action="{% url 'change_password' %}">
                                     {% csrf_token %}
-                                    <input type="hidden" name="change_password" value="1">
-                                    
-                                    <div class="form-group">
-                                        <label class="form-label" for="current_password">Current Password</label>
+                                    <div class="form-group mb-4">
+                                        <label for="current_password">Current Password</label>
                                         <input type="password" class="form-control" id="current_password" name="current_password" required>
                                     </div>
-                                    
-                                    <div class="form-group">
-                                        <label class="form-label" for="new_password">New Password</label>
+                                    <div class="form-group mb-4">
+                                        <label for="new_password">New Password</label>
                                         <input type="password" class="form-control" id="new_password" name="new_password" required>
-                                        <div class="form-text">Must be at least 8 characters long</div>
                                     </div>
-                                    
-                                    <div class="form-group">
-                                        <label class="form-label" for="confirm_password">Confirm New Password</label>
+                                    <div class="form-group mb-4">
+                                        <label for="confirm_password">Confirm New Password</label>
                                         <input type="password" class="form-control" id="confirm_password" name="confirm_password" required>
                                     </div>
-                                    
-                                    <div class="settings-footer">
-                                        <button type="submit" class="btn btn-primary">Change Password</button>
-                                    </div>
+                                    <button type="submit" class="btn btn-primary">Change Password</button>
                                 </form>
                             </div>
                         </div>
@@ -510,60 +490,30 @@
                                 <h5 class="mb-0">Notification Settings</h5>
                             </div>
                             <div class="settings-body">
-                                <form method="post" action="{% url 'settings' %}">
+                                <form method="post" action="{% url 'save_notification_settings' %}">
                                     {% csrf_token %}
-                                    <input type="hidden" name="notification_settings" value="1">
-                                    
-                                    <div class="form-group">
+                                    <div class="form-group mb-4">
                                         <div class="form-check form-switch">
-                                            <input class="form-check-input" type="checkbox" id="email_alerts" name="email_alerts" {% if notification_settings.email_alerts %}checked{% endif %}>
+                                            <input class="form-check-input" type="checkbox" id="email_alerts" name="email_alerts" 
+                                                  {% if notification_settings.email_alerts %}checked{% endif %}>
                                             <label class="form-check-label" for="email_alerts">Email Notifications</label>
                                         </div>
-                                        <div class="form-text">Receive security alerts via email</div>
                                     </div>
-                                    
-                                    <div class="form-group">
+                                    <div class="form-group mb-4">
                                         <div class="form-check form-switch">
-                                            <input class="form-check-input" type="checkbox" id="sms_alerts" name="sms_alerts" {% if notification_settings.sms_alerts %}checked{% endif %}>
+                                            <input class="form-check-input" type="checkbox" id="sms_alerts" name="sms_alerts" 
+                                                  {% if notification_settings.sms_alerts %}checked{% endif %}>
                                             <label class="form-check-label" for="sms_alerts">SMS Notifications</label>
                                         </div>
-                                        <div class="form-text">Receive critical alerts via SMS</div>
                                     </div>
-                                    
-                                    <div class="form-group">
+                                    <div class="form-group mb-4">
                                         <div class="form-check form-switch">
-                                            <input class="form-check-input" type="checkbox" id="slack_alerts" name="slack_alerts" {% if notification_settings.slack_alerts %}checked{% endif %}>
+                                            <input class="form-check-input" type="checkbox" id="slack_alerts" name="slack_alerts" 
+                                                  {% if notification_settings.slack_alerts %}checked{% endif %}>
                                             <label class="form-check-label" for="slack_alerts">Slack Notifications</label>
                                         </div>
-                                        <div class="form-text">Send alerts to a Slack channel</div>
                                     </div>
-                                    
-                                    <div class="settings-separator"></div>
-                                    
-                                    <div class="form-group">
-                                        <label class="form-label">Alert Severity Levels</label>
-                                        <div class="form-check mt-2">
-                                            <input class="form-check-input" type="checkbox" id="critical_alerts" name="critical_alerts" checked disabled>
-                                            <label class="form-check-label" for="critical_alerts">Critical Alerts</label>
-                                            <span class="badge bg-danger ms-2">Required</span>
-                                        </div>
-                                        <div class="form-check mt-2">
-                                            <input class="form-check-input" type="checkbox" id="high_alerts" name="high_alerts" checked>
-                                            <label class="form-check-label" for="high_alerts">High Severity Alerts</label>
-                                        </div>
-                                        <div class="form-check mt-2">
-                                            <input class="form-check-input" type="checkbox" id="medium_alerts" name="medium_alerts" checked>
-                                            <label class="form-check-label" for="medium_alerts">Medium Severity Alerts</label>
-                                        </div>
-                                        <div class="form-check mt-2">
-                                            <input class="form-check-input" type="checkbox" id="low_alerts" name="low_alerts">
-                                            <label class="form-check-label" for="low_alerts">Low Severity Alerts</label>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="settings-footer">
-                                        <button type="submit" class="btn btn-primary">Save Notification Settings</button>
-                                    </div>
+                                    <button type="submit" class="btn btn-primary">Save Notification Settings</button>
                                 </form>
                             </div>
                         </div>
@@ -573,30 +523,30 @@
                     <div class="tab-pane fade" id="log-section">
                         <div class="settings-card">
                             <div class="settings-header">
-                                <i class="fas fa-file-alt"></i>
-                                <h5 class="mb-0">Log File Configuration</h5>
+                                <i class="fas fa-file-alt"></i> Log File Configuration
                             </div>
                             <div class="settings-body">
-                                <form method="post" action="{% url 'settings' %}" id="logPathForm" enctype="multipart/form-data">
+                                <form method="post" action="{% url 'save_log_settings' %}" id="logPathForm" enctype="multipart/form-data">
                                     {% csrf_token %}
-                                    <input type="hidden" name="log_path_settings" value="1">
                                     
-                                    <!-- Apache Log Configuration -->
+                                    <!-- Hidden field to indicate whether to process logs -->
+                                    <input type="hidden" name="process_logs" id="process_logs" value="false">
+                                    
                                     <div class="form-group mb-4">
                                         <label class="form-label fw-bold">Apache Log</label>
-                                        
                                         <div class="mb-3">
                                             <label class="form-label">Path to Apache access log file</label>
                                             <div class="input-group">
                                                 <input type="text" class="form-control" id="apache_log_path" name="apache_log_path" 
-                                                       value="{{ log_settings.apache_log_path|default:'/var/log/apache2/access.log' }}">
+                                                       value="{{ log_settings.apache_log_path }}" placeholder="Enter the full path to Apache log file">
                                                 <button class="btn btn-outline-primary" type="button" id="apache_browse_btn">
                                                     <i class="fas fa-folder-open"></i> Browse
                                                 </button>
                                             </div>
+                                            <small class="form-text text-muted">Specify the full path to the Apache access log file</small>
                                         </div>
                                         
-                                        <div class="mb-3">
+                                        <div class="mb-4">
                                             <label class="form-label">Or upload Apache log file</label>
                                             <div class="dropzone" id="apache_dropzone">
                                                 <div class="dz-message">
@@ -608,37 +558,26 @@
                                                         <p class="text-muted small">or click to select file</p>
                                                     </div>
                                                 </div>
-                                                <input type="file" id="apache_log_file" name="apache_log_file" 
-                                                       class="file-input" accept=".log,.txt">
                                             </div>
-                                            <div id="apache_file_info" class="file-info mt-2 d-none">
-                                                <div class="d-flex align-items-center">
-                                                    <i class="fas fa-file-alt me-2 text-primary"></i>
-                                                    <span class="file-name"></span>
-                                                    <button type="button" class="btn btn-sm btn-link text-danger ms-auto remove-file">
-                                                        <i class="fas fa-times"></i>
-                                                    </button>
-                                                </div>
-                                            </div>
+                                            <input type="file" id="apache_log_file" name="apache_log_file" class="d-none" accept=".log,.txt">
                                         </div>
                                     </div>
                                     
-                                    <!-- MySQL Log Configuration -->
                                     <div class="form-group mb-4">
                                         <label class="form-label fw-bold">MySQL Log</label>
-                                        
                                         <div class="mb-3">
                                             <label class="form-label">Path to MySQL error log file</label>
                                             <div class="input-group">
-                                                <input type="text" class="form-control" id="mysql_log_path" name="mysql_log_path" 
-                                                       value="{{ log_settings.mysql_log_path|default:'/var/log/mysql/mysql.log' }}">
+                                                <input type="text" class="form-control" id="mysql_log_path" name="mysql_log_path"
+                                                       value="{{ log_settings.mysql_log_path }}" placeholder="Enter the full path to MySQL log file">
                                                 <button class="btn btn-outline-primary" type="button" id="mysql_browse_btn">
                                                     <i class="fas fa-folder-open"></i> Browse
                                                 </button>
                                             </div>
+                                            <small class="form-text text-muted">Specify the full path to the MySQL error log file</small>
                                         </div>
                                         
-                                        <div class="mb-3">
+                                        <div class="mb-4">
                                             <label class="form-label">Or upload MySQL log file</label>
                                             <div class="dropzone" id="mysql_dropzone">
                                                 <div class="dz-message">
@@ -650,43 +589,30 @@
                                                         <p class="text-muted small">or click to select file</p>
                                                     </div>
                                                 </div>
-                                                <input type="file" id="mysql_log_file" name="mysql_log_file" 
-                                                       class="file-input" accept=".log,.txt">
                                             </div>
-                                            <div id="mysql_file_info" class="file-info mt-2 d-none">
-                                                <div class="d-flex align-items-center">
-                                                    <i class="fas fa-file-alt me-2 text-primary"></i>
-                                                    <span class="file-name"></span>
-                                                    <button type="button" class="btn btn-sm btn-link text-danger ms-auto remove-file">
-                                                        <i class="fas fa-times"></i>
-                                                    </button>
-                                                </div>
-                                            </div>
+                                            <input type="file" id="mysql_log_file" name="mysql_log_file" class="d-none" accept=".log,.txt">
                                         </div>
                                     </div>
                                     
-                                    <div class="form-group">
-                                        <label class="form-label" for="log_retention">Log Retention Period</label>
-                                        <select class="form-select" id="log_retention" name="log_retention">
-                                            <option value="7" {% if log_settings.log_retention == 7 %}selected{% endif %}>7 days</option>
-                                            <option value="30" {% if log_settings.log_retention == 30 or not log_settings.log_retention %}selected{% endif %}>30 days</option>
-                                            <option value="90" {% if log_settings.log_retention == 90 %}selected{% endif %}>90 days</option>
-                                            <option value="365" {% if log_settings.log_retention == 365 %}selected{% endif %}>1 year</option>
-                                        </select>
-                                        <div class="form-text">How long to keep log data in the database</div>
+                                    <div class="form-group mb-4">
+                                        <label class="form-label" for="log_retention">Log Retention Period (days)</label>
+                                        <input type="number" class="form-control" id="log_retention" name="log_retention" value="{{ log_settings.log_retention }}" min="1" max="365">
+                                        <small class="form-text text-muted">Logs older than this period will be automatically purged</small>
                                     </div>
                                     
-                                    <div class="settings-separator"></div>
-                                    
-                                    <div class="form-group">
-                                        <div class="alert alert-info">
-                                            <i class="fas fa-info-circle me-2"></i> You can either specify a path to existing log files or upload log files directly.
+                                    <div class="d-flex justify-content-between">
+                                        <button type="button" id="testLogPathBtn" class="btn btn-outline-secondary">
+                                            <i class="fas fa-check-circle"></i> Test Log Paths
+                                        </button>
+                                        
+                                        <div>
+                                            <button type="button" id="analyzeLogsBtn" class="btn btn-outline-primary me-2">
+                                                <i class="fas fa-search"></i> Analyze Logs Now
+                                            </button>
+                                            <button type="submit" class="btn btn-primary">
+                                                <i class="fas fa-save"></i> Save Log Settings
+                                            </button>
                                         </div>
-                                    </div>
-                                    
-                                    <div class="settings-footer">
-                                        <button type="button" id="testLogPathBtn" class="btn btn-outline-secondary me-2">Test Log Paths</button>
-                                        <button type="submit" class="btn btn-primary">Save Log Settings</button>
                                     </div>
                                 </form>
                             </div>
@@ -799,129 +725,109 @@
             setupFileUpload('apache');
             setupFileUpload('mysql');
 
-            // Hidden file inputs for the browse buttons
+            // Connect browse buttons to file inputs
             document.getElementById('apache_browse_btn').addEventListener('click', function(e) {
                 e.preventDefault();
-                e.stopPropagation();
                 document.getElementById('apache_log_file').click();
-                return false;
             });
 
             document.getElementById('mysql_browse_btn').addEventListener('click', function(e) {
                 e.preventDefault();
-                e.stopPropagation();
                 document.getElementById('mysql_log_file').click();
-                return false;
             });
 
             // Function to set up file upload for a given log type
             function setupFileUpload(logType) {
                 const dropzone = document.getElementById(`${logType}_dropzone`);
                 const fileInput = document.getElementById(`${logType}_log_file`);
-                const fileInfo = document.getElementById(`${logType}_file_info`);
-                const fileName = fileInfo.querySelector('.file-name');
                 const pathInput = document.getElementById(`${logType}_log_path`);
-                const removeBtn = fileInfo.querySelector('.remove-file');
                 
-                // Make sure the dropzone only triggers the file input when clicked directly
-                dropzone.addEventListener('click', function(e) {
-                    if (e.target === dropzone || dropzone.contains(e.target)) {
-                        fileInput.click();
-                        e.stopPropagation();
-                    }
-                });
-                
-                // Prevent the file input from capturing clicks outside its area
-                fileInput.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                });
-                
-                // Handle drag and drop events
-                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-                    dropzone.addEventListener(eventName, preventDefaults, false);
-                });
-                
-                function preventDefaults(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-                
-                // Add visual feedback when file is dragged over dropzone
-                ['dragenter', 'dragover'].forEach(eventName => {
-                    dropzone.addEventListener(eventName, highlight, false);
-                });
-                
-                ['dragleave', 'drop'].forEach(eventName => {
-                    dropzone.addEventListener(eventName, unhighlight, false);
-                });
-                
-                function highlight() {
-                    dropzone.classList.add('dragover');
-                }
-                
-                function unhighlight() {
-                    dropzone.classList.remove('dragover');
-                }
-                
-                // Handle dropped files
-                dropzone.addEventListener('drop', handleDrop, false);
-                
-                function handleDrop(e) {
-                    const dt = e.dataTransfer;
-                    const files = dt.files;
-                    if (files.length > 0) {
-                        handleFiles(files[0]);
-                    }
+                if (!dropzone || !fileInput || !pathInput) {
+                    console.error(`Missing elements for ${logType} file upload setup`);
+                    return;
                 }
                 
                 // Handle file selection through input
-                fileInput.addEventListener('change', function() {
+                fileInput.addEventListener('change', function(e) {
                     if (this.files.length > 0) {
-                        handleFiles(this.files[0]);
+                        const file = this.files[0];
+                        
+                        // Update the path input with file name
+                        // For security reasons browsers don't provide the full file path
+                        // We'll use a placeholder path plus the filename
+                        pathInput.value = file.name;
+                        
+                        // Add visual feedback
+                        dropzone.classList.add('file-selected');
+                        dropzone.innerHTML = `
+                            <div class="selected-file p-2">
+                                <i class="fas fa-file-alt me-2"></i>
+                                <strong>${file.name}</strong> (${formatFileSize(file.size)})
+                                <button type="button" class="btn-close ms-2" aria-label="Remove file"></button>
+                            </div>
+                        `;
+                        
+                        // Handle remove button
+                        dropzone.querySelector('.btn-close').addEventListener('click', function(evt) {
+                            evt.preventDefault();
+                            evt.stopPropagation();
+                            
+                            // Reset file input and dropzone
+                            fileInput.value = '';
+                            dropzone.classList.remove('file-selected');
+                            dropzone.innerHTML = `
+                                <div class="dz-message">
+                                    <div class="dz-icon mb-3">
+                                        <i class="fas fa-cloud-upload-alt fa-3x text-muted"></i>
+                                    </div>
+                                    <div class="dz-text">
+                                        <p>Drag & drop ${logType} log file here</p>
+                                        <p class="text-muted small">or click to select file</p>
+                                    </div>
+                                </div>
+                            `;
+                        });
                     }
                 });
                 
-                // Process the selected file
-                function handleFiles(file) {
-                    // Update file info display
-                    fileInfo.classList.remove('d-none');
-                    
-                    // Add file details - size and last modified
-                    const fileSize = formatFileSize(file.size);
-                    const lastModified = new Date(file.lastModified).toLocaleString();
-                    
-                    // Mark the dropzone as having a file
-                    dropzone.classList.add('file-selected');
-                    
-                    // Use a PSEUDO PATH for display purposes
-                    const osSeparator = navigator.platform.indexOf('Win') > -1 ? '\\' : '/';
-                    const pseudoPath = logType === 'apache' ? 
-                        `C:${osSeparator}xampp${osSeparator}apache${osSeparator}logs${osSeparator}${file.name}` :
-                        `C:${osSeparator}xampp${osSeparator}mysql${osSeparator}data${osSeparator}${file.name}`;
-                    
-                    // Display pseudo path in the input
-                    pathInput.value = pseudoPath;
-                    
-                    // Show browser security notice
-                    const securityNotice = document.createElement('div');
-                    securityNotice.className = 'alert alert-info mt-2 p-2 small';
-                    securityNotice.innerHTML = `<i class="fas fa-info-circle me-1"></i> 
-                        Browser security prevents accessing the full file path. 
-                        If this isn't the correct path, please type it manually.`;
-                    
-                    // Add security notice after file info
-                    if (!fileInfo.nextElementSibling || !fileInfo.nextElementSibling.classList.contains('alert-info')) {
-                        fileInfo.parentNode.insertBefore(securityNotice, fileInfo.nextSibling);
+                // Set up drag and drop functionality
+                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                    dropzone.addEventListener(eventName, function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }, false);
+                });
+                
+                // Visual feedback for drag events
+                ['dragenter', 'dragover'].forEach(eventName => {
+                    dropzone.addEventListener(eventName, function() {
+                        this.classList.add('dragover');
+                    }, false);
+                });
+                
+                ['dragleave', 'drop'].forEach(eventName => {
+                    dropzone.addEventListener(eventName, function() {
+                        this.classList.remove('dragover');
+                    }, false);
+                });
+                
+                // Handle file drop
+                dropzone.addEventListener('drop', function(e) {
+                    const files = e.dataTransfer.files;
+                    if (files.length) {
+                        // Update the file input
+                        fileInput.files = files;
+                        
+                        // Trigger change event to process the file
+                        const event = new Event('change', { bubbles: true });
+                        fileInput.dispatchEvent(event);
                     }
-                    
-                    // Update the file name with additional information
-                    fileName.innerHTML = `<strong>${file.name}</strong> (${fileSize}) - Modified: ${lastModified}`;
-                    
-                    // Store file info for reference
-                    fileInfo.dataset.fileName = file.name;
-                    fileInfo.dataset.fileSize = file.size;
-                    fileInfo.dataset.fileType = file.type || 'text/plain';
-                }
+                });
+                
+                // Make dropzone clickable
+                dropzone.addEventListener('click', function() {
+                    fileInput.click();
+                });
                 
                 // Helper function to format file size
                 function formatFileSize(bytes) {
@@ -931,43 +837,6 @@
                     const i = Math.floor(Math.log(bytes) / Math.log(k));
                     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
                 }
-                
-                // Handle remove button click
-                removeBtn.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    
-                    // Clear the file input
-                    fileInput.value = '';
-                    
-                    // Hide the file info
-                    fileInfo.classList.add('d-none');
-                    
-                    // Remove the selected class from dropzone
-                    dropzone.classList.remove('file-selected');
-                    
-                    // Keep the path input value to allow manual editing
-                    // Only clear if it's showing the file name
-                    if (pathInput.value === fileInfo.dataset.fileName) {
-                        const defaultPath = logType === 'apache' ? 
-                            '/var/log/apache2/access.log' : 
-                            '/var/log/mysql/mysql.log';
-                        pathInput.value = defaultPath;
-                    }
-                    
-                    // Clear stored file data
-                    fileInfo.dataset.fileName = '';
-                    fileInfo.dataset.fileSize = '';
-                    fileInfo.dataset.fileType = '';
-                    
-                    return false;
-                });
-                
-                // Allow users to manually type the path
-                pathInput.addEventListener('focus', function() {
-                    // Select all text for easy editing
-                    this.select();
-                });
             }
         });
 
@@ -1012,17 +881,41 @@
         });
 
         function validateLogForm() {
-            // Basic validation
-            const apachePath = document.getElementById('apache_log_path').value;
-            const mysqlPath = document.getElementById('mysql_log_path').value;
+            const apachePath = document.getElementById('apache_log_path').value.trim();
+            const mysqlPath = document.getElementById('mysql_log_path').value.trim();
             
-            if (!apachePath || !mysqlPath) {
-                showAlert('danger', 'Both log paths are required.');
+            // Check if at least one path is provided
+            if (!apachePath && !mysqlPath) {
+                showAlert('warning', 'Please provide at least one log file path.');
                 return false;
+            }
+            
+            // Check if provided Apache path exists (only if a path was entered)
+            if (apachePath) {
+                // Visual feedback for validation
+                document.getElementById('apache_log_path').classList.add('is-valid');
+            }
+            
+            // Check if provided MySQL path exists (only if a path was entered)
+            if (mysqlPath) {
+                // Visual feedback for validation
+                document.getElementById('mysql_log_path').classList.add('is-valid');
             }
             
             return true;
         }
+
+        // Handle "Analyze Logs Now" button
+        document.getElementById('analyzeLogsBtn').addEventListener('click', function() {
+            // Set the flag to process logs
+            document.getElementById('process_logs').value = 'true';
+            
+            // Validate the form
+            if (validateLogForm()) {
+                // Submit the form
+                document.getElementById('logPathForm').submit();
+            }
+        });
 
         // Load saved settings from localStorage or server
         function loadSettings() {
@@ -1451,6 +1344,75 @@
             }
             fixBanner();
         }
+    </script>
+
+    <!-- Add this at the bottom of settings.html before </body> -->
+    <script>
+    // Display flash messages/alerts
+    document.addEventListener('DOMContentLoaded', function() {
+        // Show success message if present
+        const successMessage = '{{ success_message }}';
+        if (successMessage && successMessage !== 'None') {
+            showAlert('success', successMessage);
+        }
+        
+        // Show error message if present
+        const errorMessage = '{{ error_message }}';
+        if (errorMessage && errorMessage !== 'None') {
+            showAlert('danger', errorMessage);
+        }
+        
+        // Form validation
+        const passwordForm = document.querySelector('form[action*="change-password"]');
+        if (passwordForm) {
+            passwordForm.addEventListener('submit', function(event) {
+                const newPassword = document.getElementById('new_password').value;
+                const confirmPassword = document.getElementById('confirm_password').value;
+                
+                if (newPassword !== confirmPassword) {
+                    event.preventDefault();
+                    showAlert('danger', 'Passwords do not match');
+                }
+            });
+        }
+        
+        // File path validation
+        const logPathForm = document.getElementById('logPathForm');
+        if (logPathForm) {
+            logPathForm.addEventListener('submit', function() {
+                const apachePath = document.getElementById('apache_log_path').value;
+                const mysqlPath = document.getElementById('mysql_log_path').value;
+                
+                if (!apachePath && !mysqlPath) {
+                    showAlert('warning', 'At least one log path should be provided');
+                }
+            });
+        }
+    });
+
+    // Helper function to show alerts
+    function showAlert(type, message) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+        alertDiv.role = 'alert';
+        
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        `;
+        
+        // Find a good place to insert the alert
+        const container = document.querySelector('.settings-card') || document.querySelector('.container');
+        if (container) {
+            container.insertBefore(alertDiv, container.firstChild);
+            
+            // Auto-dismiss after 5 seconds
+            setTimeout(() => {
+                alertDiv.classList.remove('show');
+                setTimeout(() => alertDiv.remove(), 150);
+            }, 5000);
+        }
+    }
     </script>
 </body>
 </html>

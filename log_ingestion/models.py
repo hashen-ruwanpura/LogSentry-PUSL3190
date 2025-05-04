@@ -63,49 +63,43 @@ class RawLog(models.Model):
         ]
 
 class ParsedLog(models.Model):
-    """Parsed and normalized log data"""
-    STATUS_CHOICES = [
-        ('normal', 'Normal'),
-        ('warning', 'Warning'),
-        ('suspicious', 'Suspicious'),
-        ('attack', 'Attack'),
-    ]
-    
-    # Make raw_log field optional to support streaming logs that don't have RawLog entries
-    raw_log = models.OneToOneField(RawLog, on_delete=models.CASCADE, related_name='parsed',
-                                   null=True, blank=True)
-    timestamp = models.DateTimeField(default=timezone.now, db_index=True)  # Add default
-    log_level = models.CharField(max_length=20, blank=True, null=True)
-    source_ip = models.GenericIPAddressField(blank=True, null=True, db_index=True)  # Add index for IP lookups
+    """Parsed and normalized log entries"""
+    raw_log = models.ForeignKey('RawLog', on_delete=models.CASCADE, null=True, blank=True)
+    timestamp = models.DateTimeField()
+    source_ip = models.GenericIPAddressField(null=True, blank=True)
+    source_type = models.CharField(max_length=50, blank=True)
+    log_level = models.CharField(max_length=20, null=True, blank=True)
     user_agent = models.TextField(blank=True, null=True)
-    request_method = models.CharField(max_length=10, blank=True, null=True)
-    request_path = models.TextField(blank=True, null=True)
-    status_code = models.IntegerField(blank=True, null=True)
-    response_size = models.IntegerField(blank=True, null=True)
-    user_id = models.CharField(max_length=255, blank=True, null=True)
-    query = models.TextField(blank=True, null=True)
-    execution_time = models.FloatField(blank=True, null=True)
-    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='normal', db_index=True)  # Add index
-    normalized_data = models.JSONField()
-    
-    # New fields for real-time analysis
-    analyzed = models.BooleanField(default=False, help_text="Whether this log has been analyzed for threats")
-    analysis_time = models.DateTimeField(null=True, blank=True, help_text="When the log was analyzed")
-    source_type = models.CharField(max_length=20, blank=True, null=True, 
-                                  help_text="Type of log (apache, mysql, etc)")
+    request_method = models.CharField(max_length=20, null=True, blank=True)
+    request_path = models.TextField(null=True, blank=True)  # This will store the path
+    status_code = models.IntegerField(null=True, blank=True)
+    response_size = models.IntegerField(null=True, blank=True)
+    user_id = models.CharField(max_length=100, null=True, blank=True)
+    query = models.TextField(null=True, blank=True)
+    execution_time = models.FloatField(null=True, blank=True)
+    status = models.CharField(max_length=20, default='normal')
+    normalized_data = models.JSONField(default=dict)
+    analyzed = models.BooleanField(default=False)
+    analysis_time = models.DateTimeField(null=True, blank=True)
     
     def __str__(self):
-        return f"Parsed log: {self.timestamp}"
+        return f"{self.source_type} log ({self.status}): {self.timestamp}"
     
-    class Meta:
-        # Add indexes for better performance in real-time queries
-        indexes = [
-            models.Index(fields=['analyzed', 'timestamp']),
-            models.Index(fields=['status', 'source_ip']),
-        ]
+    @property
+    def path(self):
+        """Dynamic property to access the request path"""
+        # First check if it's directly in our fields
+        if hasattr(self, 'request_path') and self.request_path:
+            return self.request_path
+            
+        # Then check in normalized_data
+        if self.normalized_data and 'request_path' in self.normalized_data:
+            return self.normalized_data['request_path']
         
-    def mark_analyzed(self):
-        """Mark this log as analyzed for threats"""
-        self.analyzed = True
-        self.analysis_time = timezone.now()
-        self.save(update_fields=['analyzed', 'analysis_time'])
+        # Try other possible keys
+        for key in ['path', 'url', 'uri']:
+            if self.normalized_data and key in self.normalized_data:
+                return self.normalized_data[key]
+        
+        # Default to empty string if not found
+        return ''

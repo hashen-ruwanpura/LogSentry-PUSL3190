@@ -1,37 +1,71 @@
 import re
 import datetime
 import ipaddress
+import logging
 from abc import ABC, abstractmethod
+from django.utils import timezone
 from .models import RawLog, ParsedLog
 
+logger = logging.getLogger(__name__)
+
 class BaseLogParser(ABC):
-    @abstractmethod
     def parse(self, raw_log):
         """Parse raw log and return normalized data"""
+        try:
+            # Handle both string content and RawLog objects
+            if isinstance(raw_log, str):
+                # If it's a string, create a temporary object with content attribute
+                class TempRawLog:
+                    def __init__(self, content_str):
+                        self.content = content_str
+                        self.timestamp = timezone.now()
+                
+                temp_log = TempRawLog(raw_log)
+                return self._parse_raw_log(temp_log)
+            else:
+                # It's an actual RawLog or similar object
+                return self._parse_raw_log(raw_log)
+        except Exception as e:
+            logger.error(f"Error in BaseLogParser.parse: {str(e)}")
+            return None
+    
+    @abstractmethod
+    def _parse_raw_log(self, raw_log):
+        """The actual parsing implementation - subclasses must override"""
         pass
     
     def save_parsed_log(self, raw_log, normalized_data):
         """Save the parsed log data"""
-        parsed_log = ParsedLog(
-            raw_log=raw_log,
-            timestamp=normalized_data.get('timestamp', raw_log.timestamp),
-            normalized_data=normalized_data
-        )
-        
-        # Extract common fields if available
-        for field in ['log_level', 'source_ip', 'user_agent', 'request_method', 
-                     'request_path', 'status_code', 'response_size', 'user_id',
-                     'query', 'execution_time']:
-            if field in normalized_data:
-                setattr(parsed_log, field, normalized_data[field])
-        
-        parsed_log.save()
-        
-        # Mark raw log as parsed
-        raw_log.is_parsed = True
-        raw_log.save(update_fields=['is_parsed'])
-        
-        return parsed_log
+        try:
+            # Only try to create a database entry if it's a real RawLog object
+            if hasattr(raw_log, 'id') and not isinstance(raw_log, str):
+                parsed_log = ParsedLog(
+                    raw_log=raw_log,
+                    timestamp=normalized_data.get('timestamp', raw_log.timestamp),
+                    normalized_data=normalized_data
+                )
+                
+                # Extract common fields if available
+                for field in ['log_level', 'source_ip', 'user_agent', 'request_method', 
+                            'request_path', 'status_code', 'response_size', 'user_id',
+                            'query', 'execution_time', 'source_type']:
+                    if field in normalized_data:
+                        setattr(parsed_log, field, normalized_data[field])
+                
+                parsed_log.save()
+                
+                # Mark raw log as parsed
+                raw_log.is_parsed = True
+                raw_log.save(update_fields=['is_parsed'])
+                
+                return parsed_log
+            else:
+                # For string or temp objects, just return the normalized data
+                # This handles Kafka messages without database operations
+                return normalized_data
+        except Exception as e:
+            logger.error(f"Error in save_parsed_log: {str(e)}")
+            return None
 
 class ApacheLogParser(BaseLogParser):
     """Parser for Apache access and error logs"""
@@ -42,8 +76,8 @@ class ApacheLogParser(BaseLogParser):
     # Combined log format regex (adds referrer and user agent)
     COMBINED_LOG_FORMAT_REGEX = COMMON_LOG_FORMAT_REGEX + r' "([^"]*)" "([^"]*)"'
     
-    def parse(self, raw_log):
-        """Parse Apache log entry"""
+    def _parse_raw_log(self, raw_log):
+        """Parse Apache log entry - handles both RawLog objects and strings"""
         # Try combined format first
         combined_match = re.match(self.COMBINED_LOG_FORMAT_REGEX, raw_log.content)
         if combined_match:
@@ -55,17 +89,17 @@ class ApacheLogParser(BaseLogParser):
             return self._parse_common_log(common_match, raw_log)
         
         # Error log format
-        # This is a simplified approach - real Apache error logs can vary
         if raw_log.content.startswith('['):
             return self._parse_error_log(raw_log)
             
         # If we can't parse it, return basic metadata
         return self.save_parsed_log(raw_log, {
-            'timestamp': raw_log.timestamp,
+            'timestamp': getattr(raw_log, 'timestamp', timezone.now()),
             'raw_content': raw_log.content,
+            'source_type': 'apache',
             'parse_success': False
         })
-    
+        
     def _parse_combined_log(self, match, raw_log):
         # Extract fields from combined log format
         ip, identd, userid, time_str, method, path, protocol, status, size, referrer, user_agent = match.groups()
@@ -160,8 +194,8 @@ class MySQLLogParser(BaseLogParser):
     # Regex for slow query log entry
     SLOW_QUERY_REGEX = r'# Time: (.*)\n# User@Host: (.*)\n# Query_time: (\d+\.\d+)\s+Lock_time: (\d+\.\d+)\s+Rows_sent: (\d+)\s+Rows_examined: (\d+)'
     
-    def parse(self, raw_log):
-        """Parse MySQL log entry"""
+    def _parse_raw_log(self, raw_log):
+        """Parse MySQL log entry - handles both RawLog objects and strings"""
         content = raw_log.content
         
         # Check if it's a slow query log
@@ -180,12 +214,13 @@ class MySQLLogParser(BaseLogParser):
             
         # If we can't parse it, return basic metadata
         return self.save_parsed_log(raw_log, {
-            'timestamp': raw_log.timestamp,
+            'timestamp': getattr(raw_log, 'timestamp', timezone.now()),
             'raw_content': content,
+            'source_type': 'mysql',
             'log_type': 'mysql_unknown',
             'parse_success': False
         })
-    
+        
     def _parse_slow_query(self, match, raw_log):
         time_str, user_host, query_time, lock_time, rows_sent, rows_examined = match.groups()
         

@@ -647,6 +647,7 @@
         
         // Submit contact form
         function submitContact() {
+            const form = document.getElementById('contactForm');
             const name = document.getElementById('name').value;
             const email = document.getElementById('email').value;
             const subject = document.getElementById('subject').value;
@@ -658,11 +659,43 @@
                 return;
             }
             
-            // Show success message
-            alert('Thank you for your message! We will get back to you soon.');
+            // Disable submit button and show loading state
+            const submitBtn = document.querySelector('#contactForm button[type="button"]');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
             
-            // Reset form
-            document.getElementById('contactForm').reset();
+            // Submit the form data via AJAX
+            const formData = new FormData(form);
+            
+            fetch('/submit-contact/', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show success message
+                    alert('Thank you for your message! We will get back to you soon.');
+                    
+                    // Reset form
+                    form.reset();
+                } else {
+                    // Show error message
+                    alert('Error: ' + (data.error || 'Failed to send message. Please try again.'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred. Please try again later.');
+            })
+            .finally(() => {
+                // Re-enable submit button
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = 'Send Message';
+            });
         }
         
         // Navbar scroll effect
@@ -693,4 +726,4 @@
         });
     </script>
 </body>
-</html>
+</html> 

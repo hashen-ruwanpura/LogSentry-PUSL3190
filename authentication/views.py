@@ -7,7 +7,7 @@ from django.contrib.auth.decorators import login_required
 from log_ingestion.models import RawLog, ParsedLog
 from threat_detection.models import Threat, BlacklistedIP
 from threat_detection.models import Threat, ThreatAnalysis
-
+from django.core.mail import send_mail
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib import messages
 from django.contrib.auth import logout
@@ -40,6 +40,7 @@ from django.conf import settings
 from threat_detection.models import Threat, ThreatAnalysis
 from ai_analytics.services import AlertAnalysisService
 from alerts.models import NotificationPreference
+from .models import ContactMessage, AdminReply, User
 
 logger = logging.getLogger(__name__)
 
@@ -1471,110 +1472,6 @@ def generate_mitre_chart_data(start_time):
     
     return mitre_labels, mitre_counts
 
-@login_required
-def settings_view(request):
-    """
-    View for user settings management.
-    Allows users to update their profile, password, and notification preferences.
-    """
-    # Get the current user
-    user = request.user
-    
-    # Initialize message storage
-    success_message = None
-    error_message = None
-    
-    # Handle profile update form submission
-    if request.method == 'POST' and 'update_profile' in request.POST:
-        # Get form data
-        first_name = request.POST.get('first_name')
-        last_name = request.POST.get('last_name')
-        email = request.POST.get('email')
-        
-        # Update user information
-        try:
-            user.first_name = first_name
-            user.last_name = last_name
-            user.email = email
-            user.save()
-            success_message = "Profile updated successfully"
-        except Exception as e:
-            error_message = f"Failed to update profile: {str(e)}"
-    
-    # Handle password change form submission
-    elif request.method == 'POST' and 'change_password' in request.POST:
-        current_password = request.POST.get('current_password')
-        new_password = request.POST.get('new_password')
-        confirm_password = request.POST.get('confirm_password')
-        
-        # Validate password change
-        if not user.check_password(current_password):
-            error_message = "Current password is incorrect"
-        elif new_password != confirm_password:
-            error_message = "New passwords do not match"
-        elif len(new_password) < 8:
-            error_message = "Password must be at least 8 characters long"
-        else:
-            # Update password
-            try:
-                user.set_password(new_password)
-                user.save()
-                success_message = "Password changed successfully. Please log in again."
-                # Use Django's authentication system to update the session
-                update_session_auth_hash(request, user)
-            except Exception as e:
-                error_message = f"Failed to change password: {str(e)}"
-    
-    # Handle notification settings form submission
-    elif request.method == 'POST' and 'notification_settings' in request.POST:
-        # Get notification preferences
-        email_alerts = request.POST.get('email_alerts') == 'on'
-        sms_alerts = request.POST.get('sms_alerts') == 'on'
-        slack_alerts = request.POST.get('slack_alerts') == 'on'
-        
-        # Update user notification settings in NotificationPreference
-        try:
-            # Get or create user profile
-            profile, created = NotificationPreference.objects.get_or_create(user=user)
-            profile.email_alerts = email_alerts
-            profile.sms_alerts = sms_alerts
-            profile.slack_alerts = slack_alerts
-            profile.save()
-            success_message = "Notification settings updated successfully"
-        except Exception as e:
-            error_message = f"Failed to update notification settings: {str(e)}"
-    
-    # Get current notification settings
-    try:
-        profile = NotificationPreference.objects.get(user=user)
-        notification_settings = {
-            'email_alerts': profile.email_alerts,
-            'sms_alerts': profile.sms_alerts,
-            'slack_alerts': profile.slack_alerts,
-        }
-    except NotificationPreference.DoesNotExist:
-        # Default settings if profile doesn't exist yet
-        notification_settings = {
-            'email_alerts': True,
-            'sms_alerts': False,
-            'slack_alerts': False,
-        }
-    except Exception:
-        # Fallback if there's an error
-        notification_settings = {
-            'email_alerts': True,
-            'sms_alerts': False,
-            'slack_alerts': False,
-        }
-    
-    context = {
-        'user': user,
-        'notification_settings': notification_settings,
-        'success_message': success_message,
-        'error_message': error_message,
-    }
-    
-    return render(request, 'settings.html', context)
 
 @login_required
 def alerts_details_view(request):
@@ -2128,81 +2025,7 @@ def profile_stats_api(request):
         return JsonResponse({
             'success': False,
             'error': str(e)
-        }, status=500)
-        
-@login_required
-def test_log_paths(request):
-    """API endpoint to test if log paths are valid and accessible."""
-    if request.method == 'POST':
-        try:
-            import json
-            import logging
-            import os
-            
-            logger = logging.getLogger(__name__)
-            
-            # Parse request body
-            data = json.loads(request.body)
-            apache_path = data.get('apache_path', '').strip()
-            mysql_path = data.get('mysql_path', '').strip()
-            
-            # Log the paths being tested
-            logger.info(f"Testing log paths - Apache: {apache_path}, MySQL: {mysql_path}")
-            
-            # Test Apache log path
-            apache_result = validate_log_file(apache_path, 'apache') if apache_path else {'valid_log': False, 'path': ''}
-            
-            # Test MySQL log path
-            mysql_result = validate_log_file(mysql_path, 'mysql') if mysql_path else {'valid_log': False, 'path': ''}
-            
-            # Overall success based on provided paths
-            overall_success = True
-            if apache_path and not apache_result.get('valid_log', False):
-                overall_success = False
-            if mysql_path and not mysql_result.get('valid_log', False):
-                overall_success = False
-            
-            # Save these paths to user preferences or session
-            if overall_success:
-                # Save the original paths to session so they persist
-                request.session['apache_log_path'] = apache_path
-                request.session['mysql_log_path'] = mysql_path
-                logger.info(f"Saved log paths to session - Apache: {apache_path}, MySQL: {mysql_path}")
-            
-            # Format response
-            results = {
-                'apache': apache_result,
-                'mysql': mysql_result
-            }
-            
-            return JsonResponse({
-                'success': overall_success,
-                'results': results,
-                'error': None if overall_success else "One or both log files are invalid",
-                'saved_paths': {
-                    'apache': apache_path if overall_success else '',
-                    'mysql': mysql_path if overall_success else '',
-                }
-            })
-            
-        except json.JSONDecodeError:
-            return JsonResponse({
-                'success': False,
-                'error': 'Invalid JSON data'
-            }, status=400)
-            
-        except Exception as e:
-            logger.exception(f"Error in test_log_paths: {str(e)}")
-            return JsonResponse({
-                'success': False,
-                'error': str(e)
-            }, status=500)
-    
-    return JsonResponse({
-        'success': False,
-        'error': 'Only POST method is supported'
-    }, status=405)
-
+        }, status=500)        
 
 def validate_log_file(file_path, log_type):
     """
@@ -2371,440 +2194,6 @@ def validate_log_file(file_path, log_type):
         logger.error(f"Unexpected error validating log file {file_path}: {str(e)}")
         return result
 
-
-@login_required
-@require_POST
-def analyze_logs_api(request):
-    """API endpoint to trigger log analysis"""
-    try:
-        # Parse request body
-        import os
-        import json
-        import logging
-        from django.utils import timezone
-        from log_ingestion.models import ParsedLog
-        from threat_detection.models import Threat
-        from django.db.models import Q
-        
-        logger = logging.getLogger(__name__)
-        
-        data = json.loads(request.body)
-        logs_count = int(data.get('logs_count', 50))
-        apache_path = data.get('apache_path', '')
-        mysql_path = data.get('mysql_path', '')
-        
-        # Safety cap on logs count to prevent overload
-        logs_count = min(max(10, logs_count), 500)
-        
-        logger.info(f"Received request to analyze up to {logs_count} logs")
-        
-        # If log paths are provided, import them first
-        if apache_path or mysql_path:
-            try:
-                # Import logs from the provided paths
-                from log_ingestion.collectors import EnhancedLogCollectionManager
-                
-                # Create configuration for log collection
-                config = {
-                    'log_files': []
-                }
-                
-                if apache_path and os.path.exists(apache_path):
-                    config['log_files'].append({
-                        'path': apache_path,
-                        'type': 'apache_access'
-                    })
-                
-                if mysql_path and os.path.exists(mysql_path):
-                    config['log_files'].append({
-                        'path': mysql_path,
-                        'type': 'mysql_general'
-                    })
-                
-                if config['log_files']:
-                    # Initialize collector and process logs
-                    collector = EnhancedLogCollectionManager(config)
-                    
-                    # Check if process_log_files method exists, if not add it
-                    if not hasattr(collector, 'process_log_files') or not callable(getattr(collector, 'process_log_files')):
-                        # Define the method on the instance
-                        def process_log_files(self):
-                            """Process log files without starting continuous monitoring"""
-                            for log_config in self.config.get('log_files', []):
-                                try:
-                                    from log_ingestion.models import LogSource, RawLog
-                                    from log_ingestion.parsers import LogParserFactory
-                                    import os
-                                    
-                                    file_path = log_config['path']
-                                    log_type = log_config['type']
-                                    
-                                    # Skip if file doesn't exist
-                                    if not os.path.exists(file_path):
-                                        logger.warning(f"Log file not found: {file_path}")
-                                        continue
-                                    
-                                    # Get or create log source
-                                    log_source, created = LogSource.objects.get_or_create(
-                                        file_path=file_path,
-                                        defaults={
-                                            'name': f"{log_type.capitalize()} Logs",
-                                            'source_type': log_type,
-                                            'enabled': True
-                                        }
-                                    )
-                                    
-                                    # Process the file
-                                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                                        for line in f:
-                                            if line.strip():
-                                                # Create raw log entry
-                                                raw_log = RawLog.objects.create(
-                                                    source=log_source,
-                                                    content=line.strip(),
-                                                    timestamp=timezone.now()
-                                                )
-                                                
-                                                # Get appropriate parser
-                                                parser = LogParserFactory.get_parser(log_type)
-                                                if parser:
-                                                    try:
-                                                        # Parse the log
-                                                        parser.parse(raw_log)
-                                                    except Exception as e:
-                                                        logger.error(f"Error parsing log: {str(e)}")
-                                    
-                                    logger.info(f"Processed log file: {file_path}")
-                                except Exception as e:
-                                    logger.error(f"Error processing log file {log_config['path']}: {str(e)}")
-                        
-                        # Add the method to the instance
-                        import types
-                        collector.process_log_files = types.MethodType(process_log_files, collector)
-                    
-                    # Process the log files
-                    collector.process_log_files()
-                    logger.info(f"Imported logs from {len(config['log_files'])} files")
-            except Exception as import_error:
-                logger.error(f"Error importing logs from files: {str(import_error)}")
-        
-        # Get unanalyzed logs with proper optimization
-        unanalyzed_logs = ParsedLog.objects.filter(
-            analyzed=0,
-            raw_log__isnull=False
-        ).select_related(
-            'raw_log', 'raw_log__source'
-        ).order_by('-raw_log__timestamp')[:logs_count]
-        
-        # Track threats found
-        threats_found = 0
-        logs_analyzed = len(unanalyzed_logs)
-        
-        logger.info(f"Found {logs_analyzed} unanalyzed logs to process")
-        
-        # Define our own LogAnalysisService since the module doesn't exist
-        class LogAnalysisService:
-            def __init__(self):
-                self.threat_rules = {
-                    'apache': [
-                        (r'4\d{2}', 'Client Error', 'medium'),
-                        (r'5\d{2}', 'Server Error', 'high'),
-                        (r'(admin|config|setup|install|phpMyAdmin)', 'Sensitive URL Access', 'high'),
-                        (r'(\.\.|%2e%2e|/etc/passwd|/bin/sh|eval\(|exec\()', 'Path Traversal Attempt', 'critical'),
-                    ],
-                    'mysql': [
-                        (r'(execution_time|query_time).*[5-9]\.\d+', 'Slow Query', 'low'),
-                        (r'(DROP|DELETE|TRUNCATE|ALTER)', 'Data Modification', 'high'),
-                        (r'(GRANT|PRIVILEGES)', 'Permission Change', 'high'),
-                        (r'(denied|error|failed)', 'Access Error', 'medium'),
-                    ]
-                }
-            
-            def analyze_log(self, log):
-                """Analyze a log entry for threats"""
-                threats = []
-                
-                # Determine log type
-                log_type = getattr(log, 'source_type', None) or getattr(log.raw_log.source, 'source_type', 'unknown')
-                log_type = log_type.split('_')[0] if '_' in log_type else log_type  # Extract base type
-                
-                # Get appropriate rules
-                rules = self.threat_rules.get(log_type, [])
-                
-                # Get content to check
-                content = ""
-                
-                # For Apache logs
-                if hasattr(log, 'request_path') and log.request_path:
-                    content += log.request_path + " "
-                if hasattr(log, 'status_code') and log.status_code:
-                    content += str(log.status_code) + " "
-                    
-                # For MySQL logs
-                if hasattr(log, 'query') and log.query:
-                    content += log.query + " "
-                if hasattr(log, 'execution_time') and log.execution_time:
-                    content += f"execution_time={log.execution_time} "
-                
-                # Also check normalized data
-                if hasattr(log, 'normalized_data') and log.normalized_data:
-                    content += str(log.normalized_data)
-                
-                # If no specific content found, check raw log content
-                if not content and hasattr(log, 'raw_log') and hasattr(log.raw_log, 'content'):
-                    content = log.raw_log.content
-                
-                # Check each rule
-                for pattern, desc, severity in rules:
-                    if re.search(pattern, content, re.IGNORECASE):
-                        # Create threat
-                        threat = Threat(
-                            severity=severity,
-                            status='new',
-                            description=f"{desc} detected: {pattern}",
-                            source_ip=getattr(log, 'source_ip', None),
-                            user_id=getattr(log, 'user_id', None),
-                            mitre_tactic='Discovery',
-                            mitre_technique='T1046',
-                            parsed_log=log,
-                            created_at=timezone.now(),
-                            updated_at=timezone.now()
-                        )
-                        threats.append(threat)
-                        
-                        # Save the threat to database
-                        threat.save()
-                
-                return threats
-        
-        # Create our analyzer service
-        analyzer = LogAnalysisService()
-        
-        # Process each log using the service
-        for log in unanalyzed_logs:
-            try:
-                # Get result from analyzer service
-                result = analyzer.analyze_log(log)
-                
-                # Count threats based on result type
-                if result:
-                    if isinstance(result, (list, tuple)):
-                        threats_found += len(result)
-                    else:
-                        threats_found += 1
-                    
-                    logger.debug(f"Detected threat(s) in log ID: {log.id}")
-            except Exception as log_error:
-                logger.error(f"Error analyzing log {log.id}: {str(log_error)}")
-                # Fallback to built-in detection for this log
-                try:
-                    log_type = getattr(log, 'source_type', None) or getattr(log.raw_log.source, 'source_type', 'unknown')
-                    if 'apache' in log_type.lower():
-                        new_threats = detect_apache_threats(log)
-                    elif 'mysql' in log_type.lower():
-                        new_threats = detect_mysql_threats(log)
-                    else:
-                        new_threats = []
-                        if detect_generic_threat(log):
-                            threats_found += 1
-                    
-                    threats_found += len(new_threats)
-                except Exception:
-                    logger.exception("Even fallback detection failed")
-            
-            # Mark as analyzed regardless of outcome
-            log.analyzed = 1
-            log.analysis_time = timezone.now()
-            log.save(update_fields=['analyzed', 'analysis_time'])
-        
-        logger.info(f"Analysis complete. Found {threats_found} threats in {logs_analyzed} logs.")
-        
-        return JsonResponse({
-            'success': True,
-            'logs_analyzed': logs_analyzed,
-            'threats_found': threats_found,
-            'message': f"Analysis complete: {threats_found} threats detected in {logs_analyzed} logs"
-        })
-    
-    except json.JSONDecodeError:
-        logger.error("Invalid JSON in analyze_logs_api request")
-        return JsonResponse({
-            'success': False,
-            'error': 'Invalid JSON in request'
-        }, status=400)
-    
-    except Exception as e:
-        logger.exception(f"Error in analyze_logs_api: {str(e)}")
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
-        
-def detect_apache_threats(log):
-    """Detect threats in Apache logs"""
-    threats = []
-    
-    # Check for HTTP errors (4xx, 5xx)
-    if hasattr(log, 'status_code') and log.status_code:
-        if log.status_code >= 400 and log.status_code < 500:
-            # Client errors - may indicate probing attempts
-            threat = Threat.objects.create(
-                severity='medium',
-                status='new',
-                description=f"Possible unauthorized access attempt (Status: {log.status_code})",
-                source_ip=getattr(log, 'source_ip', None),
-                user_id=getattr(log, 'user_id', None),
-                mitre_tactic='Initial Access',
-                mitre_technique='T1190',
-                parsed_log=log,
-                created_at=timezone.now(),
-                updated_at=timezone.now()
-            )
-            threats.append(threat)
-            
-        elif log.status_code >= 500:
-            # Server errors
-            threat = Threat.objects.create(
-                severity='low',
-                status='new',
-                description=f"Server error detected (Status: {log.status_code})",
-                source_ip=getattr(log, 'source_ip', None),
-                user_id=getattr(log, 'user_id', None),
-                mitre_tactic='Impact',
-                mitre_technique='T1499',
-                parsed_log=log,
-                created_at=timezone.now(),
-                updated_at=timezone.now()
-            )
-            threats.append(threat)
-    
-    # Check for suspicious URL patterns
-    if hasattr(log, 'request_path') and log.request_path:
-        suspicious_patterns = [
-            'wp-admin', 'phpmyadmin', '.git/', '../', 'etc/passwd', 
-            'eval(', 'exec(', '.php?', '/shell', '/admin', 'admin.php',
-            'config.php', '.sql', 'backup', 'wp-login', '/conf/', '/bin/',
-            'cmd.php', 'cmd.exe', '.bak', '.old', '.zip', '.tar', '.gz',
-            'test.php', 'debug.php', '%27', 'SELECT%20', 'UNION%20',
-            '..%2F', '%3C%73%63%72%69%70%74%3E'  # URL-encoded payloads
-        ]
-        
-        for pattern in suspicious_patterns:
-            if pattern in log.request_path.lower():
-                threat = Threat.objects.create(
-                    severity='high',
-                    status='new',
-                    description=f"Suspicious URL pattern detected: {pattern}",
-                    source_ip=getattr(log, 'source_ip', None),
-                    user_id=getattr(log, 'user_id', None),
-                    mitre_tactic='Initial Access',
-                    mitre_technique='T1190',
-                    parsed_log=log,
-                    created_at=timezone.now(),
-                    updated_at=timezone.now()
-                )
-                threats.append(threat)
-                break  # Only create one threat for URL pattern
-    
-    return threats
-
-def detect_mysql_threats(log):
-    """Detect threats in MySQL logs"""
-    threats = []
-    
-    # Check for slow queries
-    if hasattr(log, 'execution_time') and log.execution_time and log.execution_time > 3.0:
-        threat = Threat.objects.create(
-            severity='low',
-            status='new',
-            description=f"Slow MySQL query detected (execution time: {log.execution_time:.2f}s)",
-            source_ip=getattr(log, 'source_ip', None),
-            user_id=getattr(log, 'user_id', None),
-            affected_system='Database Server',
-            mitre_tactic='Resource Development',
-            mitre_technique='T1583',
-            parsed_log=log,
-            created_at=timezone.now(),
-            updated_at=timezone.now()
-        )
-        threats.append(threat)
-        
-    # Check for dangerous SQL operations
-    if hasattr(log, 'query') and log.query:
-        dangerous_operations = [
-            'DROP TABLE', 'DROP DATABASE', 'TRUNCATE TABLE', 'DELETE FROM', 
-            'DROP USER', 'GRANT ALL', 'SHUTDOWN', 'FLUSH PRIVILEGES',
-            'ALTER USER', 'RENAME TABLE', 'WITH ADMIN OPTION', 'IDENTIFIED BY'
-        ]
-        for operation in dangerous_operations:
-            if operation in log.query.upper():
-                threat = Threat.objects.create(
-                    severity='high',
-                    status='new',
-                    description=f"Potentially dangerous SQL operation detected: {operation}",
-                    source_ip=getattr(log, 'source_ip', None),
-                    user_id=getattr(log, 'user_id', None),
-                    affected_system='Database Server',
-                    mitre_tactic='Impact',
-                    mitre_technique='T1485', 
-                    parsed_log=log,
-                    created_at=timezone.now(),
-                    updated_at=timezone.now()
-                )
-                threats.append(threat)
-                break  # Only create one threat for dangerous operations
-    
-    return threats
-
-def detect_generic_threat(log):
-    """Detect threats in unknown log types using basic heuristics"""
-    suspicious_terms = [
-        'error', 'failed', 'denied', 'unauthorized', 'attack', 'exploit', 'overflow',
-        'injection', 'malware', 'suspicious', 'brute force', 'abuse', 'compromise',
-        'hack', 'violation', 'malicious', 'breach', 'infected', 'corrupted',
-        'phishing', 'ransomware', 'botnet', 'backdoor', 'trojan', 'rootkit'
-    ]
-    
-    # Look for suspicious terms in normalized data
-    if hasattr(log, 'normalized_data') and log.normalized_data:
-        normalized_str = str(log.normalized_data).lower()
-        for term in suspicious_terms:
-            if term in normalized_str:
-                Threat.objects.create(
-                    severity='low',
-                    status='new',
-                    description=f"Suspicious term '{term}' detected in log",
-                    source_ip=getattr(log, 'source_ip', None),
-                    affected_system='Unknown',
-                    mitre_tactic='Discovery',
-                    mitre_technique='T1046',
-                    parsed_log=log,
-                    created_at=timezone.now(),
-                    updated_at=timezone.now()
-                )
-                return True
-    
-    # Also check raw content if available
-    if hasattr(log, 'raw_log') and hasattr(log.raw_log, 'content'):
-        content = log.raw_log.content.lower()
-        for term in suspicious_terms:
-            if term in content:
-                Threat.objects.create(
-                    severity='low',
-                    status='new',
-                    description=f"Suspicious term '{term}' detected in log content",
-                    source_ip=getattr(log, 'source_ip', None),
-                    affected_system='Unknown',
-                    mitre_tactic='Discovery',
-                    mitre_technique='T1046',
-                    parsed_log=log,
-                    created_at=timezone.now(),
-                    updated_at=timezone.now()
-                )
-                return True
-    
-    return False
-
 @login_required
 def api_event_detail(request, event_id):
     """API endpoint for retrieving event details"""
@@ -2938,3 +2327,73 @@ def api_resolve_event(request, event_id):
             'success': False,
             'error': f"An error occurred: {str(e)}"
         }, status=500)
+
+@require_POST
+def submit_contact(request):
+    """Handle contact form submission"""
+    try:
+        name = request.POST.get('name', '').strip()
+        email = request.POST.get('email', '').strip()
+        subject = request.POST.get('subject', '').strip()
+        message = request.POST.get('message', '').strip()
+        
+        # Validate required fields
+        if not all([name, email, subject, message]):
+            return JsonResponse({
+                'success': False,
+                'error': 'All fields are required'
+            })
+        
+        # Create contact message record
+        contact_message = ContactMessage.objects.create(
+            name=name,
+            email=email,
+            subject=subject,
+            message=message
+        )
+        
+        # Send notification email to admin (optional)
+        try:
+            admin_emails = [admin[1] for admin in settings.ADMINS]
+            if admin_emails:
+                send_mail(
+                    f'New Contact Form Submission: {subject}',
+                    f"Name: {name}\nEmail: {email}\n\nMessage:\n{message}",
+                    settings.DEFAULT_FROM_EMAIL,
+                    admin_emails,
+                    fail_silently=True,
+                )
+        except Exception as e:
+            logger.error(f"Failed to send admin notification email: {str(e)}")
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Your message has been sent successfully. We will get back to you soon.'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in contact form submission: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': 'An error occurred while processing your request. Please try again later.'
+        }, status=500)
+
+from django.contrib import admin
+from .models import ContactMessage, AdminReply
+
+class AdminReplyInline(admin.TabularInline):
+    model = AdminReply
+    extra = 0
+
+@admin.register(ContactMessage)
+class ContactMessageAdmin(admin.ModelAdmin):
+    list_display = ('name', 'email', 'subject', 'created_at', 'is_read', 'is_replied')
+    list_filter = ('is_read', 'is_replied', 'created_at')
+    search_fields = ('name', 'email', 'subject', 'message')
+    inlines = [AdminReplyInline]
+
+@admin.register(AdminReply)
+class AdminReplyAdmin(admin.ModelAdmin):
+    list_display = ('contact_message', 'admin_user', 'created_at')
+    list_filter = ('created_at',)
+    search_fields = ('reply_text',)

@@ -3,7 +3,8 @@ import logging
 from datetime import timedelta
 from django.db import models
 from django.utils import timezone
-from log_ingestion.models import ParsedLog, Threat
+from log_ingestion.models import ParsedLog
+from threat_detection.models import Threat
 from .models import DetectionRule, Threat
 from django.core.cache import cache
 
