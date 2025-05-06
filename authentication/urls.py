@@ -14,6 +14,7 @@ urlpatterns = [
     path('api/alerts/<int:alert_id>/analyze/', views.analyze_alert_with_ai, name='analyze_alert'),
     path('dashboard-data-api/', views.dashboard_data_api, name='dashboard_data_api'),
     path('api/reports/geo-attacks/', views_reports.geo_attacks_data, name='geo_attacks_data'),
+    path('api/server-status/', views.server_status_api, name='server_status_api'),
     
     # Password reset - using custom view for confirmation
     path('password-reset/', 

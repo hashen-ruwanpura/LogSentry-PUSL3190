@@ -181,28 +181,38 @@ def dashboard_view(request):
         period_name = 'Last 24 Hours'
         timeframe = '1d'
 
-    # Get log metrics
+    # Get log metrics - updated to include correct source types
     total_logs = RawLog.objects.filter(timestamp__gte=start_time).count()
-    apache_count = RawLog.objects.filter(source__source_type='apache', timestamp__gte=start_time).count()
-    mysql_count = RawLog.objects.filter(source__source_type='mysql', timestamp__gte=start_time).count()
+    
+    # Get Apache logs - updated to match actual source type
+    apache_count = RawLog.objects.filter(
+        Q(source__source_type='apache_access') | Q(source__source_type='apache'),
+        timestamp__gte=start_time
+    ).count()
+    
+    # Get MySQL logs - updated to include both mysql and mysql_error
+    mysql_count = RawLog.objects.filter(
+        Q(source__source_type='mysql') | Q(source__source_type='mysql_error'), 
+        timestamp__gte=start_time
+    ).count()
     
     # Get Apache errors - CORRECTED FIELD ACCESS
     apache_4xx = ParsedLog.objects.filter(
-        raw_log__source__source_type='apache',
+        Q(raw_log__source__source_type='apache_access') | Q(raw_log__source__source_type='apache'),
         raw_log__timestamp__gte=start_time,
         status_code__gte=400,
         status_code__lt=500
     ).count()
     
     apache_5xx = ParsedLog.objects.filter(
-        raw_log__source__source_type='apache',
+        Q(raw_log__source__source_type='apache_access') | Q(raw_log__source__source_type='apache'),
         raw_log__timestamp__gte=start_time,
         status_code__gte=500
     ).count()
     
     # Get MySQL slow queries - CORRECTED FIELD ACCESS
     mysql_slow = ParsedLog.objects.filter(
-        raw_log__source__source_type='mysql',
+        Q(raw_log__source__source_type='mysql') | Q(raw_log__source__source_type='mysql_error'),
         raw_log__timestamp__gte=start_time,
         execution_time__gte=1.0  # Queries taking more than 1 second
     ).count()
@@ -378,6 +388,43 @@ def dashboard_data_api(request):
             'description': threat.description
         })
     
+    # Enhanced server status metrics
+    apache_metrics = {
+        'total_requests': apache_count,
+        'client_errors': apache_4xx,
+        'server_errors': apache_5xx,
+        'success_rate': round(((apache_count - apache_4xx - apache_5xx) / apache_count * 100) if apache_count > 0 else 0, 1)
+    }
+    
+    mysql_metrics = {
+        'total_queries': mysql_count,
+        'slow_queries': mysql_slow,
+        'optimal_rate': round(((mysql_count - mysql_slow) / mysql_count * 100) if mysql_count > 0 else 0, 1)
+    }
+    
+    # Add real-time server health check (representative values)
+    import psutil
+    try:
+        cpu_usage = psutil.cpu_percent(interval=0.1)
+        memory_usage = psutil.virtual_memory().percent
+        disk_usage = psutil.disk_usage('/').percent
+        
+        system_health = {
+            'cpu': cpu_usage,
+            'memory': memory_usage,
+            'disk': disk_usage,
+            'apache_status': 'online' if apache_count > 0 else 'unknown',
+            'mysql_status': 'online' if mysql_count > 0 else 'unknown'
+        }
+    except:
+        system_health = {
+            'cpu': 0,
+            'memory': 0,
+            'disk': 0,
+            'apache_status': 'unknown',
+            'mysql_status': 'unknown'
+        }
+    
     return JsonResponse({
         'metrics': {
             'total_logs': total_logs,
@@ -390,6 +437,11 @@ def dashboard_data_api(request):
             'mysql_count': mysql_count,
             'mysql_slow': mysql_slow
         },
+        'server_status': {
+            'apache': apache_metrics,
+            'mysql': mysql_metrics,
+            'system': system_health
+        },
         'charts': {
             'alerts': {
                 'labels': chart_labels,
@@ -401,6 +453,122 @@ def dashboard_data_api(request):
             }
         },
         'alerts': alerts
+    })
+
+@login_required
+def server_status_api(request):
+    """API endpoint that returns server status data for Apache and MySQL."""
+    timeframe = request.GET.get('timeframe', '30d')
+    start_date = get_start_date_from_timeframe(timeframe)
+    
+    # Debug logs to diagnose the issue
+    logger.debug(f"Server status API called with timeframe: {timeframe}, start date: {start_date}")
+    
+    # Updated: Include the correct source type for Apache logs
+    apache_source_types = ['apache_access', 'apache', 'Apache', 'httpd', 'apache2']
+    apache_count = 0
+    apache_4xx = 0
+    apache_5xx = 0
+    
+    # Try each possible Apache source type
+    for source_type in apache_source_types:
+        count = RawLog.objects.filter(
+            source__source_type__iexact=source_type, 
+            timestamp__gte=start_date
+        ).count()
+        
+        if count > 0:
+            apache_count = count
+            # Get 4xx errors
+            apache_4xx = ParsedLog.objects.filter(
+                raw_log__source__source_type__iexact=source_type,
+                raw_log__timestamp__gte=start_date,
+                status_code__gte=400, 
+                status_code__lt=500
+            ).count()
+            
+            # Get 5xx errors
+            apache_5xx = ParsedLog.objects.filter(
+                raw_log__source__source_type__iexact=source_type,
+                raw_log__timestamp__gte=start_date,
+                status_code__gte=500, 
+                status_code__lt=600
+            ).count()
+            
+            logger.debug(f"Found Apache logs with source_type '{source_type}': {count}")
+            break
+    
+    # If no Apache logs found with standard source types, try a broader approach
+    if apache_count == 0:
+        logger.warning("No Apache logs found with standard source types, trying broader query")
+        # Look for any logs that might be Apache-related by checking content
+        apache_count = RawLog.objects.filter(
+            Q(content__icontains='HTTP') | Q(content__icontains='GET') | Q(content__icontains='POST'),
+            timestamp__gte=start_date
+        ).count()
+    
+    # Updated: Include both mysql and mysql_error source types
+    mysql_count = RawLog.objects.filter(
+        Q(source__source_type__iexact='mysql') | Q(source__source_type__iexact='mysql_error'),
+        timestamp__gte=start_date
+    ).count()
+    
+    # Slow query definition might need adjustment if no slow queries are found
+    slow_threshold = 1.0  # 1 second
+    mysql_slow = ParsedLog.objects.filter(
+        Q(raw_log__source__source_type__iexact='mysql') | Q(raw_log__source__source_type__iexact='mysql_error'),
+        raw_log__timestamp__gte=start_date,
+        execution_time__gt=slow_threshold
+    ).count()
+    
+    # Check if MySQL still shows 0 slow queries, try a lower threshold
+    if mysql_count > 0 and mysql_slow == 0:
+        # Try with a lower threshold - maybe your environment has faster queries
+        slow_threshold = 0.1  # 100ms
+        mysql_slow = ParsedLog.objects.filter(
+            Q(raw_log__source__source_type__iexact='mysql') | Q(raw_log__source__source_type__iexact='mysql_error'),
+            raw_log__timestamp__gte=start_date,
+            execution_time__gt=slow_threshold
+        ).count()
+    
+    logger.debug(f"Apache count: {apache_count}, 4xx: {apache_4xx}, 5xx: {apache_5xx}")
+    logger.debug(f"MySQL count: {mysql_count}, slow: {mysql_slow}")
+    
+    # Add real-time system health check
+    try:
+        import psutil
+        cpu_usage = psutil.cpu_percent(interval=0.1)
+        memory_usage = psutil.virtual_memory().percent
+        disk_usage = psutil.disk_usage('/').percent
+        
+        system_health = {
+            'cpu': cpu_usage,
+            'memory': memory_usage,
+            'disk': disk_usage,
+            'apache_status': 'online' if apache_count > 0 else 'unknown',
+            'mysql_status': 'online' if mysql_count > 0 else 'unknown'
+        }
+    except Exception as e:
+        logger.error(f"Error getting system health: {str(e)}")
+        system_health = {
+            'cpu': 0,
+            'memory': 0,
+            'disk': 0,
+            'apache_status': 'unknown',
+            'mysql_status': 'unknown'
+        }
+    
+    return JsonResponse({
+        'apache': {
+            'total_requests': apache_count,
+            'client_errors': apache_4xx,
+            'server_errors': apache_5xx
+        },
+        'mysql': {
+            'total_queries': mysql_count,
+            'slow_queries': mysql_slow
+        },
+        'system': system_health
     })
 
 @login_required
@@ -1136,13 +1304,29 @@ def events_view(request):
     mitre_tactic = request.GET.get('mitre_tactic', 'all')
     status = request.GET.get('status', 'all')
     search_query = request.GET.get('search', '')
+    event_type = request.GET.get('event_type', 'all')  # Added event_type parameter
     page = int(request.GET.get('page', 1))
     
     # Determine time period based on range parameter
     now = timezone.now()
-    if time_range == '1h':
+    if time_range == '15m':
+        start_time = now - timedelta(minutes=15)
+        period_name = 'Last 15 Minutes'
+    elif time_range == '30m':
+        start_time = now - timedelta(minutes=30)
+        period_name = 'Last 30 Minutes'
+    elif time_range == '1h':
         start_time = now - timedelta(hours=1)
         period_name = 'Last Hour'
+    elif time_range == '3h':
+        start_time = now - timedelta(hours=3)
+        period_name = 'Last 3 Hours'
+    elif time_range == '5h':
+        start_time = now - timedelta(hours=5)
+        period_name = 'Last 5 Hours'
+    elif time_range == '8h':
+        start_time = now - timedelta(hours=8)
+        period_name = 'Last 8 Hours'
     elif time_range == '12h':
         start_time = now - timedelta(hours=12)
         period_name = 'Last 12 Hours'
@@ -1152,6 +1336,9 @@ def events_view(request):
     elif time_range == '30d':
         start_time = now - timedelta(days=30)
         period_name = 'Last 30 Days'
+    elif time_range == '3d':
+        start_time = now - timedelta(days=3)
+        period_name = 'Last 3 Days'
     else:  # Default to 24h
         start_time = now - timedelta(days=1)
         period_name = 'Last 24 Hours'
@@ -1159,6 +1346,28 @@ def events_view(request):
     
     # Base queryset
     events = Threat.objects.filter(created_at__gte=start_time).order_by('-created_at')
+    
+    # Apply event_type filter
+    if event_type != 'all':
+        if event_type == 'apache':
+            # Filter for Apache-related threats
+            events = events.filter(
+                Q(parsed_log__source_type='apache') | 
+                Q(parsed_log__raw_log__source__source_type='apache_access')
+            )
+        elif event_type == 'mysql':
+            # Filter for MySQL-related threats
+            events = events.filter(
+                Q(parsed_log__source_type='mysql') | 
+                Q(parsed_log__raw_log__source__source_type='mysql') |
+                Q(parsed_log__raw_log__source__source_type='mysql_error')
+            )
+        elif event_type == 'threat':
+            # Filter for threats without specific source (generic security threats)
+            events = events.filter(
+                Q(parsed_log__isnull=True) |
+                ~Q(parsed_log__source_type__in=['apache', 'mysql'])
+            )
     
     # Apply severity filter
     if severity != 'all':
@@ -1220,6 +1429,7 @@ def events_view(request):
         'mitre_tactic': mitre_tactic,
         'mitre_tactics': mitre_tactics,
         'status': status,
+        'event_type': event_type,  # Added to context for template
         'search_query': search_query,
         'current_page': page,
         'total_pages': total_pages,

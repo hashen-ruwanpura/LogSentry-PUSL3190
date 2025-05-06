@@ -642,25 +642,25 @@
                         </div>
                         <div class="filter-group">
                             <label for="time-period">Time Period</label>
-                            <select id="time-period" class="form-select form-select-sm">
-                                <option value="15m" {% if date_range == '15m' %}selected{% endif %}>Last 15 Minutes</option>
-                                <option value="30m" {% if date_range == '30m' %}selected{% endif %}>Last 30 Minutes</option>
-                                <option value="1h" {% if date_range == '1h' %}selected{% endif %}>Last 1 Hour</option>
-                                <option value="3h" {% if date_range == '3h' %}selected{% endif %}>Last 3 Hours</option>
-                                <option value="5h" {% if date_range == '5h' %}selected{% endif %}>Last 5 Hours</option>
-                                <option value="8h" {% if date_range == '8h' %}selected{% endif %}>Last 8 Hours</option>
-                                <option value="12h" {% if date_range == '12h' %}selected{% endif %}>Last 12 Hours</option>
-                                <option value="24h" {% if date_range == '24h' %}selected{% endif %}>Last 24 Hours</option>
-                                <option value="3d" {% if date_range == '3d' %}selected{% endif %}>Last 3 Days</option>
-                                <option value="7d" {% if date_range == '7d' %}selected{% endif %}>Last 7 Days</option>
-                                <option value="30d" {% if date_range == '30d' %}selected{% endif %}>Last 30 Days</option>
+                            <select id="time-period" class="form-select">
+                                <option value="15m" {% if time_range == '15m' %}selected{% endif %}>Last 15 Minutes</option>
+                                <option value="30m" {% if time_range == '30m' %}selected{% endif %}>Last 30 Minutes</option>
+                                <option value="1h" {% if time_range == '1h' %}selected{% endif %}>Last 1 Hour</option>
+                                <option value="3h" {% if time_range == '3h' %}selected{% endif %}>Last 3 Hours</option>
+                                <option value="5h" {% if time_range == '5h' %}selected{% endif %}>Last 5 Hours</option>
+                                <option value="8h" {% if time_range == '8h' %}selected{% endif %}>Last 8 Hours</option>
+                                <option value="12h" {% if time_range == '12h' %}selected{% endif %}>Last 12 Hours</option>
+                                <option value="24h" {% if time_range == '24h' %}selected{% endif %}>Last 24 Hours</option>
+                                <option value="3d" {% if time_range == '3d' %}selected{% endif %}>Last 3 Days</option>
+                                <option value="7d" {% if time_range == '7d' %}selected{% endif %}>Last 7 Days</option>
+                                <option value="30d" {% if time_range == '30d' %}selected{% endif %}>Last 30 Days</option>
                             </select>
                         </div>
                         <div class="filter-group">
                             <label for="search-input">Search</label>
                             <div class="input-group input-group-sm">
                                 <input type="text" id="search-input" class="form-control" placeholder="Search source IP, description..." value="{{ search_query }}">
-                                <button class="btn btn-primary" type="button" onclick="applyFilters()">
+                                <button class="btn btn-primary" type="button" id="search-button">
                                     <i class="fas fa-search"></i>
                                 </button>
                             </div>
@@ -753,8 +753,8 @@
                 <div class="pagination-container">
                     <ul class="pagination">
                         {% if has_prev %}
-                            <li><a href="?page=1&event_type={{ event_type }}&severity={{ severity }}&status={{ status }}&mitre_tactic={{ mitre_tactic }}&date_range={{ date_range }}&search={{ search_query }}" aria-label="First"><i class="fas fa-angle-double-left"></i></a></li>
-                            <li><a href="?page={{ prev_page }}&event_type={{ event_type }}&severity={{ severity }}&status={{ status }}&mitre_tactic={{ mitre_tactic }}&date_range={{ date_range }}&search={{ search_query }}" aria-label="Previous"><i class="fas fa-angle-left"></i></a></li>
+                            <li><a href="?page=1&event_type={{ event_type }}&severity={{ severity }}&status={{ status }}&mitre_tactic={{ mitre_tactic }}&time_range={{ time_range }}&search={{ search_query }}" aria-label="First"><i class="fas fa-angle-double-left"></i></a></li>
+                            <li><a href="?page={{ prev_page }}&event_type={{ event_type }}&severity={{ severity }}&status={{ status }}&mitre_tactic={{ mitre_tactic }}&time_range={{ time_range }}&search={{ search_query }}" aria-label="Previous"><i class="fas fa-angle-left"></i></a></li>
                         {% else %}
                             <li class="disabled"><a href="#"><i class="fas fa-angle-double-left"></i></a></li>
                             <li class="disabled"><a href="#"><i class="fas fa-angle-left"></i></a></li>
@@ -766,13 +766,13 @@
                             {% elif i == current_page %}
                                 <li class="active"><a href="#">{{ i }}</a></li>
                             {% else %}
-                                <li><a href="?page={{ i }}&event_type={{ event_type }}&severity={{ severity }}&status={{ status }}&mitre_tactic={{ mitre_tactic }}&date_range={{ date_range }}&search={{ search_query }}">{{ i }}</a></li>
+                                <li><a href="?page={{ i }}&event_type={{ event_type }}&severity={{ severity }}&status={{ status }}&mitre_tactic={{ mitre_tactic }}&time_range={{ time_range }}&search={{ search_query }}">{{ i }}</a></li>
                             {% endif %}
                         {% endfor %}
                         
                         {% if has_next %}
-                            <li><a href="?page={{ next_page }}&event_type={{ event_type }}&severity={{ severity }}&status={{ status }}&mitre_tactic={{ mitre_tactic }}&date_range={{ date_range }}&search={{ search_query }}" aria-label="Next"><i class="fas fa-angle-right"></i></a></li>
-                            <li><a href="?page={{ total_pages }}&event_type={{ event_type }}&severity={{ severity }}&status={{ status }}&mitre_tactic={{ mitre_tactic }}&date_range={{ date_range }}&search={{ search_query }}" aria-label="Last"><i class="fas fa-angle-double-right"></i></a></li>
+                            <li><a href="?page={{ next_page }}&event_type={{ event_type }}&severity={{ severity }}&status={{ status }}&mitre_tactic={{ mitre_tactic }}&time_range={{ time_range }}&search={{ search_query }}" aria-label="Next"><i class="fas fa-angle-right"></i></a></li>
+                            <li><a href="?page={{ total_pages }}&event_type={{ event_type }}&severity={{ severity }}&status={{ status }}&mitre_tactic={{ mitre_tactic }}&time_range={{ time_range }}&search={{ search_query }}" aria-label="Last"><i class="fas fa-angle-double-right"></i></a></li>
                         {% else %}
                             <li class="disabled"><a href="#"><i class="fas fa-angle-right"></i></a></li>
                             <li class="disabled"><a href="#"><i class="fas fa-angle-double-right"></i></a></li>
@@ -983,16 +983,16 @@
             const severity = document.getElementById('severity').value;
             const status = document.getElementById('status').value;
             const mitreTactic = document.getElementById('mitre-tactic').value;
-            const dateRange = document.getElementById('time-period').value; // This was the issue! time-period instead of date-range
+            const timeRange = document.getElementById('time-period').value;
             const searchQuery = document.getElementById('search-input').value;
             
-            // Build URL with filters
+            // Build URL with filters - ensuring consistent parameter names
             const url = new URL(window.location.href);
             url.searchParams.set('event_type', eventType);
             url.searchParams.set('severity', severity);
             url.searchParams.set('status', status);
             url.searchParams.set('mitre_tactic', mitreTactic);
-            url.searchParams.set('date_range', dateRange); // This parameter name must match what your backend expects
+            url.searchParams.set('time_range', timeRange); // Consistently use time_range
             url.searchParams.set('search', searchQuery);
             url.searchParams.set('page', 1); // Reset to first page
             
@@ -1095,7 +1095,7 @@
                 url.searchParams.set('severity', severity);
                 url.searchParams.set('status', status);
                 url.searchParams.set('mitre_tactic', mitreTactic);
-                url.searchParams.set('time_range', dateRange);
+                url.searchParams.set('time_range', timeRange); // FIXED: Changed dateRange to timeRange for consistency
                 url.searchParams.set('search', searchQuery);
                 url.searchParams.set('format', format);
                 
@@ -1115,5 +1115,146 @@
             });
         }
     </script>
+    <script>
+// Wait for DOM to be fully loaded
+document.addEventListener('DOMContentLoaded', function() {
+    // Set the form controls to reflect the current URL parameters
+    setFiltersFromUrl();
+    
+    // Add event listeners to the form controls
+    document.getElementById('time-period').addEventListener('change', function() {
+        applyFilters();
+    });
+    
+    document.getElementById('severity').addEventListener('change', function() {
+        applyFilters();
+    });
+    
+    document.getElementById('status').addEventListener('change', function() {
+        applyFilters();
+    });
+    
+    document.getElementById('mitre-tactic').addEventListener('change', function() {
+        applyFilters();
+    });
+    
+    document.getElementById('event-source').addEventListener('change', function() {
+        applyFilters();
+    });
+    
+    // Add event listener for search button
+    document.getElementById('search-button').addEventListener('click', function() {
+        applyFilters();
+    });
+    
+    // Add event listener for search on Enter key
+    document.getElementById('search-input').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            applyFilters();
+        }
+    });
+});
+
+// Function to set form controls based on URL parameters
+function setFiltersFromUrl() {
+    const urlParams = new URLSearchParams(window.location.search);
+    
+    // Set time period dropdown
+    const timeRange = urlParams.get('time_range') || '15m';
+    const timeSelect = document.getElementById('time-period');
+    if (timeSelect) {
+        // First verify the option exists, if not add it
+        let optionExists = false;
+        for (let i = 0; i < timeSelect.options.length; i++) {
+            if (timeSelect.options[i].value === timeRange) {
+                optionExists = true;
+                break;
+            }
+        }
+        
+        if (optionExists) {
+            timeSelect.value = timeRange;
+        } else {
+            console.warn(`Option for time_range=${timeRange} not found, using default`);
+        }
+    }
+    
+    // Set other filter dropdowns
+    const eventType = urlParams.get('event_type') || 'all';
+    setSelectValue('event-source', eventType);
+    
+    const severity = urlParams.get('severity') || 'all';
+    setSelectValue('severity', severity);
+    
+    const status = urlParams.get('status') || 'all';
+    setSelectValue('status', status);
+    
+    const mitreTactic = urlParams.get('mitre_tactic') || 'all';
+    setSelectValue('mitre-tactic', mitreTactic);
+    
+    // Set search input
+    const searchQuery = urlParams.get('search') || '';
+    document.getElementById('search-input').value = searchQuery;
+}
+
+// Helper to set select element value with error handling
+function setSelectValue(elementId, value) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        // Check if value exists in options
+        let optionExists = false;
+        for (let i = 0; i < element.options.length; i++) {
+            if (element.options[i].value === value) {
+                optionExists = true;
+                break;
+            }
+        }
+        
+        if (optionExists) {
+            element.value = value;
+        } else {
+            console.warn(`Option for ${elementId}=${value} not found, using default`);
+        }
+    }
+}
+
+// Apply filters - fixed implementation
+function applyFilters() {
+    // Get the current values from form controls
+    const eventTypeSelect = document.getElementById('event-source');
+    const severitySelect = document.getElementById('severity');
+    const statusSelect = document.getElementById('status');
+    const mitreSelect = document.getElementById('mitre-tactic');
+    const timeSelect = document.getElementById('time-period');
+    const searchInput = document.getElementById('search-input');
+    
+    // Get current values
+    const eventType = eventTypeSelect ? eventTypeSelect.value : 'all';
+    const severity = severitySelect ? severitySelect.value : 'all';
+    const status = statusSelect ? statusSelect.value : 'all';
+    const mitreTactic = mitreSelect ? mitreSelect.value : 'all';
+    const timeRange = timeSelect ? timeSelect.value : '24h';
+    const searchQuery = searchInput ? searchInput.value : '';
+    
+    // Log values for debugging
+    console.log('Applying filters:', {
+        eventType, severity, status, mitreTactic, timeRange, searchQuery
+    });
+    
+    // Build URL with filters
+    const url = new URL(window.location.href);
+    url.searchParams.set('event_type', eventType);
+    url.searchParams.set('severity', severity);
+    url.searchParams.set('status', status);
+    url.searchParams.set('mitre_tactic', mitreTactic);
+    url.searchParams.set('time_range', timeRange);
+    url.searchParams.set('search', searchQuery);
+    url.searchParams.set('page', 1); // Reset to first page
+    
+    // Navigate to filtered URL
+    window.location.href = url.toString();
+}
+</script>
 </body>
 </html>
