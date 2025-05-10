@@ -178,3 +178,30 @@ class AgentResourceMetric(models.Model):
     
     def __str__(self):
         return f"{self.agent.name} - {self.timestamp.strftime('%Y-%m-%d %H:%M')}"
+
+class SystemMetricsHistory(models.Model):
+    """Historical record of system-wide resource metrics for trend analysis"""
+    METRIC_TYPE_CHOICES = [
+        ('cpu', 'CPU Usage'),
+        ('memory', 'Memory Usage'),
+        ('disk', 'Disk Usage'),
+        ('log_volume', 'Log Volume'),
+    ]
+    
+    timestamp = models.DateTimeField(default=timezone.now)
+    metric_type = models.CharField(max_length=20, choices=METRIC_TYPE_CHOICES)
+    value = models.FloatField(help_text="Current usage percentage (0-100)")
+    total_available = models.FloatField(help_text="Total available resource (e.g., GB)", null=True, blank=True)
+    used_amount = models.FloatField(help_text="Amount currently in use (e.g., GB)", null=True, blank=True)
+    details = models.JSONField(null=True, blank=True, help_text="Additional metric-specific details")
+    
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['timestamp']),
+            models.Index(fields=['metric_type']),
+            models.Index(fields=['metric_type', 'timestamp']),
+        ]
+    
+    def __str__(self):
+        return f"{self.get_metric_type_display()} at {self.timestamp.strftime('%Y-%m-%d %H:%M')}: {self.value:.1f}%"

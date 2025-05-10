@@ -933,7 +933,7 @@
             }
             
             // Update progress bar
-            const progressBar = document.querySelector(`.card-body:has(#current-${resourceType}) .progress-bar`);
+            const progressBar = getProgressBar(resourceType);
             if (progressBar && data.usage !== undefined) {
                 progressBar.style.width = `${data.usage}%`;
                 progressBar.setAttribute('aria-valuenow', data.usage);
@@ -960,6 +960,41 @@
                 const diskDetails = diskCard.querySelector('p.mb-0.text-muted');
                 if (diskDetails) {
                     diskDetails.textContent = `Current usage of ${data.used} GB / ${data.total} GB`;
+                }
+            } else if (resourceType === 'log-volume' && data.apache_size !== undefined) {
+                // Find the Log Volume card by looking for the heading text
+                const allCards = document.querySelectorAll('.resource-card');
+                let logVolumeCard = null;
+                
+                // Find the card with "Log Volume" in its header
+                allCards.forEach(card => {
+                    const headerText = card.querySelector('.card-header h5')?.textContent || '';
+                    if (headerText.includes('Log Volume')) {
+                        logVolumeCard = card;
+                    }
+                });
+                
+                // Update the content if we found the card
+                if (logVolumeCard) {
+                    const breakdown = logVolumeCard.querySelector('.resource-forecast');
+                    if (breakdown) {
+                        const list = breakdown.querySelector('ul');
+                        if (list) {
+                            list.innerHTML = `
+                                <li>Apache Logs: ${data.apache_size} GB (${data.apache_growth || 0} GB/week)</li>
+                                <li>MySQL Logs: ${data.mysql_size} GB (${data.mysql_growth || 0} GB/week)</li>
+                                <li>System Logs: ${data.system_size} GB (${data.system_growth || 0} GB/week)</li>
+                            `;
+                        }
+                    }
+                    
+                    // Also update the main text display
+                    const detailsText = logVolumeCard.querySelector('.card-body p.mb-0.text-muted');
+                    if (detailsText) {
+                        detailsText.textContent = `${data.used} GB of allocated log space`;
+                    }
+                } else {
+                    console.warn('Log Volume card not found in the DOM');
                 }
             }
         }
@@ -1097,6 +1132,17 @@
             
             // Fetch real data immediately after initializing charts
             fetchResourcePredictions();
+        }
+
+        // Replace :has() selector with standard DOM navigation
+        function getProgressBar(resourceType) {
+            const cards = document.querySelectorAll('.card');
+            for (const card of cards) {
+                if (card.querySelector(`#current-${resourceType}`)) {
+                    return card.querySelector('.progress-bar');
+                }
+            }
+            return null;
         }
 
         // Update the document ready function
