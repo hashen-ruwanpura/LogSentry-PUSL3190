@@ -986,6 +986,225 @@
                 });
             });
         });
+
+        // Real-time MySQL Logs Updates
+        function setupRealTimeUpdates() {
+            // Configuration
+            const updateInterval = 30000; // Update every 30 seconds
+            let isUpdating = false;
+            let autoRefresh = true;
+            
+            // Get current filter values
+            function getFilterValues() {
+                return {
+                    time_range: document.getElementById('time_range').value,
+                    query_type: document.getElementById('query_type').value,
+                    execution_time: document.getElementById('execution_time').value,
+                    search: document.getElementById('search').value,
+                    page: document.querySelector('.pagination .active .page-link')?.textContent || '1'
+                };
+            }
+            
+            // Fetch new log data
+            function fetchMySQLLogs() {
+                if (isUpdating || !autoRefresh) return;
+                
+                isUpdating = true;
+                const filters = getFilterValues();
+                
+                // Add timestamp to prevent caching
+                filters.timestamp = new Date().getTime();
+                
+                // Create URL query params
+                const params = new URLSearchParams(filters);
+                
+                // Fetch logs from API endpoint
+                fetch(`/api/mysql-logs/?${params.toString()}`, {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    updateLogsTable(data.logs);
+                    updateStatistics(data.stats);
+                    isUpdating = false;
+                })
+                .catch(error => {
+                    console.error('Error fetching MySQL logs:', error);
+                    isUpdating = false;
+                });
+            }
+            
+            // Update the logs table with new data
+            function updateLogsTable(logs) {
+                const tableBody = document.querySelector('.logs-table tbody');
+                if (!tableBody || !logs || !logs.length) return;
+                
+                // Create HTML for each log entry
+                const rowsHtml = logs.map(log => `
+                    <tr>
+                        <td class="time-cell">${new Date(log.raw_log.timestamp).toLocaleString()}</td>
+                        <td>${log.user_id || 'system'}</td>
+                        <td class="query-cell" title="${log.query}">
+                            ${log.query ? log.query.substring(0, 100) + (log.query.length > 100 ? '...' : '') : ''}
+                        </td>
+                        <td>
+                            ${getPerformanceIndicator(log.execution_time)}
+                            ${log.execution_time.toFixed(2)}s
+                        </td>
+                        <td>${log.rows_affected || '0'}</td>
+                        <td>
+                            ${getStatusBadge(log.status)}
+                        </td>
+                    </tr>
+                `).join('');
+                
+                // Update the table
+                tableBody.innerHTML = rowsHtml;
+                
+                // Make query cells expandable on click
+                document.querySelectorAll('.query-cell').forEach(function(cell) {
+                    cell.addEventListener('click', function() {
+                        this.classList.toggle('text-truncate');
+                        this.style.whiteSpace = this.style.whiteSpace === 'normal' ? 'nowrap' : 'normal';
+                        this.style.maxWidth = this.style.maxWidth === 'none' ? '400px' : 'none';
+                    });
+                });
+            }
+            
+            // Generate performance indicator HTML
+            function getPerformanceIndicator(executionTime) {
+                let className = 'performance-fast';
+                let title = 'Fast query';
+                
+                if (executionTime >= 5.0) {
+                    className = 'performance-slow';
+                    title = 'Slow query';
+                } else if (executionTime >= 1.0) {
+                    className = 'performance-medium';
+                    title = 'Medium performance';
+                }
+                
+                return `<span class="performance-indicator ${className}" title="${title}"></span>`;
+            }
+            
+            // Generate status badge HTML
+            function getStatusBadge(status) {
+                if (status === 'success') {
+                    return '<span class="badge bg-success">Success</span>';
+                } else if (status === 'error') {
+                    return '<span class="badge bg-danger">Error</span>';
+                } else {
+                    return `<span class="badge bg-secondary">${status || 'Unknown'}</span>`;
+                }
+            }
+            
+            // Update statistics
+            function updateStatistics(stats) {
+                if (!stats) return;
+                
+                // Update count statistics
+                document.querySelectorAll('.stat-value')[0].textContent = stats.total_logs;
+                document.querySelectorAll('.stat-value')[1].textContent = stats.normal_queries;
+                document.querySelectorAll('.stat-value')[2].textContent = stats.slow_queries;
+                
+                // Update period name
+                document.querySelectorAll('.stat-subtitle')[0].textContent = stats.period_name;
+                
+                // Update query type distribution if available
+                if (stats.query_types && stats.query_types.length > 0) {
+                    const queryTypeList = document.querySelector('.query-type-list');
+                    if (queryTypeList) {
+                        queryTypeList.innerHTML = stats.query_types.map(qt => `
+                            <div class="query-type-pill query-type-${['SELECT','INSERT','UPDATE','DELETE'].includes(qt.type) ? qt.type : 'other'}">
+                                ${qt.type}
+                                <span class="badge bg-white text-dark">${qt.count}</span>
+                            </div>
+                        `).join('');
+                    }
+                }
+                
+                // Update timestamp to show last refresh
+                const refreshBadge = document.querySelector('.last-refresh');
+                if (refreshBadge) {
+                    refreshBadge.textContent = new Date().toLocaleTimeString();
+                } else {
+                    // Add refresh indicator if it doesn't exist
+                    const statCard = document.querySelector('.stat-card');
+                    if (statCard) {
+                        const refreshIndicator = document.createElement('div');
+                        refreshIndicator.className = 'stat-subtitle mt-2';
+                        refreshIndicator.innerHTML = `Last updated: <span class="last-refresh">${new Date().toLocaleTimeString()}</span>`;
+                        statCard.appendChild(refreshIndicator);
+                    }
+                }
+                
+                // Update progress bar percentages
+                if (stats.total_logs > 0) {
+                    const normalPercentage = (stats.normal_queries / stats.total_logs * 100).toFixed(1);
+                    const slowPercentage = (stats.slow_queries / stats.total_logs * 100).toFixed(1);
+                    
+                    const progressBars = document.querySelectorAll('.progress-bar');
+                    if (progressBars.length >= 2) {
+                        progressBars[0].style.width = `${normalPercentage}%`;
+                        progressBars[0].textContent = `Optimal (${normalPercentage}%)`;
+                        progressBars[0].setAttribute('aria-valuenow', stats.normal_queries);
+                        
+                        progressBars[1].style.width = `${slowPercentage}%`;
+                        progressBars[1].textContent = `Slow (${slowPercentage}%)`;
+                        progressBars[1].setAttribute('aria-valuenow', stats.slow_queries);
+                    }
+                }
+            }
+            
+            // Add auto-refresh toggle
+            function addRefreshToggle() {
+                const headerDiv = document.querySelector('.d-flex.justify-content-between.align-items-center.mb-4');
+                if (!headerDiv) return;
+                
+                const toggleBtn = document.createElement('div');
+                toggleBtn.className = 'form-check form-switch me-3';
+                toggleBtn.innerHTML = `
+                    <input class="form-check-input" type="checkbox" id="autoRefreshToggle" checked>
+                    <label class="form-check-label" for="autoRefreshToggle">Auto Refresh</label>
+                `;
+                
+                headerDiv.querySelector('.d-flex').prepend(toggleBtn);
+                
+                // Toggle auto-refresh
+                document.getElementById('autoRefreshToggle').addEventListener('change', function() {
+                    autoRefresh = this.checked;
+                });
+            }
+            
+            // Initialize
+            addRefreshToggle();
+            
+            // Initial fetch after page loads
+            setTimeout(fetchMySQLLogs, 1000);
+            
+            // Set up periodic updates
+            setInterval(fetchMySQLLogs, updateInterval);
+            
+            // Update when the refresh button is clicked manually
+            const refreshBtn = document.getElementById('refresh-btn');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', function() {
+                    this.querySelector('i').classList.add('fa-spin');
+                    fetchMySQLLogs();
+                    setTimeout(() => {
+                        this.querySelector('i').classList.remove('fa-spin');
+                    }, 1000);
+                });
+            }
+        }
+
+        // Start real-time updates
+        document.addEventListener('DOMContentLoaded', function() {
+            setupRealTimeUpdates();
+        });
     </script>
 </body>
 </html>

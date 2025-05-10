@@ -1,0 +1,1194 @@
+{% load custom_filters %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Predictive Maintenance - Log Detection Platform</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #3f51b5;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --warning-color: #ffc107;
+            --info-color: #17a2b8;
+            --text-primary: #212529;
+            --text-secondary: #6c757d;
+            --card-bg: #ffffff;
+            --border-color: #dee2e6;
+            --sidebar-width: 250px;
+            --sidebar-collapsed-width: 70px;
+            --header-height: 60px;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f7fa;
+            margin: 0;
+            padding: 0;
+            color: var(--text-primary);
+        }
+        
+        .dashboard-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        /* Header styles */
+        .main-header {
+            background-color: #fff;
+            border-bottom: 1px solid var(--border-color);
+            height: var(--header-height);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 1.5rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        
+        .logo-section {
+            display: flex;
+            align-items: center;
+        }
+        
+        .logo-section h1 {
+            font-size: 1.25rem;
+            margin: 0 0 0 1rem;
+            font-weight: 500;
+        }
+        
+        .sidebar-toggle {
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 1.25rem;
+            padding: 0.25rem;
+        }
+        
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .username {
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+        
+        .logout-btn {
+            color: var(--danger-color);
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        
+        /* Main content container */
+        .main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        /* Sidebar styles */
+        .sidebar {
+            width: var(--sidebar-width);
+            background-color: #fff;
+            border-right: 1px solid var(--border-color);
+            transition: width 0.3s ease;
+            overflow-y: auto;
+            box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
+        }
+        
+        .sidebar.collapsed {
+            width: var(--sidebar-collapsed-width);
+        }
+        
+        .sidebar-nav ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .sidebar-nav li {
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        }
+        
+        .sidebar-nav li a {
+            display: flex;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+        
+        .sidebar-nav li a i {
+            margin-right: 1rem;
+            min-width: 20px;
+            text-align: center;
+        }
+        
+        .sidebar-nav li a:hover {
+            background-color: rgba(0, 0, 0, 0.03);
+            color: var(--primary-color);
+        }
+        
+        .sidebar-nav li.active a {
+            background-color: rgba(63, 81, 181, 0.1);
+            color: var(--primary-color);
+            font-weight: 500;
+            border-left: 4px solid var(--primary-color);
+        }
+        
+        .sidebar.collapsed .sidebar-nav li a span {
+            display: none;
+        }
+        
+        /* Content area */
+        .content {
+            flex: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+        
+        /* Stats cards */
+        .stats-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .stat-card {
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .stat-card .stat-title {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .stat-card .stat-value {
+            font-size: 1.75rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-card .stat-subtitle {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+        
+        .home-nav-item {
+            margin-top: auto;
+            border-top: 1px solid var(--border-color);
+        }
+        
+        .sidebar-nav {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        
+        .sidebar-nav ul {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+        }
+
+        /* Sidebar Toggle Functionality CSS */
+        .sidebar.hidden {
+            display: none !important;
+        }
+
+        .content.full-width {
+            margin-left: 0 !important;
+            width: 100% !important;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                left: -250px;
+                top: var(--header-height);
+                height: calc(100vh - var(--header-height));
+                z-index: 99;
+                transition: left 0.3s ease;
+            }
+            
+            .sidebar.open {
+                left: 0;
+                box-shadow: 2px 0 10px rgba(0, 0, 0, 0.2);
+            }
+            
+            .sidebar-backdrop {
+                position: fixed;
+                top: var(--header-height);
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background-color: rgba(0,0,0,0.5);
+                z-index: 98;
+            }
+        }
+
+        /* Prediction card styles */
+        .prediction-loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+
+        .prediction-card {
+            position: relative;
+            margin-bottom: 1.5rem;
+        }
+
+        .prediction-time {
+            font-size: 0.8rem;
+            margin-top: 0.25rem;
+        }
+
+        .prediction-status {
+            text-transform: capitalize;
+        }
+        
+        .resource-card {
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+        }
+        
+        .resource-card .card-header {
+            padding: 0.75rem 1rem;
+            font-weight: 600;
+        }
+        
+        .resource-forecast {
+            padding: 1rem;
+            background-color: rgba(0, 0, 0, 0.02);
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+        }
+        
+        .forecast-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+        }
+        
+        .timeline-container {
+            position: relative;
+            height: 60px;
+            margin: 1.5rem 0;
+        }
+        
+        .timeline {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 50%;
+            height: 3px;
+            background-color: #e9ecef;
+            transform: translateY(-50%);
+        }
+        
+        .timeline-marker {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            background-color: var(--primary-color);
+        }
+        
+        .timeline-label {
+            position: absolute;
+            font-size: 0.75rem;
+            top: -20px;
+            transform: translateX(-50%);
+            color: var(--text-secondary);
+        }
+        
+        .timeline-now {
+            left: 0%;
+        }
+        
+        .timeline-critical {
+            background-color: var(--danger-color);
+        }
+        
+        .timeline-label-now {
+            left: 0%;
+        }
+        
+        .settings-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            background-color: white;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .settings-bar .form-group {
+            margin-bottom: 0;
+            margin-right: 1rem;
+        }
+        
+        .settings-bar .form-label {
+            margin-bottom: 0.25rem;
+            font-size: 0.875rem;
+        }
+        
+        .settings-bar select {
+            min-width: 120px;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <header class="main-header">
+            <div class="logo-section">
+                <button id="sidebar-toggle" class="sidebar-toggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <h1>Log Detection Platform</h1>
+            </div>
+            <div class="header-actions">
+                <span class="username">{{ request.user.username }}</span>
+                <a href="{% url 'logout' %}" class="logout-btn">Logout</a>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <!-- Sidebar Navigation -->
+            <aside class="sidebar">
+                <nav class="sidebar-nav">
+                    <ul>
+                        <li><a href="{% url 'dashboard' %}"><i class="fas fa-chart-line"></i> Dashboard</a></li>
+                        <li><a href="{% url 'events' %}"><i class="fas fa-calendar-alt"></i> Events</a></li>
+                        <li><a href="{% url 'apache_logs' %}"><i class="fas fa-server"></i> Apache Logs</a></li>
+                        <li><a href="{% url 'mysql_logs' %}"><i class="fas fa-database"></i> MySQL Logs</a></li>
+                        <li><a href="{% url 'mitre_details' %}"><i class="fas fa-shield-alt"></i> MITRE ATT&CK</a></li>
+                        <li><a href="{% url 'reports' %}"><i class="fas fa-file-alt"></i> Reports</a></li>
+                        <li class="active"><a href="{% url 'predictive_maintenance' %}"><i class="fas fa-chart-line"></i> Predictive Maintenance</a></li>
+                        <li><a href="{% url 'ai_analytics:reports_dashboard' %}"><i class="fas fa-robot"></i> <span>AI Reports</span></a></li>
+                        <li><a href="{% url 'settings' %}"><i class="fas fa-cog"></i> Settings</a></li>
+                        <li class="home-nav-item"><a href="/"><i class="fas fa-home"></i> <span>Home</span></a></li>
+                    </ul>
+                </nav>
+            </aside>
+
+            <!-- Content Area -->
+            <main class="content">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2><i class="fas fa-chart-line me-2"></i> Predictive Maintenance</h2>
+                    <div class="d-flex">
+                        <button id="refresh-btn" class="btn btn-sm btn-primary ms-2">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+
+                <div class="alert alert-info" role="alert">
+                    <i class="fas fa-info-circle me-2"></i> Predictive maintenance uses AI to analyze resource usage patterns and predict potential system failures before they happen.
+                </div>
+
+                <!-- Settings Bar -->
+                <div class="settings-bar">
+                    <div class="d-flex">
+                        <div class="form-group me-3">
+                            <label for="prediction-time-window" class="form-label">Prediction Window</label>
+                            <select id="prediction-time-window" class="form-select form-select-sm">
+                                <option value="24">24 hours</option>
+                                <option value="48">48 hours</option>
+                                <option value="72">72 hours</option>
+                                <option value="168">7 days</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="resource-type" class="form-label">Resource Filter</label>
+                            <select id="resource-type" class="form-select form-select-sm">
+                                <option value="all">All Resources</option>
+                                <option value="cpu">CPU Only</option>
+                                <option value="memory">Memory Only</option>
+                                <option value="disk">Disk Only</option>
+                                <option value="log_volume">Log Volume Only</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <span class="text-muted small me-2">Last update: <span id="last-update-time">{% now "H:i:s" %}</span></span>
+                        <button id="prediction-refresh-btn" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-sync-alt"></i> Update Now
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Overview Statistics Cards -->
+                <div class="row mb-4">
+                    <div class="col-md-3 mb-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-title text-muted mb-0">CPU Usage</h6>
+                                <div class="d-flex align-items-center mt-2">
+                                    <h3 class="mb-0 me-2" id="current-cpu">{{ current_cpu|default:"52.8" }}%</h3>
+                                    <div id="cpu-trend" class="text-success small">
+                                        <i class="fas fa-arrow-down"></i> Stable
+                                    </div>
+                                </div>
+                                <div class="progress mt-2">
+                                    <div class="progress-bar" role="progressbar" style="width: 52.8%;" aria-valuenow="52.8" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-title text-muted mb-0">Memory Usage</h6>
+                                <div class="d-flex align-items-center mt-2">
+                                    <h3 class="mb-0 me-2" id="current-memory">{{ current_memory|default:"67.4" }}%</h3>
+                                    <div id="memory-trend" class="text-warning small">
+                                        <i class="fas fa-arrow-up"></i> Increasing
+                                    </div>
+                                </div>
+                                <div class="progress mt-2">
+                                    <div class="progress-bar" role="progressbar" style="width: 67.4%;" aria-valuenow="67.4" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-title text-muted mb-0">Disk Usage</h6>
+                                <div class="d-flex align-items-center mt-2">
+                                    <h3 class="mb-0 me-2" id="current-disk">{{ current_disk|default:"78.1" }}%</h3>
+                                    <div id="disk-trend" class="text-warning small">
+                                        <i class="fas fa-arrow-up"></i> Increasing
+                                    </div>
+                                </div>
+                                <div class="progress mt-2">
+                                    <div class="progress-bar" role="progressbar" style="width: 78.1%;" aria-valuenow="78.1" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-title text-muted mb-0">Log Volume</h6>
+                                <div class="d-flex align-items-center mt-2">
+                                    <h3 class="mb-0 me-2" id="current-log-volume">{{ current_log_volume|default:"45.5" }}%</h3>
+                                    <div id="log-volume-trend" class="text-success small">
+                                        <i class="fas fa-arrow-down"></i> Stable
+                                    </div>
+                                </div>
+                                <div class="progress mt-2">
+                                    <div class="progress-bar" role="progressbar" style="width: 45.5%;" aria-valuenow="45.5" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Predictive Maintenance Section -->
+                <div class="row mb-4">
+                    <div class="col-lg-6 mb-4">
+                        <div class="card resource-card">
+                            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">Memory Usage Prediction</h5>
+                                <span class="badge bg-warning">Warning</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div style="width: 100px; height: 100px;" class="me-3">
+                                        <canvas id="memoryGauge" width="100" height="100"></canvas>
+                                    </div>
+                                    <div>
+                                        <h3 class="mb-1">67.4% Used</h3>
+                                        <p class="mb-0 text-muted">Current usage of 10.8 GB / 16 GB</p>
+                                        <p class="mb-0 text-warning mt-2">
+                                            <i class="fas fa-exclamation-triangle me-1"></i> Predicted to reach 90% threshold in 3 days
+                                        </p>
+                                    </div>
+                                </div>
+                                
+                                <div class="timeline-container">
+                                    <div class="timeline"></div>
+                                    <div class="timeline-marker timeline-now" style="left: 0%;">
+                                        <div class="timeline-label timeline-label-now">Now</div>
+                                    </div>
+                                    <div class="timeline-marker" style="left: 25%;">
+                                        <div class="timeline-label">Day 1</div>
+                                    </div>
+                                    <div class="timeline-marker" style="left: 50%;">
+                                        <div class="timeline-label">Day 2</div>
+                                    </div>
+                                    <div class="timeline-marker timeline-critical" style="left: 75%;">
+                                        <div class="timeline-label">Day 3</div>
+                                    </div>
+                                    <div class="timeline-marker" style="left: 100%;">
+                                        <div class="timeline-label">Day 4</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="resource-forecast">
+                                    <div class="forecast-header">
+                                        <h6 class="mb-0">Analysis</h6>
+                                        <span class="badge bg-success">89% Confidence</span>
+                                    </div>
+                                    <p class="mb-2">Memory usage is growing at approximately 7.5% per day based on trend analysis of the past week.</p>
+                                    <h6>Recommendation:</h6>
+                                    <ul class="mb-0">
+                                        <li>Check for memory leaks in application processes</li>
+                                        <li>Consider increasing available memory before Day 3</li>
+                                        <li>Optimize Apache and MySQL memory configurations</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-lg-6 mb-4">
+                        <div class="card resource-card">
+                            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">Disk Usage Prediction</h5>
+                                <span class="badge bg-warning">Warning</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div style="width: 100px; height: 100px;" class="me-3">
+                                        <canvas id="diskGauge" width="100" height="100"></canvas>
+                                    </div>
+                                    <div>
+                                        <h3 class="mb-1">78.1% Used</h3>
+                                        <p class="mb-0 text-muted">Current usage of 156.2 GB / 200 GB</p>
+                                        <p class="mb-0 text-warning mt-2">
+                                            <i class="fas fa-exclamation-triangle me-1"></i> Predicted to reach 95% threshold in 4 days
+                                        </p>
+                                    </div>
+                                </div>
+                                
+                                <div class="timeline-container">
+                                    <div class="timeline"></div>
+                                    <div class="timeline-marker timeline-now" style="left: 0%;">
+                                        <div class="timeline-label timeline-label-now">Now</div>
+                                    </div>
+                                    <div class="timeline-marker" style="left: 25%;">
+                                        <div class="timeline-label">Day 1</div>
+                                    </div>
+                                    <div class="timeline-marker" style="left: 50%;">
+                                        <div class="timeline-label">Day 2</div>
+                                    </div>
+                                    <div class="timeline-marker" style="left: 75%;">
+                                        <div class="timeline-label">Day 3</div>
+                                    </div>
+                                    <div class="timeline-marker timeline-critical" style="left: 100%;">
+                                        <div class="timeline-label">Day 4</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="resource-forecast">
+                                    <div class="forecast-header">
+                                        <h6 class="mb-0">Analysis</h6>
+                                        <span class="badge bg-success">92% Confidence</span>
+                                    </div>
+                                    <p class="mb-2">Disk space is being consumed at a rate of 4.2% per day, primarily due to growing log files and database storage.</p>
+                                    <h6>Recommendation:</h6>
+                                    <ul class="mb-0">
+                                        <li>Implement log rotation for Apache and MySQL logs</li>
+                                        <li>Clean temporary files from /tmp directory</li>
+                                        <li>Archive old logs to free up space</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-lg-6 mb-4">
+                        <div class="card resource-card">
+                            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">CPU Usage Prediction</h5>
+                                <span class="badge bg-success">Normal</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div style="width: 100px; height: 100px;" class="me-3">
+                                        <canvas id="cpuGauge" width="100" height="100"></canvas>
+                                    </div>
+                                    <div>
+                                        <h3 class="mb-1">52.8% Used</h3>
+                                        <p class="mb-0 text-muted">CPU load is stable</p>
+                                        <p class="mb-0 text-success mt-2">
+                                            <i class="fas fa-check-circle me-1"></i> No exhaustion predicted within 7 days
+                                        </p>
+                                    </div>
+                                </div>
+                                
+                                <div class="resource-forecast">
+                                    <div class="forecast-header">
+                                        <h6 class="mb-0">Analysis</h6>
+                                        <span class="badge bg-success">95% Confidence</span>
+                                    </div>
+                                    <p class="mb-2">CPU usage has remained stable with a slight downward trend (-0.5% per day). Daily peak usage occurs between 2PM-4PM during high traffic periods.</p>
+                                    <h6>Current Performance:</h6>
+                                    <ul class="mb-0">
+                                        <li>Average load: 52.8%</li>
+                                        <li>Peak load: 68.3%</li>
+                                        <li>Trend: Stable with minor fluctuations</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-lg-6 mb-4">
+                        <div class="card resource-card">
+                            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">Log Volume Prediction</h5>
+                                <span class="badge bg-success">Normal</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div style="width: 100px; height: 100px;" class="me-3">
+                                        <canvas id="logVolumeGauge" width="100" height="100"></canvas>
+                                    </div>
+                                    <div>
+                                        <h3 class="mb-1">45.5% Used</h3>
+                                        <p class="mb-0 text-muted">9.1 GB of allocated log space</p>
+                                        <p class="mb-0 text-success mt-2">
+                                            <i class="fas fa-check-circle me-1"></i> No exhaustion predicted within 7 days
+                                        </p>
+                                    </div>
+                                </div>
+                                
+                                <div class="resource-forecast">
+                                    <div class="forecast-header">
+                                        <h6 class="mb-0">Analysis</h6>
+                                        <span class="badge bg-success">87% Confidence</span>
+                                    </div>
+                                    <p class="mb-2">Log volume is growing steadily at 2.1% per day. At current rates, log partition will reach 90% capacity in approximately 21 days.</p>
+                                    <h6>Log Growth By Type:</h6>
+                                    <ul class="mb-0">
+                                        <li>Apache Access Logs: 1.2 GB/week</li>
+                                        <li>MySQL Logs: 0.8 GB/week</li>
+                                        <li>System Logs: 0.3 GB/week</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- System Health Section -->
+                <div class="card mb-4">
+                    <div class="card-header bg-white">
+                        <h5 class="mb-0">System Health Summary</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <div class="d-flex align-items-center">
+                                <div class="me-3">
+                                    <span class="d-inline-block p-3 rounded-circle bg-warning"></span>
+                                </div>
+                                <div>
+                                    <h5 class="mb-0">Warning: Action Recommended</h5>
+                                    <p class="mb-0 text-muted">Some resources may require attention within the next 4 days</p>
+                                </div>
+                            </div>
+                            <button class="btn btn-outline-primary" id="export-report">
+                                <i class="fas fa-file-export me-2"></i> Export Report
+                            </button>
+                        </div>
+                        
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Resource</th>
+                                        <th>Current Value</th>
+                                        <th>Threshold</th>
+                                        <th>Trend</th>
+                                        <th>Prediction</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>Memory Usage</td>
+                                        <td>67.4%</td>
+                                        <td>90%</td>
+                                        <td><span class="text-warning"><i class="fas fa-arrow-up"></i> +7.5%/day</span></td>
+                                        <td>Will reach threshold in 3 days</td>
+                                        <td><span class="badge bg-warning">Warning</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Disk Usage</td>
+                                        <td>78.1%</td>
+                                        <td>95%</td>
+                                        <td><span class="text-warning"><i class="fas fa-arrow-up"></i> +4.2%/day</span></td>
+                                        <td>Will reach threshold in 4 days</td>
+                                        <td><span class="badge bg-warning">Warning</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td>CPU Usage</td>
+                                        <td>52.8%</td>
+                                        <td>85%</td>
+                                        <td><span class="text-success"><i class="fas fa-arrow-down"></i> -0.5%/day</span></td>
+                                        <td>No exhaustion predicted</td>
+                                        <td><span class="badge bg-success">Normal</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Log Volume</td>
+                                        <td>45.5%</td>
+                                        <td>90%</td>
+                                        <td><span class="text-warning"><i class="fas fa-arrow-up"></i> +2.1%/day</span></td>
+                                        <td>Will reach threshold in 21 days</td>
+                                        <td><span class="badge bg-success">Normal</span></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Automated Tasks Section -->
+                <div class="card mb-4">
+                    <div class="card-header bg-white">
+                        <h5 class="mb-0">Recommended Automated Tasks</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Task</th>
+                                        <th>Description</th>
+                                        <th>Impact</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>Log Rotation</td>
+                                        <td>Configure Apache and MySQL log rotation to compress and archive older logs</td>
+                                        <td>Free up to 2GB of disk space</td>
+                                        <td><button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#taskModal">Configure</button></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Cache Cleanup</td>
+                                        <td>Clear temporary files and browser cache data</td>
+                                        <td>Free up to 1.5GB of disk space</td>
+                                        <td><button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#taskModal">Run Now</button></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Memory Optimization</td>
+                                        <td>Optimize MySQL memory usage configurations</td>
+                                        <td>Reduce memory usage by ~15%</td>
+                                        <td><button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#taskModal">Configure</button></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Task Modal -->
+    <div class="modal fade" id="taskModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Configure Automated Task</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>This feature will be implemented in a future update.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS & jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <script>
+        // Replace the fetchResourcePredictions function with this implementation
+        function fetchResourcePredictions() {
+            // Show loading indicators
+            document.getElementById('prediction-refresh-btn').querySelector('i').classList.add('fa-spin');
+            
+            // Fetch real-time system metrics from the API
+            fetch('/api/system-metrics/?_=' + new Date().getTime(), {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Update CPU metrics
+                updateResourceMetrics('cpu', data.cpu);
+                
+                // Update memory metrics
+                updateResourceMetrics('memory', data.memory);
+                
+                // Update disk metrics
+                updateResourceMetrics('disk', data.disk);
+                
+                // Update log volume metrics
+                updateResourceMetrics('log-volume', data.log_volume);
+                
+                // Update gauge charts
+                updateGaugeCharts(data);
+                
+                // Update last refresh time
+                document.getElementById('last-update-time').textContent = new Date().toLocaleTimeString();
+                
+                // Stop loading indicator
+                document.getElementById('prediction-refresh-btn').querySelector('i').classList.remove('fa-spin');
+            })
+            .catch(error => {
+                console.error('Error fetching system metrics:', error);
+                document.getElementById('prediction-refresh-btn').querySelector('i').classList.remove('fa-spin');
+                
+                // Show error notification
+                const alertHTML = `
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        <i class="fas fa-exclamation-triangle me-2"></i> Failed to fetch system metrics: ${error.message}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                `;
+                document.querySelector('.content').insertAdjacentHTML('afterbegin', alertHTML);
+            });
+        }
+
+        // Function to update resource metrics in UI
+        function updateResourceMetrics(resourceType, data) {
+            // Update the displayed value
+            const valueElement = document.getElementById(`current-${resourceType}`);
+            if (valueElement && data.usage !== undefined) {
+                valueElement.textContent = `${data.usage.toFixed(1)}%`;
+            }
+            
+            // Update trend indicator
+            const trendElement = document.getElementById(`${resourceType}-trend`);
+            if (trendElement && data.trend) {
+                let trendHTML = '';
+                let trendClass = 'text-success';
+                
+                if (data.trend === 'increasing') {
+                    trendHTML = '<i class="fas fa-arrow-up"></i> Increasing';
+                    trendClass = 'text-warning';
+                } else if (data.trend === 'decreasing') {
+                    trendHTML = '<i class="fas fa-arrow-down"></i> Decreasing';
+                    trendClass = 'text-success';
+                } else {
+                    trendHTML = '<i class="fas fa-arrow-right"></i> Stable';
+                    trendClass = 'text-success';
+                }
+                
+                trendElement.className = `${trendClass} small`;
+                trendElement.innerHTML = trendHTML;
+            }
+            
+            // Update progress bar
+            const progressBar = document.querySelector(`.card-body:has(#current-${resourceType}) .progress-bar`);
+            if (progressBar && data.usage !== undefined) {
+                progressBar.style.width = `${data.usage}%`;
+                progressBar.setAttribute('aria-valuenow', data.usage);
+                
+                // Update color based on usage
+                if (data.usage > 85) {
+                    progressBar.className = 'progress-bar bg-danger';
+                } else if (data.usage > 70) {
+                    progressBar.className = 'progress-bar bg-warning';
+                } else {
+                    progressBar.className = 'progress-bar bg-success';
+                }
+            }
+            
+            // Update additional resource-specific details
+            if (resourceType === 'memory' && data.used !== undefined && data.total !== undefined) {
+                const memoryCard = document.querySelector('.card-body:has(#current-memory)');
+                const memoryDetails = memoryCard.querySelector('p.mb-0.text-muted');
+                if (memoryDetails) {
+                    memoryDetails.textContent = `Current usage of ${data.used} GB / ${data.total} GB`;
+                }
+            } else if (resourceType === 'disk' && data.used !== undefined && data.total !== undefined) {
+                const diskCard = document.querySelector('.card-body:has(#current-disk)');
+                const diskDetails = diskCard.querySelector('p.mb-0.text-muted');
+                if (diskDetails) {
+                    diskDetails.textContent = `Current usage of ${data.used} GB / ${data.total} GB`;
+                }
+            }
+        }
+
+        // Function to update gauge charts with real data
+        function updateGaugeCharts(data) {
+            // Update CPU gauge
+            if (window.cpuGauge && data.cpu) {
+                window.cpuGauge.data.datasets[0].data = [data.cpu.usage, 100 - data.cpu.usage];
+                window.cpuGauge.update();
+            }
+            
+            // Update Memory gauge
+            if (window.memoryGauge && data.memory) {
+                window.memoryGauge.data.datasets[0].data = [data.memory.usage, 100 - data.memory.usage];
+                window.memoryGauge.update();
+            }
+            
+            // Update Disk gauge
+            if (window.diskGauge && data.disk) {
+                window.diskGauge.data.datasets[0].data = [data.disk.usage, 100 - data.disk.usage];
+                window.diskGauge.update();
+            }
+            
+            // Update Log Volume gauge
+            if (window.logVolumeGauge && data.log_volume) {
+                window.logVolumeGauge.data.datasets[0].data = [data.log_volume.usage, 100 - data.log_volume.usage];
+                window.logVolumeGauge.update();
+            }
+            
+            // Update chart colors based on usage values
+            updateGaugeColors(window.cpuGauge, data.cpu.usage);
+            updateGaugeColors(window.memoryGauge, data.memory.usage);
+            updateGaugeColors(window.diskGauge, data.disk.usage);
+            updateGaugeColors(window.logVolumeGauge, data.log_volume.usage);
+        }
+
+        // Function to update gauge chart colors based on usage
+        function updateGaugeColors(chart, usage) {
+            if (!chart) return;
+            
+            let color = '#28a745'; // Green for normal
+            
+            if (usage > 85) {
+                color = '#dc3545'; // Red for critical
+            } else if (usage > 70) {
+                color = '#ffc107'; // Yellow for warning
+            }
+            
+            chart.data.datasets[0].backgroundColor[0] = color;
+            chart.update();
+        }
+
+        // Function to initialize gauge charts with real-time data
+        function initializeGauges() {
+            // CPU Gauge
+            window.cpuGauge = new Chart(document.getElementById('cpuGauge'), {
+                type: 'doughnut',
+                data: {
+                    datasets: [{
+                        data: [52.8, 47.2],
+                        backgroundColor: ['#28a745', '#f2f2f2'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    cutout: '70%',
+                    plugins: {
+                        tooltip: {
+                            enabled: false
+                        }
+                    }
+                }
+            });
+            
+            // Memory Gauge
+            window.memoryGauge = new Chart(document.getElementById('memoryGauge'), {
+                type: 'doughnut',
+                data: {
+                    datasets: [{
+                        data: [67.4, 32.6],
+                        backgroundColor: ['#ffc107', '#f2f2f2'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    cutout: '70%',
+                    plugins: {
+                        tooltip: {
+                            enabled: false
+                        }
+                    }
+                }
+            });
+            
+            // Disk Gauge
+            window.diskGauge = new Chart(document.getElementById('diskGauge'), {
+                type: 'doughnut',
+                data: {
+                    datasets: [{
+                        data: [78.1, 21.9],
+                        backgroundColor: ['#ffc107', '#f2f2f2'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    cutout: '70%',
+                    plugins: {
+                        tooltip: {
+                            enabled: false
+                        }
+                    }
+                }
+            });
+            
+            // Log Volume Gauge
+            window.logVolumeGauge = new Chart(document.getElementById('logVolumeGauge'), {
+                type: 'doughnut',
+                data: {
+                    datasets: [{
+                        data: [45.5, 54.5],
+                        backgroundColor: ['#28a745', '#f2f2f2'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    cutout: '70%',
+                    plugins: {
+                        tooltip: {
+                            enabled: false
+                        }
+                    }
+                }
+            });
+            
+            // Fetch real data immediately after initializing charts
+            fetchResourcePredictions();
+        }
+
+        // Update the document ready function
+        document.addEventListener('DOMContentLoaded', function() {
+            // Sidebar toggle functionality
+            const sidebarToggle = document.getElementById('sidebar-toggle');
+            const sidebar = document.querySelector('.sidebar');
+            
+            if (sidebarToggle) {
+                sidebarToggle.addEventListener('click', function() {
+                    sidebar.classList.toggle('collapsed');
+                    
+                    // Handle mobile view
+                    if (window.innerWidth <= 768) {
+                        sidebar.classList.toggle('open');
+                    }
+                });
+            }
+            
+            // Refresh button functionality
+            const refreshBtn = document.getElementById('refresh-btn');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', function() {
+                    this.querySelector('i').classList.add('fa-spin');
+                    setTimeout(() => {
+                        this.querySelector('i').classList.remove('fa-spin');
+                        fetchResourcePredictions();
+                    }, 500);
+                });
+            }
+            
+            // Prediction refresh button
+            const predictionRefreshBtn = document.getElementById('prediction-refresh-btn');
+            if (predictionRefreshBtn) {
+                predictionRefreshBtn.addEventListener('click', function() {
+                    this.querySelector('i').classList.add('fa-spin');
+                    setTimeout(() => {
+                        this.querySelector('i').classList.remove('fa-spin');
+                        fetchResourcePredictions();
+                        document.getElementById('last-update-time').textContent = new Date().toLocaleTimeString();
+                    }, 1000);
+                });
+            }
+            
+            // Initialize gauge charts
+            initializeGauges();
+            
+            // Export report button
+            const exportBtn = document.getElementById('export-report');
+            if (exportBtn) {
+                exportBtn.addEventListener('click', function() {
+                    alert('Report export functionality will be implemented in a future update.');
+                });
+            }
+            
+            // Set up resource filter
+            const resourceFilter = document.getElementById('resource-type');
+            if (resourceFilter) {
+                resourceFilter.addEventListener('change', function() {
+                    const resourceCards = document.querySelectorAll('.resource-card');
+                    const selectedValue = this.value;
+                    
+                    if (selectedValue === 'all') {
+                        resourceCards.forEach(card => card.style.display = 'block');
+                    } else {
+                        resourceCards.forEach(card => {
+                            const cardTitle = card.querySelector('.card-header h5').textContent.toLowerCase();
+                            
+                            if (cardTitle.includes(selectedValue)) {
+                                card.style.display = 'block';
+                            } else {
+                                card.style.display = 'none';
+                            }
+                        });
+                    }
+                });
+            }
+            
+            // Set up prediction window change
+            const timeWindowSelect = document.getElementById('prediction-time-window');
+            if (timeWindowSelect) {
+                timeWindowSelect.addEventListener('change', function() {
+                    fetchResourcePredictions();
+                });
+            }
+            
+            // Start with initial fetch
+            fetchResourcePredictions();
+            
+            // Set up faster periodic refresh (every 3 seconds instead of 5 minutes)
+            setInterval(fetchResourcePredictions, 3000);
+        });
+    </script>
+</body>
+</html>

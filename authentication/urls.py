@@ -5,6 +5,11 @@ from . import views_reports
 from .reset_views import CustomPasswordResetConfirmView  # Import the custom view
 from . import views_settings
 from . import views_admin_contact
+from . import views_apache_logs
+from .views_apache_logs import apache_logs_view, apache_logs_api
+from .views_mysql_logs import mysql_logs_view, mysql_logs_api
+from . import views_explore_agent
+from .views_predictive import predictive_maintenance_view, resource_predictions_api, system_metrics_api
 
 urlpatterns = [
     # ... existing URL patterns ...
@@ -73,4 +78,22 @@ urlpatterns = [
 
     # Contact form submission URL
     path('submit-contact/', views.submit_contact, name='submit_contact'),
+    
+    # Apache logs URLs
+    path('apache-logs/', apache_logs_view, name='apache_logs'),
+    path('api/apache-logs/', apache_logs_api, name='apache_logs_api'),
+
+    # MySQL logs URLs
+    path('mysql-logs/', mysql_logs_view, name='mysql_logs'),
+    path('api/mysql-logs/', mysql_logs_api, name='mysql_logs_api'),
+
+    # Agent prediction API
+    path('api/agent-prediction/<int:agent_id>/', views_explore_agent.agent_prediction_api, name='agent_prediction_api'),
+    path('api/agent-prediction/', views_explore_agent.agent_prediction_api, name='agent_prediction_api_batch'),
+
+    # Predictive maintenance URLs
+    path('predictive-maintenance/', predictive_maintenance_view, name='predictive_maintenance'),
+    path('api/resource-predictions/', resource_predictions_api, name='resource_predictions_api'),
+    path('api/system-metrics/', system_metrics_api, name='system_metrics_api'),
+    
 ]

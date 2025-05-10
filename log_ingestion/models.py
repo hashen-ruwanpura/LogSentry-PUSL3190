@@ -103,3 +103,78 @@ class ParsedLog(models.Model):
         
         # Default to empty string if not found
         return ''
+
+class LogAgent(models.Model):
+    """Model for log collection agents installed on remote servers"""
+    AGENT_TYPE_CHOICES = [
+        ('system', 'System Agent'),
+        ('apache', 'Apache Agent'),
+        ('mysql', 'MySQL Agent'),
+        ('application', 'Application Agent'),
+        ('security', 'Security Agent'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('inactive', 'Inactive'),
+        ('error', 'Error'),
+        ('pending', 'Pending'),
+    ]
+    
+    name = models.CharField(max_length=100)
+    agent_type = models.CharField(max_length=20, choices=AGENT_TYPE_CHOICES)
+    hostname = models.CharField(max_length=255)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    version = models.CharField(max_length=20, null=True, blank=True)
+    os_info = models.CharField(max_length=255, null=True, blank=True)
+    last_check_in = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    # Configuration
+    collection_interval = models.IntegerField(default=30, help_text="Log collection interval in seconds")
+    heartbeat_interval = models.IntegerField(default=60, help_text="Heartbeat interval in seconds")
+    log_paths = models.TextField(null=True, blank=True, help_text="Paths to monitor for logs")
+    monitored_services = models.CharField(max_length=255, null=True, blank=True)
+    encryption_enabled = models.BooleanField(default=True)
+    compression_enabled = models.BooleanField(default=True)
+    
+    # Stats fields
+    logs_collected = models.IntegerField(default=0)
+    error_count = models.IntegerField(default=0)
+    cpu_usage = models.FloatField(null=True, blank=True)
+    memory_usage = models.FloatField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-last_check_in']
+        indexes = [
+            models.Index(fields=['status']),
+            models.Index(fields=['agent_type']),
+            models.Index(fields=['last_check_in']),
+        ]
+    
+    def __str__(self):
+        return f"{self.name} ({self.agent_type})"
+
+class AgentResourceMetric(models.Model):
+    """Resource utilization metrics collected from agents"""
+    agent = models.ForeignKey(LogAgent, on_delete=models.CASCADE, related_name='resource_metrics')
+    timestamp = models.DateTimeField(default=timezone.now)
+    cpu_usage = models.FloatField(help_text="CPU usage percentage (0-100)")
+    memory_usage = models.FloatField(help_text="Memory usage percentage (0-100)")
+    disk_usage = models.FloatField(help_text="Disk usage percentage (0-100)")
+    log_volume = models.FloatField(help_text="Log volume (percentage of allocated space)")
+    iops = models.FloatField(null=True, blank=True, help_text="IO operations per second")
+    network_in = models.FloatField(null=True, blank=True, help_text="Network inbound KB/s")
+    network_out = models.FloatField(null=True, blank=True, help_text="Network outbound KB/s")
+    
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['agent', 'timestamp']),
+            models.Index(fields=['timestamp']),
+        ]
+    
+    def __str__(self):
+        return f"{self.agent.name} - {self.timestamp.strftime('%Y-%m-%d %H:%M')}"

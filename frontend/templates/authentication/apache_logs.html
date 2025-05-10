@@ -788,104 +788,171 @@
                 });
             }
             
-            // Refresh button functionality
+            // Set up real-time updates for Apache logs
+            setupRealTimeUpdates();
+        });
+
+        // Function to handle real-time updates
+        function setupRealTimeUpdates() {
+            const updateInterval = 30000; // Update every 30 seconds
+            let isUpdating = false;
+            let autoRefresh = true;
+            
+            // Add auto-refresh toggle
+            const headerDiv = document.querySelector('.d-flex.justify-content-between.align-items-center.mb-4');
+            if (headerDiv) {
+                const toggleBtn = document.createElement('div');
+                toggleBtn.className = 'form-check form-switch me-3';
+                toggleBtn.innerHTML = `
+                    <input class="form-check-input" type="checkbox" id="autoRefreshToggle" checked>
+                    <label class="form-check-label" for="autoRefreshToggle">Auto Refresh</label>
+                `;
+                
+                const actionDiv = headerDiv.querySelector('.d-flex');
+                if (actionDiv) {
+                    actionDiv.prepend(toggleBtn);
+                    
+                    // Set up auto-refresh toggle handler
+                    document.getElementById('autoRefreshToggle').addEventListener('change', function() {
+                        autoRefresh = this.checked;
+                    });
+                }
+            }
+            
+            // Function to get current filter values
+            function getFilterValues() {
+                return {
+                    time_range: document.getElementById('time_range')?.value || '24h',
+                    status_code: document.getElementById('status_code')?.value || 'all',
+                    method: document.getElementById('method')?.value || 'all',
+                    search: document.getElementById('search')?.value || '',
+                    page: document.querySelector('.pagination .active .page-link')?.textContent || '1'
+                };
+            }
+            
+            // Function to fetch Apache logs from the API
+            function fetchApacheLogs() {
+                if (isUpdating || !autoRefresh) return;
+                
+                isUpdating = true;
+                const filters = getFilterValues();
+                
+                // Add timestamp to prevent caching
+                filters.timestamp = new Date().getTime();
+                
+                // Create URL query params
+                const params = new URLSearchParams(filters);
+                
+                // Fetch logs from API endpoint
+                fetch(`/api/apache-logs/?${params.toString()}`, {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    updateLogsTable(data.logs);
+                    updateStatistics(data.stats);
+                    isUpdating = false;
+                })
+                .catch(error => {
+                    console.error('Error fetching Apache logs:', error);
+                    isUpdating = false;
+                });
+            }
+            
+            // Function to update the logs table with new data
+            function updateLogsTable(logs) {
+                const tableBody = document.querySelector('.logs-table tbody');
+                if (!tableBody || !logs || !logs.length) return;
+                
+                // Create HTML for each log entry
+                const rowsHtml = logs.map(log => `
+                    <tr>
+                        <td>${new Date(log.raw_log.timestamp).toLocaleString()}</td>
+                        <td>
+                            <span class="method-badge method-${log.request_method.toLowerCase()}">${log.request_method}</span>
+                        </td>
+                        <td class="path-cell" title="${log.request_path}">
+                            ${log.request_path}
+                        </td>
+                        <td>
+                            ${getStatusBadgeHtml(log.status_code)}
+                        </td>
+                        <td>${log.source_ip}</td>
+                        <td>${log.response_size || "-"}</td>
+                    </tr>
+                `).join('');
+                
+                // Update the table
+                tableBody.innerHTML = rowsHtml;
+            }
+            
+            // Function to generate status badge HTML
+            function getStatusBadgeHtml(statusCode) {
+                if (statusCode < 300) {
+                    return `<span class="status-pill status-2xx">${statusCode}</span>`;
+                } else if (statusCode < 400) {
+                    return `<span class="status-pill status-3xx">${statusCode}</span>`;
+                } else if (statusCode < 500) {
+                    return `<span class="status-pill status-4xx">${statusCode}</span>`;
+                } else {
+                    return `<span class="status-pill status-5xx">${statusCode}</span>`;
+                }
+            }
+            
+            // Function to update statistics
+            function updateStatistics(stats) {
+                if (!stats) return;
+                
+                // Update count statistics
+                const totalElement = document.querySelector('.stat-value');
+                if (totalElement) totalElement.textContent = stats.total_logs;
+                
+                // Update status code badges
+                const statusBadges = document.querySelectorAll('.status-stats .status-badge');
+                if (statusBadges.length >= 4) {
+                    statusBadges[0].textContent = `2xx: ${stats.status_2xx}`;
+                    statusBadges[1].textContent = `3xx: ${stats.status_3xx}`;
+                    statusBadges[2].textContent = `4xx: ${stats.status_4xx}`;
+                    statusBadges[3].textContent = `5xx: ${stats.status_5xx}`;
+                }
+                
+                // Update timestamp to show last refresh
+                let refreshBadge = document.querySelector('.last-refresh');
+                if (refreshBadge) {
+                    refreshBadge.textContent = new Date().toLocaleTimeString();
+                } else {
+                    // Add refresh indicator if it doesn't exist
+                    const statCard = document.querySelector('.stat-card');
+                    if (statCard) {
+                        const refreshIndicator = document.createElement('div');
+                        refreshIndicator.className = 'stat-subtitle';
+                        refreshIndicator.innerHTML = `Last updated: <span class="last-refresh">${new Date().toLocaleTimeString()}</span>`;
+                        statCard.appendChild(refreshIndicator);
+                    }
+                }
+            }
+            
+            // Initial fetch after page loads
+            setTimeout(fetchApacheLogs, 1000);
+            
+            // Set up periodic updates
+            setInterval(fetchApacheLogs, updateInterval);
+            
+            // Update when the refresh button is clicked manually
             const refreshBtn = document.getElementById('refresh-btn');
             if (refreshBtn) {
                 refreshBtn.addEventListener('click', function() {
                     this.querySelector('i').classList.add('fa-spin');
+                    fetchApacheLogs();
                     setTimeout(() => {
-                        window.location.reload();
-                    }, 500);
+                        this.querySelector('i').classList.remove('fa-spin');
+                    }, 1000);
                 });
             }
-
-            // Enable tooltips
-            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-            tooltipTriggerList.map(function (tooltipTriggerEl) {
-                return new bootstrap.Tooltip(tooltipTriggerEl)
-            });
-        });
-
-        // Sidebar Toggle Functionality
-        document.addEventListener('DOMContentLoaded', function() {
-            // Get sidebar elements
-            const sidebarToggle = document.getElementById('sidebar-toggle');
-            const sidebar = document.querySelector('.sidebar');
-            const content = document.querySelector('.content');
-            
-            // Initialize sidebar state for mobile
-            if (window.innerWidth <= 768) {
-                sidebar.style.left = '-250px';
-            }
-            
-            // Toggle sidebar visibility
-            if (sidebarToggle) {
-                sidebarToggle.addEventListener('click', function() {
-                    if (window.innerWidth <= 768) {
-                        // Mobile view - slide in/out with backdrop
-                        if (sidebar.style.left === '0px') {
-                            // Hide the sidebar
-                            sidebar.style.left = '-250px';
-                            
-                            // Remove backdrop if exists
-                            const backdrop = document.querySelector('.sidebar-backdrop');
-                            if (backdrop) backdrop.remove();
-                        } else {
-                            // Show the sidebar
-                            sidebar.style.left = '0px';
-                            
-                            // Add backdrop for mobile
-                            const backdrop = document.createElement('div');
-                            backdrop.className = 'sidebar-backdrop';
-                            document.body.appendChild(backdrop);
-                            
-                            // Close sidebar when backdrop is clicked
-                            backdrop.addEventListener('click', function() {
-                                sidebar.style.left = '-250px';
-                                backdrop.remove();
-                            });
-                        }
-                    } else {
-                        // Desktop view - fully hide instead of collapse
-                        sidebar.classList.toggle('hidden');
-                        content.classList.toggle('full-width');
-                    }
-                });
-            }
-            
-            // Handle window resize
-            window.addEventListener('resize', function() {
-                if (window.innerWidth <= 768) {
-                    // Switch to mobile view behavior
-                    sidebar.classList.remove('hidden');
-                    content.classList.remove('full-width');
-                    
-                    // If sidebar isn't explicitly shown, make sure it's hidden
-                    if (!sidebar.classList.contains('open') && sidebar.style.left !== '0px') {
-                        sidebar.style.left = '-250px';
-                    }
-                } else {
-                    // Switch to desktop view behavior
-                    sidebar.style.removeProperty('left');
-                    
-                    // Remove any mobile-specific elements
-                    const backdrop = document.querySelector('.sidebar-backdrop');
-                    if (backdrop) backdrop.remove();
-                }
-            });
-            
-            // Optional: Close mobile sidebar when clicking menu items
-            const sidebarLinks = sidebar.querySelectorAll('a');
-            sidebarLinks.forEach(link => {
-                link.addEventListener('click', function() {
-                    if (window.innerWidth <= 768) {
-                        sidebar.style.left = '-250px';
-                        const backdrop = document.querySelector('.sidebar-backdrop');
-                        if (backdrop) backdrop.remove();
-                    }
-                });
-            });
-        });
+        }
     </script>
 </body>
 </html>
