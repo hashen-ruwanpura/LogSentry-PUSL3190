@@ -383,6 +383,37 @@ def automated_tasks_api(request):
         logger.exception(f"Error executing automated task {task_type}: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
 
+@login_required
+def open_folder(request):
+    """API endpoint to open folder in Windows Explorer"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    folder_path = request.POST.get('folder_path')
+    if not folder_path:
+        return JsonResponse({'error': 'Folder path is required'}, status=400)
+    
+    try:
+        import os
+        import platform
+        import subprocess
+        
+        # Check if path exists
+        if not os.path.exists(folder_path):
+            return JsonResponse({'error': f'Path not found: {folder_path}'}, status=404)
+        
+        # Open folder in file explorer
+        if platform.system() == 'Windows':
+            subprocess.Popen(['explorer', folder_path])
+        else:
+            # Fallback for Unix systems
+            subprocess.Popen(['xdg-open', folder_path])
+        
+        return JsonResponse({'success': True})
+    except Exception as e:
+        logger.exception(f"Error opening folder: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
 def configure_log_rotation(request):
     """Configure and apply real log rotation for Apache and MySQL logs"""
     try:
@@ -444,7 +475,7 @@ function Rotate-Log {
         
         Write-Output "Rotated: $LogPath -> $compressedLog"
         return $true
-    } else:
+    } else {
         Write-Output "Log file not found: $LogPath"
         return $false
     }
@@ -828,6 +859,7 @@ def configure_memory_optimization(request):
         import subprocess
         import platform
         import re
+        import tempfile
         
         # Find MySQL configuration file
         mysql_config_path = None
@@ -913,177 +945,154 @@ def configure_memory_optimization(request):
         optimized_settings['innodb_file_per_table'] = '1'
         optimized_settings['innodb_buffer_pool_instances'] = '8' if innodb_buffer_pool_size > 1024 else '1'
         
-        # 3. Create backup of existing config - Windows compatible approach
-        backup_path = f"{mysql_config_path}.bak"
+        # 3. Create an optimized config file that user can apply manually
+        temp_config_path = os.path.join(tempfile.gettempdir(), 'mysql_optimized.ini')
+        backup_path = os.path.join(tempfile.gettempdir(), 'mysql_original.ini.bak')
+        
+        # Make a backup copy in a non-protected location
         try:
-            # Using shutil copy2 to preserve metadata
             import shutil
             shutil.copy2(mysql_config_path, backup_path)
         except Exception as e:
             logger.warning(f"Could not create backup of MySQL config: {str(e)}")
-            # Continue without backup if we can't create one
+        
+        # Generate the optimized config
+        new_lines = []
+        in_mysqld_section = False
+        mysqld_section_found = False
+        processed_settings = {}
+        
+        with open(mysql_config_path, 'r') as f:
+            original_lines = f.readlines()
+        
+        for line in original_lines:
+            stripped = line.strip()
             
-        # 4. Apply changes to config file using PowerShell (which can elevate permissions)
-        try:
-            # Create a temporary file with our changes
-            temp_config_path = os.path.join(tempfile.gettempdir(), 'mysql_optimized.ini')
-            
-            # Read the original config
-            with open(mysql_config_path, 'r') as f:
-                original_lines = f.readlines()
-                
-            # Create modified version
-            new_lines = []
-            in_mysqld_section = False
-            mysqld_section_found = False
-            processed_settings = {}
-            
-            for line in original_lines:
-                stripped = line.strip()
-                
-                # Track when we enter/exit the mysqld section
-                if stripped == '[mysqld]':
-                    in_mysqld_section = True
-                    mysqld_section_found = True
-                elif stripped.startswith('[') and in_mysqld_section:
-                    # Before we leave mysqld section, add any missing settings
-                    for key, value in optimized_settings.items():
-                        # Check if this setting wasn't already processed
-                        if key not in [k for k, v in processed_settings.items()]:
-                            new_lines.append(f"{key}={value}\n")
-                    in_mysqld_section = False
-                
-                # Process lines in the mysqld section
-                if in_mysqld_section and '=' in stripped and not stripped.startswith('#'):
-                    parts = stripped.split('=', 1)
-                    if len(parts) == 2:
-                        key = parts[0].strip()
-                        # If this is a key we want to optimize, replace it
-                        if key in optimized_settings:
-                            processed_settings[key] = True
-                            line = f"{key}={optimized_settings[key]}\n"
-                
-                # Add the line (original or modified)
-                new_lines.append(line)
-            
-            # If mysqld section wasn't found, add it at the end
-            if not mysqld_section_found:
-                new_lines.append('\n[mysqld]\n')
+            # Track when we enter/exit the mysqld section
+            if stripped == '[mysqld]':
+                in_mysqld_section = True
+                mysqld_section_found = True
+                new_lines.append(line)  # Keep the original line
+            elif stripped.startswith('[') and in_mysqld_section:
+                # Before leaving mysqld section, add any missing settings
                 for key, value in optimized_settings.items():
-                    new_lines.append(f"{key}={value}\n")
-            # If we were in the mysqld section at the end of file, add any missing settings
-            elif in_mysqld_section:
-                for key, value in optimized_settings.items():
-                    if key not in [k for k, v in processed_settings.items()]:
+                    if key not in processed_settings:
                         new_lines.append(f"{key}={value}\n")
-            
-            # Write the modified config to temporary file
-            with open(temp_config_path, 'w') as f:
-                f.writelines(new_lines)
-            
-            # Use PowerShell to copy the file with elevated privileges
-            ps_script = f"""
-            try {{
-                Copy-Item -Path '{temp_config_path.replace('\\', '\\\\')}' -Destination '{mysql_config_path.replace('\\', '\\\\')}' -Force
-                "Success: Configuration file updated successfully"
-            }} catch {{
-                "Error: " + $_.Exception.Message
-            }}
-            """
-            
-            # Create a PowerShell script file
-            ps_script_path = os.path.join(tempfile.gettempdir(), 'update_mysql_config.ps1')
-            with open(ps_script_path, 'w') as f:
-                f.write(ps_script)
-            
-            # Execute PowerShell with elevated privileges
-            result = subprocess.run(
-                ["powershell", "-ExecutionPolicy", "Bypass", "-File", ps_script_path],
-                capture_output=True,
-                text=True
-            )
-            
-            if "Success:" in result.stdout:
-                config_update_success = True
+                        processed_settings[key] = True
+                in_mysqld_section = False
+                new_lines.append(line)  # Keep the section header
+            elif in_mysqld_section and '=' in stripped and not stripped.startswith('#'):
+                # Process existing settings in mysqld section
+                parts = stripped.split('=', 1)
+                if len(parts) == 2:
+                    key = parts[0].strip()
+                    if key in optimized_settings:
+                        # Replace with optimized value
+                        line = f"{key}={optimized_settings[key]}\n"
+                        processed_settings[key] = True
+                new_lines.append(line)
             else:
-                config_update_success = False
-                logger.warning(f"PowerShell error: {result.stderr}")
-                
-            # 6. Record the optimization in system settings
-            from authentication.models import SystemSettings
-            
-            SystemSettings.objects.update_or_create(
-                section='maintenance',
-                settings_key='mysql_memory_optimization',
-                defaults={
-                    'settings_value': json.dumps(optimized_settings),
-                    'last_updated': timezone.now(),
-                    'updated_by': request.user
-                }
-            )
-            
-            # 7. Calculate memory savings
-            original_innodb = 0
-            if 'innodb_buffer_pool_size' in current_settings:
-                size_str = current_settings['innodb_buffer_pool_size']
-                if 'M' in size_str:
-                    original_innodb = int(size_str.rstrip('M'))
-                elif 'G' in size_str:
-                    original_innodb = int(size_str.rstrip('G')) * 1024
-                else:
-                    try:
-                        original_innodb = int(size_str) / (1024 * 1024)
-                    except ValueError:
-                        original_innodb = 0
-            
-            memory_savings_pct = 0
-            if original_innodb > 0:
-                memory_savings_pct = ((innodb_buffer_pool_size - original_innodb) / original_innodb) * 100
-            
-            # Return status based on whether we could update the config
-            if config_update_success:
-                # Return success response with details
-                return {
-                    'success': True,
-                    'message': 'MySQL memory optimization configured successfully. Restart MySQL to apply changes.',
-                    'details': {
-                        'original_settings': current_settings,
-                        'optimized_settings': optimized_settings,
-                        'memory_efficiency_improved': abs(round(memory_savings_pct, 1)) if memory_savings_pct != 0 else "New configuration applied",
-                        'system_memory_gb': round(total_memory_gb, 2),
-                        'config_file': mysql_config_path,
-                        'backup_file': backup_path,
-                        'configured_by': request.user.username,
-                        'configured_at': timezone.now().isoformat(),
-                        'restart_instructions': "To apply changes, restart MySQL service from Services console or run: net stop mysql & net start mysql"
-                    }
-                }
-            else:
-                return {
-                    'success': False,
-                    'message': 'Could not update MySQL configuration file. Try running with administrator privileges.',
-                    'details': {
-                        'config_file': mysql_config_path,
-                        'temp_config': temp_config_path,
-                        'optimized_settings': optimized_settings,
-                        'error': result.stderr or result.stdout
-                    }
-                }
-            
-        except Exception as e:
-            logger.exception(f"Error modifying MySQL config: {str(e)}")
-            return {
-                'success': False,
-                'message': f'Error modifying MySQL configuration: {str(e)}',
-                'details': {
+                # Keep all other lines as-is
+                new_lines.append(line)
+        
+        # If mysqld section wasn't found, add it at the end with all settings
+        if not mysqld_section_found:
+            new_lines.append('\n[mysqld]\n')
+            for key, value in optimized_settings.items():
+                new_lines.append(f"{key}={value}\n")
+        # If we were in mysqld section at the end of file, add any missing settings
+        elif in_mysqld_section:
+            for key, value in optimized_settings.items():
+                if key not in processed_settings:
+                    new_lines.append(f"{key}={value}\n")
+        
+        # Write the optimized config to a temporary file
+        with open(temp_config_path, 'w') as f:
+            f.writelines(new_lines)
+        
+        # Create a batch file to help the user apply the changes with admin rights
+        bat_path = os.path.join(tempfile.gettempdir(), 'apply_mysql_config.bat')
+        with open(bat_path, 'w') as f:
+            f.write(f'@echo off\n')
+            f.write(f'echo MySQL Memory Optimization\n')
+            f.write(f'echo ========================\n')
+            f.write(f'echo.\n')
+            f.write(f'echo This script will apply optimized MySQL memory settings.\n')
+            f.write(f'echo Please run this script as administrator.\n')
+            f.write(f'echo.\n')
+            f.write(f'echo Backing up original MySQL config file...\n')
+            f.write(f'copy "{mysql_config_path}" "{mysql_config_path}.bak"\n')
+            f.write(f'echo.\n')
+            f.write(f'echo Applying optimized MySQL config file...\n')
+            f.write(f'copy "{temp_config_path}" "{mysql_config_path}"\n')
+            f.write(f'echo.\n')
+            f.write(f'echo Optimizations applied. Please restart MySQL service.\n')
+            f.write(f'echo.\n')
+            f.write(f'echo To restart MySQL, run: net stop mysql & net start mysql\n')
+            f.write(f'echo.\n')
+            f.write(f'pause\n')
+        
+        # Record the optimization in system settings
+        from authentication.models import SystemSettings
+        
+        SystemSettings.objects.update_or_create(
+            section='maintenance',
+            settings_key='mysql_memory_optimization',
+            defaults={
+                'settings_value': json.dumps({
+                    'optimized_settings': optimized_settings,
                     'config_file': mysql_config_path,
-                    'optimized_settings': optimized_settings
-                }
+                    'temp_config': temp_config_path,
+                    'bat_file': bat_path
+                }),
+                'last_updated': timezone.now(),
+                'updated_by': request.user
             }
+        )
+        
+        # Calculate memory savings (if applicable)
+        original_innodb = 0
+        if 'innodb_buffer_pool_size' in current_settings:
+            size_str = current_settings['innodb_buffer_pool_size']
+            if 'M' in size_str:
+                original_innodb = int(size_str.rstrip('M'))
+            elif 'G' in size_str:
+                original_innodb = int(size_str.rstrip('G')) * 1024
+            else:
+                try:
+                    original_innodb = int(size_str) / (1024 * 1024)
+                except ValueError:
+                    original_innodb = 0
+        
+        memory_savings_pct = 0
+        if original_innodb > 0:
+            memory_savings_pct = ((innodb_buffer_pool_size - original_innodb) / original_innodb) * 100
+        
+        # Return information to the user
+        return {
+            'success': True,
+            'message': 'Could not update MySQL configuration file. Try running with administrator privileges.',
+            'details': {
+                'config_file': mysql_config_path,
+                'temp_config': temp_config_path,
+                'batch_file': bat_path,
+                'optimized_settings': optimized_settings,
+                'memory_efficiency_improved': abs(round(memory_savings_pct, 1)) if memory_savings_pct != 0 else "New configuration calculated",
+                'system_memory_gb': round(total_memory_gb, 2),
+                'error': "Access denied. Please run the generated batch file as administrator.",
+                'next_steps': "1. Right-click on the batch file and select 'Run as administrator'\n2. Restart MySQL service after applying changes"
+            }
+        }
             
     except Exception as e:
         logger.exception(f"Error configuring MySQL memory optimization: {str(e)}")
-        raise
+        return {
+            'success': False,
+            'message': f'Error analyzing MySQL configuration: {str(e)}',
+            'details': {
+                'error': str(e)
+            }
+        }
 
 def predict_resource_exhaustion(resource_type, metrics, time_window=24):
     """

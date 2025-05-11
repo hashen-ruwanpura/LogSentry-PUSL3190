@@ -10,6 +10,7 @@ from .views_apache_logs import apache_logs_view, apache_logs_api
 from .views_mysql_logs import mysql_logs_view, mysql_logs_api
 from . import views_explore_agent
 from .views_predictive import predictive_maintenance_view, resource_predictions_api, system_metrics_api, automated_tasks_api
+from authentication import views_predictive
 
 urlpatterns = [
     # ... existing URL patterns ...
@@ -96,5 +97,6 @@ urlpatterns = [
     path('api/resource-predictions/', resource_predictions_api, name='resource_predictions_api'),
     path('api/system-metrics/', system_metrics_api, name='system_metrics_api'),
     path('api/automated-tasks/', automated_tasks_api, name='automated_tasks_api'),
+    path('api/open-folder/', views_predictive.open_folder, name='open_folder'),
     
 ]

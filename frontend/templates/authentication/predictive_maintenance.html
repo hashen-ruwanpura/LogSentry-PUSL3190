@@ -862,6 +862,33 @@
                         <div class="alert alert-success">
                             <h6 class="alert-heading mb-2"><i class="fas fa-check-circle me-2"></i> <span id="task-success-title">Task Completed Successfully</span></h6>
                             <p id="task-success-message" class="mb-3"></p>
+                            
+                            <!-- Add section specifically for memory optimization -->
+                            <div id="memory-optimization-help" style="display: none;" class="alert alert-info mb-3">
+                                <p><strong>Windows requires administrator privileges to modify system files.</strong></p>
+                                <ol>
+                                    <li>Locate the batch file (path shown below)</li>
+                                    <li>Right-click the batch file and select "Run as administrator"</li>
+                                    <li>The batch file will apply the optimized MySQL settings</li>
+                                    <li>Restart MySQL service after completion</li>
+                                </ol>
+                            </div>
+                            
+                            <!-- Add this before the closing task-result div -->
+                            <div id="mysql-optimization-instructions" style="display: none;" class="mt-3">
+                                <h6>How to Apply MySQL Optimizations:</h6>
+                                <ol>
+                                    <li>Click the "Open File Location" button below</li>
+                                    <li>Right-click on <code>apply_mysql_config.bat</code></li>
+                                    <li>Select "Run as administrator"</li>
+                                    <li>Confirm the UAC prompt</li>
+                                    <li>Restart MySQL service when prompted</li>
+                                </ol>
+                                <div class="alert alert-info">
+                                    <i class="fas fa-info-circle"></i> These optimizations will reduce MySQL memory usage while maintaining optimal performance for your XAMPP installation.
+                                </div>
+                            </div>
+                            
                             <h6>Task Results:</h6>
                             <div id="task-details-container" class="bg-light p-3 rounded">
                                 <pre id="task-details" class="mb-0" style="white-space: pre-wrap;"></pre>
@@ -1646,10 +1673,46 @@
             });
         });
 
+        // Function to open folder with batch file
+        function openFolderWithBatchFile(folderPath) {
+            // Create a form to submit to the server to open the folder
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/api/open-folder/';
+            
+            // Add CSRF token
+            const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]')?.value || getCookie('csrftoken');
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrfmiddlewaretoken';
+            csrfInput.value = csrfToken;
+            form.appendChild(csrfInput);
+            
+            // Add folder path
+            const pathInput = document.createElement('input');
+            pathInput.type = 'hidden';
+            pathInput.name = 'folder_path';
+            pathInput.value = folderPath;
+            form.appendChild(pathInput);
+            
+            // Submit the form
+            document.body.appendChild(form);
+            form.submit();
+        }
+
         // Handle task execution
         document.getElementById('task-execute-btn').addEventListener('click', function() {
             if (!currentTask) return;
             
+            // Add this after the other code to handle showing special info for memory optimization
+            if (currentTask && currentTask.type === 'memory_optimization') {
+                document.getElementById('memory-optimization-help').style.display = 'block';
+                document.getElementById('mysql-optimization-instructions').style.display = 'block';
+            } else {
+                document.getElementById('memory-optimization-help').style.display = 'none';
+                document.getElementById('mysql-optimization-instructions').style.display = 'none';
+            }
+
             // Show loading state
             document.getElementById('task-default-content').style.display = 'none';
             document.getElementById('task-loading').style.display = 'block';
@@ -1702,11 +1765,39 @@
                 
                 // Format and display details
                 if (data.details) {
-                    const formattedDetails = JSON.stringify(data.details, null, 2);
+                    let formattedDetails = JSON.stringify(data.details, null, 2);
+                    
+                    // If it's memory optimization, add extra info to help user find the batch file
+                    if (currentTask && currentTask.type === 'memory_optimization' && data.details.batch_file) {
+                        formattedDetails = "BATCH FILE: " + data.details.batch_file + "\n\n" + formattedDetails;
+                        
+                        // Add a button to open the folder containing the batch file
+                        const detailsContainer = document.getElementById('task-details-container');
+                        if (detailsContainer) {
+                            const openFolderBtn = document.createElement('button');
+                            openFolderBtn.className = 'btn btn-outline-primary mt-2';
+                            openFolderBtn.innerHTML = '<i class="fas fa-folder-open me-1"></i> Open File Location';
+                            openFolderBtn.onclick = function() {
+                                const folderPath = data.details.batch_file.substring(0, data.details.batch_file.lastIndexOf('\\'));
+                                openFolderWithBatchFile(folderPath);
+                            };
+                            detailsContainer.appendChild(openFolderBtn);
+                            
+                            // Also add a direct Run As Admin button for convenience
+                            const runAsAdminBtn = document.createElement('button');
+                            runAsAdminBtn.className = 'btn btn-primary mt-2 ms-2';
+                            runAsAdminBtn.innerHTML = '<i class="fas fa-shield-alt me-1"></i> Run as Administrator';
+                            runAsAdminBtn.onclick = function() {
+                                alert("Please locate the batch file at:\n\n" + data.details.batch_file + "\n\nRight-click on it and select 'Run as administrator'");
+                            };
+                            detailsContainer.appendChild(runAsAdminBtn);
+                        }
+                    }
+                    
                     document.getElementById('task-details').textContent = formattedDetails;
                 }
                 
-                // Update the maintenance status in the UI (this simulates the real impact)
+                // Update the maintenance status in the UI
                 simulateTaskImpact(currentTask.type);
             })
             .catch(error => {
