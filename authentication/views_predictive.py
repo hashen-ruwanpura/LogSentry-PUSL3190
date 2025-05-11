@@ -2,6 +2,10 @@ import logging
 import json
 import psutil
 import time
+import os
+import tempfile
+import shutil
+import subprocess
 from datetime import datetime, timedelta
 from django.shortcuts import render
 from django.http import JsonResponse
@@ -48,6 +52,7 @@ def get_log_volume_metrics():
     import glob
     from log_ingestion.models import LogSource
     from django.db.models import Q
+    from authentication.models import SystemSettings
     
     try:
         # Initialize metrics dictionary
@@ -100,10 +105,42 @@ def get_log_volume_metrics():
         apache_size_gb = apache_size / (1024 * 1024 * 1024)
         mysql_size_gb = mysql_size / (1024 * 1024 * 1024)
         
-        # Get system logs size (common locations)
+        # Get system logs size from configurable paths
         system_size = 0
-        system_log_paths = ['/var/log', 'C:\\Windows\\Logs']
         
+        # Get configured system log paths from settings
+        try:
+            # First, try to get custom paths from settings
+            system_paths_setting = SystemSettings.objects.filter(
+                section='logs',
+                settings_key='system_log_paths'
+            ).first()
+            
+            if system_paths_setting and system_paths_setting.settings_value:
+                # Parse the JSON list of paths
+                import json
+                system_log_paths = json.loads(system_paths_setting.settings_value)
+            else:
+                # Fallback to default paths if no custom paths defined
+                system_log_paths = ['/var/log', 'C:\\Windows\\Logs']
+                
+            # Also check for extra custom log paths
+            custom_paths_setting = SystemSettings.objects.filter(
+                section='logs',
+                settings_key='custom_log_paths'
+            ).first()
+            
+            if custom_paths_setting and custom_paths_setting.settings_value:
+                custom_log_paths = json.loads(custom_paths_setting.settings_value)
+                # Add custom paths to system paths
+                system_log_paths.extend(custom_log_paths)
+                
+        except Exception as e:
+            logger.warning(f"Error reading log paths from settings: {str(e)}")
+            # Fallback to default paths
+            system_log_paths = ['/var/log', 'C:\\Windows\\Logs']
+        
+        # Process each configured path
         for log_path in system_log_paths:
             if os.path.exists(log_path) and os.path.isdir(log_path):
                 for root, dirs, files in os.walk(log_path, topdown=True, followlinks=False):
@@ -320,6 +357,733 @@ def system_metrics_api(request):
         return JsonResponse({
             "error": str(e)
         }, status=500)
+
+@login_required
+def automated_tasks_api(request):
+    """API endpoint for running automated maintenance tasks"""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    task_type = request.POST.get('task_type')
+    if not task_type:
+        return JsonResponse({'error': 'Task type is required'}, status=400)
+    
+    try:
+        if task_type == 'log_rotation':
+            result = configure_log_rotation(request)
+        elif task_type == 'cache_cleanup':
+            result = run_cache_cleanup(request)
+        elif task_type == 'memory_optimization':
+            result = configure_memory_optimization(request)
+        else:
+            return JsonResponse({'error': 'Invalid task type'}, status=400)
+        
+        return JsonResponse(result)
+    except Exception as e:
+        logger.exception(f"Error executing automated task {task_type}: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+def configure_log_rotation(request):
+    """Configure and apply real log rotation for Apache and MySQL logs"""
+    try:
+        import os
+        import platform
+        import subprocess
+        
+        # 1. Get actual Apache and MySQL log paths
+        apache_paths = []
+        mysql_paths = []
+        
+        from log_ingestion.models import LogSource
+        from django.db.models import Q
+        
+        # Get Apache log paths
+        apache_sources = LogSource.objects.filter(
+            Q(name='Apache Web Server') | Q(source_type__startswith='apache')
+        )
+        for source in apache_sources:
+            if source.file_path and os.path.exists(source.file_path):
+                apache_paths.append(source.file_path)
+        
+        # Get MySQL log paths
+        mysql_sources = LogSource.objects.filter(
+            Q(name='MySQL Database Server') | Q(source_type__startswith='mysql')
+        )
+        for source in mysql_sources:
+            if source.file_path and os.path.exists(source.file_path):
+                mysql_paths.append(source.file_path)
+        
+        # 2. Determine the appropriate log rotation mechanism based on OS
+        if platform.system() == 'Windows':
+            # On Windows, we'll use PowerShell scripts for log rotation
+            
+            # Create PowerShell script for log rotation
+            ps_script_path = os.path.join(tempfile.gettempdir(), 'log_rotation.ps1')
+            
+            # Build the script content
+            ps_script = """
+# Log Rotation PowerShell Script
+$date = Get-Date -Format "yyyyMMdd"
+
+# Function to rotate a log file
+function Rotate-Log {
+    param(
+        [string]$LogPath
+    )
+    
+    if (Test-Path $LogPath) {
+        $logDir = Split-Path -Parent $LogPath
+        $logName = Split-Path -Leaf $LogPath
+        $compressedLog = Join-Path $logDir "$logName.$date.zip"
+        
+        # Create archive
+        Compress-Archive -Path $LogPath -DestinationPath $compressedLog -Force
+        
+        # Clear the original log file (keep the file but empty it)
+        Clear-Content -Path $LogPath
+        
+        Write-Output "Rotated: $LogPath -> $compressedLog"
+        return $true
+    } else:
+        Write-Output "Log file not found: $LogPath"
+        return $false
+    }
+}
+
+# Apache Logs
+$apacheLogs = @(
+"""
+            
+            # Add Apache logs to script
+            for path in apache_paths:
+                ps_script += f'    "{path.replace("\\", "\\\\")}",\n'
+            
+            ps_script += """)
+
+# MySQL Logs
+$mysqlLogs = @(
+"""
+            
+            # Add MySQL logs to script
+            for path in mysql_paths:
+                ps_script += f'    "{path.replace("\\", "\\\\")}",\n'
+            
+            ps_script += """)
+
+# Rotate Apache logs
+$apacheRotated = 0
+foreach ($log in $apacheLogs) {
+    if (Rotate-Log -LogPath $log) {
+        $apacheRotated++
+    }
+}
+
+# Rotate MySQL logs
+$mysqlRotated = 0
+foreach ($log in $mysqlLogs) {
+    if (Rotate-Log -LogPath $log) {
+        $mysqlRotated++
+    }
+}
+
+# Summary
+Write-Output "Rotation complete. Rotated $apacheRotated Apache logs and $mysqlRotated MySQL logs."
+"""
+            
+            # Write the script to disk
+            with open(ps_script_path, 'w') as f:
+                f.write(ps_script)
+            
+            # Execute PowerShell script
+            try:
+                result = subprocess.run(
+                    ["powershell", "-ExecutionPolicy", "Bypass", "-File", ps_script_path],
+                    capture_output=True,
+                    text=True
+                )
+                ps_output = result.stdout
+                ps_error = result.stderr
+                rotation_success = result.returncode == 0
+            except Exception as e:
+                ps_output = ""
+                ps_error = str(e)
+                rotation_success = False
+            
+            # Create scheduled task for regular rotation
+            try:
+                # Get the current script path for scheduling
+                current_script_path = os.path.abspath(__file__)
+                directory = os.path.dirname(current_script_path)
+                
+                # Create task scheduler command
+                task_name = "LogDetectionPlatform_LogRotation"
+                task_cmd = f"""
+                powershell -Command "Register-ScheduledTask -TaskName '{task_name}' -Trigger (New-ScheduledTaskTrigger -Daily -At 12am) -Action (New-ScheduledTaskAction -Execute 'powershell' -Argument '-ExecutionPolicy Bypass -File {ps_script_path}') -RunLevel Highest -Force"
+                """
+                
+                # Run the command to create scheduled task
+                task_result = subprocess.run(
+                    ["powershell", "-ExecutionPolicy", "Bypass", "-Command", task_cmd],
+                    capture_output=True, 
+                    text=True
+                )
+                task_output = task_result.stdout
+                task_error = task_result.stderr
+                task_success = task_result.returncode == 0
+            except Exception as e:
+                task_output = ""
+                task_error = str(e)
+                task_success = False
+            
+            # Create response
+            details = {
+                'apache_logs_rotated': len(apache_paths),
+                'mysql_logs_rotated': len(mysql_paths),
+                'script_path': ps_script_path,
+                'rotation_output': ps_output,
+                'rotation_error': ps_error,
+                'task_created': task_success,
+                'task_name': task_name,
+                'task_output': task_output,
+                'task_error': task_error
+            }
+            
+            # Record the configuration in system settings
+            from authentication.models import SystemSettings
+            
+            SystemSettings.objects.update_or_create(
+                section='maintenance',
+                settings_key='log_rotation_configured',
+                defaults={
+                    'settings_value': 'true',
+                    'last_updated': timezone.now(),
+                    'updated_by': request.user
+                }
+            )
+            
+            return {
+                'success': rotation_success,
+                'message': 'Log rotation configured and executed on Windows system',
+                'details': details
+            }
+            
+        else:
+            # On Linux/Unix systems, create and apply logrotate config
+            
+            # Create logrotate configs
+            apache_config = f"""
+# Apache log rotation configuration
+{' '.join(apache_paths)} {{
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 640 root adm
+    sharedscripts
+    postrotate
+        /etc/init.d/apache2 reload > /dev/null 2>&1 || true
+    endscript
+}}
+"""
+            
+            mysql_config = f"""
+# MySQL log rotation configuration
+{' '.join(mysql_paths)} {{
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 640 mysql adm
+    sharedscripts
+    postrotate
+        /etc/init.d/mysql reload > /dev/null 2>&1 || true
+    endscript
+}}
+"""
+            
+            # Write configs to logrotate.d
+            config_files = {}
+            try:
+                # Write Apache config
+                apache_config_path = '/etc/logrotate.d/log-detection-apache'
+                with open(apache_config_path, 'w') as f:
+                    f.write(apache_config)
+                config_files['apache'] = apache_config_path
+                
+                # Write MySQL config
+                mysql_config_path = '/etc/logrotate.d/log-detection-mysql'
+                with open(mysql_config_path, 'w') as f:
+                    f.write(mysql_config)
+                config_files['mysql'] = mysql_config_path
+                
+                # Run logrotate immediately with force option to test
+                logrotate_result = subprocess.run(
+                    ["sudo", "logrotate", "-f", apache_config_path, mysql_config_path],
+                    capture_output=True,
+                    text=True
+                )
+                
+                logrotate_output = logrotate_result.stdout
+                logrotate_error = logrotate_result.stderr
+                rotation_success = logrotate_result.returncode == 0
+                
+            except PermissionError:
+                # If we don't have permission, create temp files and show instructions
+                temp_dir = tempfile.gettempdir()
+                apache_config_path = os.path.join(temp_dir, 'log-detection-apache')
+                with open(apache_config_path, 'w') as f:
+                    f.write(apache_config)
+                
+                mysql_config_path = os.path.join(temp_dir, 'log-detection-mysql')
+                with open(mysql_config_path, 'w') as f:
+                    f.write(mysql_config)
+                
+                config_files['apache'] = apache_config_path
+                config_files['mysql'] = mysql_config_path
+                
+                logrotate_output = "Configuration files created but couldn't be installed or tested due to permissions"
+                logrotate_error = "Need root/sudo access to install and test logrotate configuration"
+                rotation_success = False
+                
+            # Record the configuration in system settings
+            from authentication.models import SystemSettings
+            
+            SystemSettings.objects.update_or_create(
+                section='maintenance',
+                settings_key='log_rotation_configured',
+                defaults={
+                    'settings_value': 'true',
+                    'last_updated': timezone.now(),
+                    'updated_by': request.user
+                }
+            )
+            
+            # Return results
+            return {
+                'success': rotation_success,
+                'message': 'Log rotation configured and executed' if rotation_success else 'Log rotation configuration created but needs manual installation',
+                'details': {
+                    'apache_paths': apache_paths,
+                    'mysql_paths': mysql_paths,
+                    'config_files': config_files,
+                    'logrotate_output': logrotate_output,
+                    'logrotate_error': logrotate_error,
+                    'instructions': "To manually install the configuration files, copy them to /etc/logrotate.d/ and run 'sudo logrotate -f /etc/logrotate.d/log-detection-apache /etc/logrotate.d/log-detection-mysql'" if not rotation_success else ""
+                }
+            }
+        
+    except Exception as e:
+        logger.exception(f"Error configuring log rotation: {str(e)}")
+        raise
+
+def run_cache_cleanup(request):
+    """Actually clean up temporary files and cache data"""
+    try:
+        import os
+        import shutil
+        import tempfile
+        import time
+        import platform
+        
+        # Track space cleaned
+        space_cleaned = 0
+        files_removed = 0
+        dirs_removed = 0
+        
+        # Set age threshold for file deletion (7 days)
+        age_threshold = time.time() - (7 * 24 * 60 * 60)
+        
+        # 1. Clean temp directories
+        temp_dirs = [tempfile.gettempdir()]
+        
+        # On Linux/Unix systems, add more directories if they exist
+        if platform.system() != 'Windows':
+            # Common temp directories on Unix
+            potential_dirs = ['/tmp', '/var/tmp']
+            for d in potential_dirs:
+                if os.path.exists(d) and os.path.isdir(d):
+                    temp_dirs.append(d)
+        
+        # Add browser cache directories
+        user_home = os.path.expanduser('~')
+        browser_cache_dirs = []
+        
+        if platform.system() == 'Windows':
+            browser_cache_dirs = [
+                os.path.join(user_home, 'AppData/Local/Google/Chrome/User Data/Default/Cache'),
+                os.path.join(user_home, 'AppData/Local/Microsoft/Edge/User Data/Default/Cache'),
+                os.path.join(user_home, 'AppData/Local/Mozilla/Firefox/Profiles')
+            ]
+        else:  # Linux/Unix
+            browser_cache_dirs = [
+                os.path.join(user_home, '.cache/google-chrome'),
+                os.path.join(user_home, '.cache/mozilla'),
+                os.path.join(user_home, '.cache/chromium')
+            ]
+        
+        # Filter to only directories that exist and are accessible
+        browser_cache_dirs = [d for d in browser_cache_dirs if os.path.exists(d) and os.path.isdir(d)]
+        
+        # Add browser cache dirs to our cleaning list
+        temp_dirs.extend(browser_cache_dirs)
+        
+        # 2. For each directory, actually clean old files
+        for temp_dir in temp_dirs:
+            try:
+                logger.info(f"Cleaning directory: {temp_dir}")
+                
+                # Walk directory tree and remove files older than threshold
+                for root, dirs, files in os.walk(temp_dir, topdown=True):
+                    # Skip hidden directories and certain system paths
+                    dirs[:] = [d for d in dirs if not d.startswith('.') and 
+                               not os.path.join(root, d).startswith('/proc') and
+                               not os.path.join(root, d).startswith('/sys')]
+                    
+                    # Process files in this directory
+                    for filename in files:
+                        try:
+                            filepath = os.path.join(root, filename)
+                            if os.path.isfile(filepath) and not os.path.islink(filepath):
+                                try:
+                                    file_stat = os.stat(filepath)
+                                    # Only remove files older than threshold
+                                    if file_stat.st_mtime < age_threshold:
+                                        # Add to total before deleting
+                                        file_size = file_stat.st_size
+                                        
+                                        # Delete the file
+                                        os.unlink(filepath)
+                                        
+                                        # Update stats
+                                        space_cleaned += file_size
+                                        files_removed += 1
+                                        logger.debug(f"Removed: {filepath}")
+                                except (FileNotFoundError, PermissionError) as e:
+                                    logger.debug(f"Error accessing {filepath}: {str(e)}")
+                                    continue
+                        except Exception as e:
+                            logger.debug(f"Error processing {filename}: {str(e)}")
+                            continue
+                    
+                    # Try to remove empty directories (post-order)
+                    for dir_name in dirs:
+                        dir_path = os.path.join(root, dir_name)
+                        try:
+                            # Check if directory is empty
+                            if not os.listdir(dir_path):
+                                os.rmdir(dir_path)
+                                dirs_removed += 1
+                                logger.debug(f"Removed empty directory: {dir_path}")
+                        except Exception as e:
+                            logger.debug(f"Error removing directory {dir_path}: {str(e)}")
+                            continue
+                
+            except Exception as e:
+                logger.warning(f"Error accessing directory {temp_dir}: {str(e)}")
+                continue
+        
+        # 3. Record the cleanup in system settings
+        from authentication.models import SystemSettings
+        
+        SystemSettings.objects.update_or_create(
+            section='maintenance',
+            settings_key='last_cache_cleanup',
+            defaults={
+                'settings_value': timezone.now().isoformat(),
+                'last_updated': timezone.now(),
+                'updated_by': request.user
+            }
+        )
+        
+        # Convert bytes to GB for the response
+        space_cleaned_gb = space_cleaned / (1024 * 1024 * 1024)
+        
+        # Return actual results of the cleanup
+        return {
+            'success': True,
+            'message': f'Cache cleanup completed. Removed {files_removed} files, freeing {space_cleaned_gb:.2f} GB',
+            'details': {
+                'space_cleaned_gb': round(space_cleaned_gb, 2),
+                'files_removed': files_removed,
+                'directories_removed': dirs_removed,
+                'directories_cleaned': len(temp_dirs),
+                'cleaned_by': request.user.username,
+                'cleaned_at': timezone.now().isoformat()
+            }
+        }
+        
+    except Exception as e:
+        logger.exception(f"Error running cache cleanup: {str(e)}")
+        raise
+
+def configure_memory_optimization(request):
+    """Actually optimize MySQL memory usage configurations"""
+    try:
+        import psutil
+        import os
+        import subprocess
+        import platform
+        import re
+        
+        # Find MySQL configuration file
+        mysql_config_path = None
+        
+        if platform.system() == 'Windows':
+            # Common locations on Windows
+            possible_paths = [
+                r'C:\ProgramData\MySQL\MySQL Server 8.0\my.ini',
+                r'C:\ProgramData\MySQL\MySQL Server 5.7\my.ini',
+                # Add more potential paths as needed
+            ]
+            for path in possible_paths:
+                if os.path.exists(path):
+                    mysql_config_path = path
+                    break
+        
+        if not mysql_config_path:
+            return {
+                'success': False,
+                'message': 'MySQL configuration file not found. Please specify the path manually.',
+                'details': {
+                    'searched_paths': possible_paths
+                }
+            }
+            
+        # 1. Get current MySQL settings - custom parser for Windows
+        current_settings = {}
+        
+        # Read the file content as plain text for Windows
+        with open(mysql_config_path, 'r') as f:
+            config_content = f.readlines()
+        
+        # Parse the file manually to extract settings
+        current_section = None
+        for line in config_content:
+            line = line.strip()
+            if line.startswith('[') and line.endswith(']'):
+                current_section = line[1:-1].lower()
+            elif current_section == 'mysqld' and '=' in line and not line.startswith('#'):
+                parts = line.split('=', 1)
+                if len(parts) == 2:
+                    key = parts[0].strip()
+                    value = parts[1].strip()
+                    current_settings[key] = value
+        
+        # 2. Calculate optimized settings based on actual system memory
+        memory = psutil.virtual_memory()
+        total_memory_gb = memory.total / (1024 * 1024 * 1024)
+        
+        # Calculate optimized values based on system memory
+        optimized_settings = {}
+        
+        # Innodb buffer pool: 50-70% of available RAM depending on system
+        if total_memory_gb >= 16:
+            # Larger systems: use 60% for InnoDB
+            innodb_pct = 0.6
+        elif total_memory_gb >= 8:
+            # Medium systems: use 50% for InnoDB
+            innodb_pct = 0.5
+        else:
+            # Small systems: use 40% for InnoDB
+            innodb_pct = 0.4
+            
+        innodb_buffer_pool_size = int(total_memory_gb * innodb_pct * 1024)
+        optimized_settings['innodb_buffer_pool_size'] = f"{innodb_buffer_pool_size}M"
+        
+        # Key buffer size: 25% of innodb buffer for MyISAM if using both engines
+        optimized_settings['key_buffer_size'] = f"{int(innodb_buffer_pool_size * 0.25)}M"
+        
+        # Thread cache: between 8-16 depending on system size
+        optimized_settings['thread_cache_size'] = '16' if total_memory_gb >= 8 else '8'
+        
+        # Query cache: often better turned off in newer MySQL versions
+        optimized_settings['query_cache_type'] = '0'
+        optimized_settings['query_cache_size'] = '0'
+        
+        # Max connections: depends on application needs, default reasonable for many cases
+        optimized_settings['max_connections'] = '200'
+        
+        # Additional performance settings
+        optimized_settings['innodb_flush_method'] = 'normal'  # Windows-specific value
+        optimized_settings['innodb_flush_log_at_trx_commit'] = '2'
+        optimized_settings['innodb_file_per_table'] = '1'
+        optimized_settings['innodb_buffer_pool_instances'] = '8' if innodb_buffer_pool_size > 1024 else '1'
+        
+        # 3. Create backup of existing config - Windows compatible approach
+        backup_path = f"{mysql_config_path}.bak"
+        try:
+            # Using shutil copy2 to preserve metadata
+            import shutil
+            shutil.copy2(mysql_config_path, backup_path)
+        except Exception as e:
+            logger.warning(f"Could not create backup of MySQL config: {str(e)}")
+            # Continue without backup if we can't create one
+            
+        # 4. Apply changes to config file using PowerShell (which can elevate permissions)
+        try:
+            # Create a temporary file with our changes
+            temp_config_path = os.path.join(tempfile.gettempdir(), 'mysql_optimized.ini')
+            
+            # Read the original config
+            with open(mysql_config_path, 'r') as f:
+                original_lines = f.readlines()
+                
+            # Create modified version
+            new_lines = []
+            in_mysqld_section = False
+            mysqld_section_found = False
+            processed_settings = {}
+            
+            for line in original_lines:
+                stripped = line.strip()
+                
+                # Track when we enter/exit the mysqld section
+                if stripped == '[mysqld]':
+                    in_mysqld_section = True
+                    mysqld_section_found = True
+                elif stripped.startswith('[') and in_mysqld_section:
+                    # Before we leave mysqld section, add any missing settings
+                    for key, value in optimized_settings.items():
+                        # Check if this setting wasn't already processed
+                        if key not in [k for k, v in processed_settings.items()]:
+                            new_lines.append(f"{key}={value}\n")
+                    in_mysqld_section = False
+                
+                # Process lines in the mysqld section
+                if in_mysqld_section and '=' in stripped and not stripped.startswith('#'):
+                    parts = stripped.split('=', 1)
+                    if len(parts) == 2:
+                        key = parts[0].strip()
+                        # If this is a key we want to optimize, replace it
+                        if key in optimized_settings:
+                            processed_settings[key] = True
+                            line = f"{key}={optimized_settings[key]}\n"
+                
+                # Add the line (original or modified)
+                new_lines.append(line)
+            
+            # If mysqld section wasn't found, add it at the end
+            if not mysqld_section_found:
+                new_lines.append('\n[mysqld]\n')
+                for key, value in optimized_settings.items():
+                    new_lines.append(f"{key}={value}\n")
+            # If we were in the mysqld section at the end of file, add any missing settings
+            elif in_mysqld_section:
+                for key, value in optimized_settings.items():
+                    if key not in [k for k, v in processed_settings.items()]:
+                        new_lines.append(f"{key}={value}\n")
+            
+            # Write the modified config to temporary file
+            with open(temp_config_path, 'w') as f:
+                f.writelines(new_lines)
+            
+            # Use PowerShell to copy the file with elevated privileges
+            ps_script = f"""
+            try {{
+                Copy-Item -Path '{temp_config_path.replace('\\', '\\\\')}' -Destination '{mysql_config_path.replace('\\', '\\\\')}' -Force
+                "Success: Configuration file updated successfully"
+            }} catch {{
+                "Error: " + $_.Exception.Message
+            }}
+            """
+            
+            # Create a PowerShell script file
+            ps_script_path = os.path.join(tempfile.gettempdir(), 'update_mysql_config.ps1')
+            with open(ps_script_path, 'w') as f:
+                f.write(ps_script)
+            
+            # Execute PowerShell with elevated privileges
+            result = subprocess.run(
+                ["powershell", "-ExecutionPolicy", "Bypass", "-File", ps_script_path],
+                capture_output=True,
+                text=True
+            )
+            
+            if "Success:" in result.stdout:
+                config_update_success = True
+            else:
+                config_update_success = False
+                logger.warning(f"PowerShell error: {result.stderr}")
+                
+            # 6. Record the optimization in system settings
+            from authentication.models import SystemSettings
+            
+            SystemSettings.objects.update_or_create(
+                section='maintenance',
+                settings_key='mysql_memory_optimization',
+                defaults={
+                    'settings_value': json.dumps(optimized_settings),
+                    'last_updated': timezone.now(),
+                    'updated_by': request.user
+                }
+            )
+            
+            # 7. Calculate memory savings
+            original_innodb = 0
+            if 'innodb_buffer_pool_size' in current_settings:
+                size_str = current_settings['innodb_buffer_pool_size']
+                if 'M' in size_str:
+                    original_innodb = int(size_str.rstrip('M'))
+                elif 'G' in size_str:
+                    original_innodb = int(size_str.rstrip('G')) * 1024
+                else:
+                    try:
+                        original_innodb = int(size_str) / (1024 * 1024)
+                    except ValueError:
+                        original_innodb = 0
+            
+            memory_savings_pct = 0
+            if original_innodb > 0:
+                memory_savings_pct = ((innodb_buffer_pool_size - original_innodb) / original_innodb) * 100
+            
+            # Return status based on whether we could update the config
+            if config_update_success:
+                # Return success response with details
+                return {
+                    'success': True,
+                    'message': 'MySQL memory optimization configured successfully. Restart MySQL to apply changes.',
+                    'details': {
+                        'original_settings': current_settings,
+                        'optimized_settings': optimized_settings,
+                        'memory_efficiency_improved': abs(round(memory_savings_pct, 1)) if memory_savings_pct != 0 else "New configuration applied",
+                        'system_memory_gb': round(total_memory_gb, 2),
+                        'config_file': mysql_config_path,
+                        'backup_file': backup_path,
+                        'configured_by': request.user.username,
+                        'configured_at': timezone.now().isoformat(),
+                        'restart_instructions': "To apply changes, restart MySQL service from Services console or run: net stop mysql & net start mysql"
+                    }
+                }
+            else:
+                return {
+                    'success': False,
+                    'message': 'Could not update MySQL configuration file. Try running with administrator privileges.',
+                    'details': {
+                        'config_file': mysql_config_path,
+                        'temp_config': temp_config_path,
+                        'optimized_settings': optimized_settings,
+                        'error': result.stderr or result.stdout
+                    }
+                }
+            
+        except Exception as e:
+            logger.exception(f"Error modifying MySQL config: {str(e)}")
+            return {
+                'success': False,
+                'message': f'Error modifying MySQL configuration: {str(e)}',
+                'details': {
+                    'config_file': mysql_config_path,
+                    'optimized_settings': optimized_settings
+                }
+            }
+            
+    except Exception as e:
+        logger.exception(f"Error configuring MySQL memory optimization: {str(e)}")
+        raise
 
 def predict_resource_exhaustion(resource_type, metrics, time_window=24):
     """

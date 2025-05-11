@@ -9,7 +9,7 @@ from . import views_apache_logs
 from .views_apache_logs import apache_logs_view, apache_logs_api
 from .views_mysql_logs import mysql_logs_view, mysql_logs_api
 from . import views_explore_agent
-from .views_predictive import predictive_maintenance_view, resource_predictions_api, system_metrics_api
+from .views_predictive import predictive_maintenance_view, resource_predictions_api, system_metrics_api, automated_tasks_api
 
 urlpatterns = [
     # ... existing URL patterns ...
@@ -95,5 +95,6 @@ urlpatterns = [
     path('predictive-maintenance/', predictive_maintenance_view, name='predictive_maintenance'),
     path('api/resource-predictions/', resource_predictions_api, name='resource_predictions_api'),
     path('api/system-metrics/', system_metrics_api, name='system_metrics_api'),
+    path('api/automated-tasks/', automated_tasks_api, name='automated_tasks_api'),
     
 ]

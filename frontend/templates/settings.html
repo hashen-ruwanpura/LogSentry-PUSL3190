@@ -599,6 +599,44 @@
                                         <input type="number" class="form-control" id="log_retention" name="log_retention" value="{{ log_settings.log_retention }}" min="1" max="365">
                                         <small class="form-text text-muted">Logs older than this period will be automatically purged</small>
                                     </div>
+
+                                    <div class="form-group mb-4">
+                                        <label class="form-label" for="system_log_paths">System Log Paths</label>
+                                        <div class="input-group">
+                                            <input type="text" class="form-control" id="system_log_paths" name="system_log_paths" 
+                                                value="{{ log_settings.system_log_paths|default:'/var/log,C:\\Windows\\Logs' }}" 
+                                                placeholder="Enter comma-separated log paths">
+                                            <button class="btn btn-outline-secondary" type="button" id="add_system_path_btn">
+                                                <i class="fas fa-plus"></i>
+                                            </button>
+                                        </div>
+                                        <small class="form-text text-muted">System log paths to monitor (comma-separated)</small>
+                                    </div>
+
+                                    <div class="form-group mb-4">
+                                        <label class="form-label" for="custom_log_paths">Custom Log Paths</label>
+                                        <div id="custom_paths_container">
+                                            {% for path in log_settings.custom_log_paths %}
+                                            <div class="input-group mb-2 custom-path-group">
+                                                <input type="text" class="form-control custom-path" value="{{ path }}" name="custom_log_paths[]">
+                                                <button class="btn btn-outline-danger remove-path-btn" type="button">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                            {% empty %}
+                                            <div class="input-group mb-2 custom-path-group">
+                                                <input type="text" class="form-control custom-path" name="custom_log_paths[]" 
+                                                    placeholder="Enter additional log path to monitor">
+                                                <button class="btn btn-outline-danger remove-path-btn" type="button">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-outline-primary" id="add_custom_path_btn">
+                                            <i class="fas fa-plus me-1"></i> Add Custom Path
+                                        </button>
+                                    </div>
                                     
                                     <div class="d-flex justify-content-between">
                                         <button type="button" id="testLogPathBtn" class="btn btn-outline-secondary">
@@ -1343,6 +1381,40 @@
                 footer.style.marginTop = '30px';
             }
             fixBanner();
+        }
+
+        // Custom log paths management
+        document.getElementById('add_custom_path_btn').addEventListener('click', function() {
+            const container = document.getElementById('custom_paths_container');
+            const newGroup = document.createElement('div');
+            newGroup.className = 'input-group mb-2 custom-path-group';
+            newGroup.innerHTML = `
+                <input type="text" class="form-control custom-path" name="custom_log_paths[]" 
+                    placeholder="Enter additional log path to monitor">
+                <button class="btn btn-outline-danger remove-path-btn" type="button">
+                    <i class="fas fa-times"></i>
+                </button>
+            `;
+            container.appendChild(newGroup);
+            
+            // Add event listener to the new remove button
+            newGroup.querySelector('.remove-path-btn').addEventListener('click', removePath);
+        });
+
+        // Add event listeners to existing remove buttons
+        document.querySelectorAll('.remove-path-btn').forEach(btn => {
+            btn.addEventListener('click', removePath);
+        });
+
+        function removePath(e) {
+            // Only remove if there's more than one path
+            const pathGroups = document.querySelectorAll('.custom-path-group');
+            if (pathGroups.length > 1) {
+                e.target.closest('.custom-path-group').remove();
+            } else {
+                // If it's the last one, just clear the input
+                e.target.closest('.custom-path-group').querySelector('input').value = '';
+            }
         }
     </script>
 

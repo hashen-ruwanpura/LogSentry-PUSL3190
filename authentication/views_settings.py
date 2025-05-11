@@ -134,6 +134,40 @@ def settings_view(request):
             'slack_alerts': False
         }
     
+    # Get system and custom log paths
+    from authentication.models import SystemSettings
+    
+    system_log_paths = '/var/log,C:\\Windows\\Logs'  # Default
+    custom_log_paths = []
+    
+    try:
+        # Get system log paths
+        system_paths_setting = SystemSettings.objects.filter(
+            section='logs', 
+            settings_key='system_log_paths'
+        ).first()
+        
+        if system_paths_setting and system_paths_setting.settings_value:
+            paths_list = json.loads(system_paths_setting.settings_value)
+            system_log_paths = ','.join(paths_list)
+        
+        # Get custom log paths
+        custom_paths_setting = SystemSettings.objects.filter(
+            section='logs', 
+            settings_key='custom_log_paths'
+        ).first()
+        
+        if custom_paths_setting and custom_paths_setting.settings_value:
+            custom_log_paths = json.loads(custom_paths_setting.settings_value)
+    except Exception as e:
+        logger.error(f"Error loading log path settings: {str(e)}")
+    
+    # Update log_settings with the path information
+    log_settings.update({
+        'system_log_paths': system_log_paths,
+        'custom_log_paths': custom_log_paths
+    })
+    
     # Build context
     context = {
         'user': request.user,
@@ -189,7 +223,38 @@ def save_log_settings(request):
         mysql_log_path = request.POST.get('mysql_log_path', '').strip()
         log_retention = int(request.POST.get('log_retention', 30))
         
-        logger.info(f"Received log paths: Apache={apache_log_path}, MySQL={mysql_log_path}")
+        # Get system log paths (comma-separated)
+        system_log_paths = request.POST.get('system_log_paths', '/var/log,C:\\Windows\\Logs').strip()
+        system_log_paths_list = [path.strip() for path in system_log_paths.split(',') if path.strip()]
+        
+        # Get custom log paths from multi-value form field
+        custom_log_paths = request.POST.getlist('custom_log_paths[]')
+        custom_log_paths_list = [path.strip() for path in custom_log_paths if path.strip()]
+        
+        # Save system and custom log paths to settings
+        from authentication.models import SystemSettings
+        
+        # Save system log paths
+        SystemSettings.objects.update_or_create(
+            section='logs',
+            settings_key='system_log_paths',
+            defaults={
+                'settings_value': json.dumps(system_log_paths_list),
+                'last_updated': timezone.now(),
+                'updated_by': request.user
+            }
+        )
+        
+        # Save custom log paths
+        SystemSettings.objects.update_or_create(
+            section='logs',
+            settings_key='custom_log_paths',
+            defaults={
+                'settings_value': json.dumps(custom_log_paths_list),
+                'last_updated': timezone.now(),
+                'updated_by': request.user
+            }
+        )
         
         # Create media directory for file uploads
         media_root = getattr(settings, 'MEDIA_ROOT', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'media'))
