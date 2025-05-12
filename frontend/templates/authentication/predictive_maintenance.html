@@ -922,7 +922,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 
     <script>
-        // Replace the fetchResourcePredictions function with this implementation
+        // Update the fetchResourcePredictions function
         function fetchResourcePredictions() {
             // Show loading indicators
             document.getElementById('prediction-refresh-btn').querySelector('i').classList.add('fa-spin');
@@ -936,20 +936,38 @@
             })
             .then(response => response.json())
             .then(data => {
+                console.log("Received metrics data:", data);
+                
                 // Update CPU metrics
                 updateResourceMetrics('cpu', data.cpu);
                 
                 // Update memory metrics
                 updateResourceMetrics('memory', data.memory);
                 
-                // Update disk metrics
+                // Update disk metrics with special handling
                 updateResourceMetrics('disk', data.disk);
+                ensureDiskUsageUpdates(data.disk);
                 
                 // Update log volume metrics
                 updateResourceMetrics('log-volume', data.log_volume);
                 
                 // Update gauge charts
                 updateGaugeCharts(data);
+                
+                // Update prediction cards with real data
+                updatePredictionCard('CPU Usage Prediction', data.cpu);
+                updatePredictionCard('Memory Usage Prediction', data.memory);
+                updatePredictionCard('Disk Usage Prediction', data.disk);
+                updatePredictionCard('Log Volume Prediction', data.log_volume);
+                
+                // Update analysis text with dynamic data
+                updateAnalysisText('CPU Usage Prediction', data.cpu);
+                updateAnalysisText('Memory Usage Prediction', data.memory);
+                updateAnalysisText('Disk Usage Prediction', data.disk);
+                updateAnalysisText('Log Volume Prediction', data.log_volume);
+                
+                // Update system health summary
+                updateSystemHealthSummary(data);
                 
                 // Update last refresh time
                 document.getElementById('last-update-time').textContent = new Date().toLocaleTimeString();
@@ -1056,7 +1074,7 @@
                 }
             } else if (resourceType === 'log-volume' && data.apache_size !== undefined) {
                 // Find the Log Volume card by looking for the heading text
-                const logVolumeCard = findCardByHeaderText('Log Volume');
+                const logVolumeCard = findCardByHeaderText('Log Volume Prediction');
                 
                 // Update the content if we found the card
                 if (logVolumeCard) {
@@ -1970,6 +1988,141 @@
         }
 
         // Function to update the system health summary table
+        function updateSystemHealthSummary(data) {
+            const summaryTable = document.querySelector('.table-hover tbody');
+            if (!summaryTable) return;
+            
+            // Get rows for each resource
+            const memoryRow = summaryTable.rows[0];  // Memory row
+            const diskRow = summaryTable.rows[1];    // Disk row
+            const cpuRow = summaryTable.rows[2];     // CPU row
+            const logVolumeRow = summaryTable.rows[3]; // Log volume row
+            
+            // Update CPU row
+            if (cpuRow && data.cpu) {
+                cpuRow.cells[1].textContent = `${data.cpu.usage.toFixed(1)}%`;
+                
+                // Update trend
+                if (data.cpu.trend && data.cpu.trend_value) {
+                    const trendCell = cpuRow.cells[3];
+                    let trendHTML = '';
+                    let trendClass = 'text-success';
+                    
+                    if (data.cpu.trend === 'increasing') {
+                        trendHTML = `<i class="fas fa-arrow-up"></i> +${data.cpu.trend_value.toFixed(1)}%/day`;
+                        trendClass = 'text-warning';
+                    } else if (data.cpu.trend === 'decreasing') {
+                        trendHTML = `<i class="fas fa-arrow-down"></i> -${Math.abs(data.cpu.trend_value).toFixed(1)}%/day`;
+                        trendClass = 'text-success';
+                    } else {
+                        trendHTML = `<i class="fas fa-arrow-right"></i> ${data.cpu.trend_value.toFixed(1)}%/day`;
+                    }
+                    
+                    trendCell.innerHTML = `<span class="${trendClass}">${trendHTML}</span>`;
+                }
+                
+                // Update prediction based on trend
+                if (data.cpu.trend_value > 0 && data.cpu.usage > 70) {
+                    const daysToThreshold = Math.ceil((85 - data.cpu.usage) / data.cpu.trend_value);
+                    if (daysToThreshold < 7) {
+                        cpuRow.cells[4].textContent = `Will reach threshold in ${daysToThreshold} days`;
+                        cpuRow.cells[5].innerHTML = '<span class="badge bg-warning">Warning</span>';
+                    } else {
+                        cpuRow.cells[4].textContent = 'No exhaustion predicted';
+                        cpuRow.cells[5].innerHTML = '<span class="badge bg-success">Normal</span>';
+                    }
+                } else {
+                    cpuRow.cells[4].textContent = 'No exhaustion predicted';
+                    cpuRow.cells[5].innerHTML = '<span class="badge bg-success">Normal</span>';
+                }
+            }
+            
+            // Update Memory row
+            if (memoryRow && data.memory) {
+                memoryRow.cells[1].textContent = `${data.memory.usage.toFixed(1)}%`;
+                
+                // Update trend
+                if (data.memory.trend && data.memory.trend_value) {
+                    const trendCell = memoryRow.cells[3];
+                    let trendHTML = '';
+                    let trendClass = 'text-success';
+                    
+                    if (data.memory.trend === 'increasing') {
+                        trendHTML = `<i class="fas fa-arrow-up"></i> +${data.memory.trend_value.toFixed(1)}%/day`;
+                        trendClass = 'text-warning';
+                    } else if (data.memory.trend === 'decreasing') {
+                        trendHTML = `<i class="fas fa-arrow-down"></i> -${Math.abs(data.memory.trend_value).toFixed(1)}%/day`;
+                        trendClass = 'text-success';
+                    } else {
+                        trendHTML = `<i class="fas fa-arrow-right"></i> ${data.memory.trend_value.toFixed(1)}%/day`;
+                    }
+                    
+                    trendCell.innerHTML = `<span class="${trendClass}">${trendHTML}</span>`;
+                }
+                
+                // Update prediction based on trend
+                if (data.memory.trend_value > 0) {
+                    const daysToThreshold = Math.ceil((90 - data.memory.usage) / data.memory.trend_value);
+                    if (daysToThreshold < 7) {
+                        memoryRow.cells[4].textContent = `Will reach threshold in ${daysToThreshold} days`;
+                        memoryRow.cells[5].innerHTML = '<span class="badge bg-warning">Warning</span>';
+                    } else {
+                        memoryRow.cells[4].textContent = `Will reach threshold in ${daysToThreshold} days`;
+                        if (daysToThreshold < 14) {
+                            memoryRow.cells[5].innerHTML = '<span class="badge bg-warning">Warning</span>';
+                        } else {
+                            memoryRow.cells[5].innerHTML = '<span class="badge bg-success">Normal</span>';
+                        }
+                    }
+                } else {
+                    memoryRow.cells[4].textContent = 'No exhaustion predicted';
+                    memoryRow.cells[5].innerHTML = '<span class="badge bg-success">Normal</span>';
+                }
+            }
+            
+            // Log Volume row was already handled in the disk update function
+            
+            if (logVolumeRow && data.log_volume) {
+                logVolumeRow.cells[1].textContent = `${data.log_volume.usage.toFixed(1)}%`;
+                
+                // Update trend
+                if (data.log_volume.trend && data.log_volume.trend_value !== undefined) {
+                    const trendCell = logVolumeRow.cells[3];
+                    let trendHTML = '';
+                    let trendClass = 'text-success';
+                    
+                    if (data.log_volume.trend === 'increasing') {
+                        trendHTML = `<i class="fas fa-arrow-up"></i> +${data.log_volume.trend_value.toFixed(1)}%/day`;
+                        trendClass = 'text-warning';
+                    } else if (data.log_volume.trend === 'decreasing') {
+                        trendHTML = `<i class="fas fa-arrow-down"></i> -${Math.abs(data.log_volume.trend_value).toFixed(1)}%/day`;
+                        trendClass = 'text-success';
+                    } else {
+                        trendHTML = `<i class="fas fa-arrow-right"></i> ${data.log_volume.trend_value.toFixed(1)}%/day`;
+                    }
+                    
+                    trendCell.innerHTML = `<span class="${trendClass}">${trendHTML}</span>`;
+                }
+                
+                // Update prediction based on trend
+                const trend = data.log_volume.trend_value || 0;
+                if (trend > 0) {
+                    const daysToThreshold = Math.ceil((90 - data.log_volume.usage) / trend);
+                    logVolumeRow.cells[4].textContent = `Will reach threshold in ${daysToThreshold} days`;
+                    
+                    if (daysToThreshold < 7) {
+                        logVolumeRow.cells[5].innerHTML = '<span class="badge bg-warning">Warning</span>';
+                    } else {
+                        logVolumeRow.cells[5].innerHTML = '<span class="badge bg-success">Normal</span>';
+                    }
+                } else {
+                    logVolumeRow.cells[4].textContent = 'No exhaustion predicted';
+                    logVolumeRow.cells[5].innerHTML = '<span class="badge bg-success">Normal</span>';
+                }
+            }
+        }
+
+        // Function to update the system health summary table
         function updateSummaryTable() {
             const table = document.querySelector('.table-hover tbody');
             if (!table) return;
@@ -2040,6 +2193,221 @@
                 }
             }
             return null;
+        }
+
+        // Utility function to find a card by its header text
+        function findCardByHeaderText(headerText) {
+            const cards = document.querySelectorAll('.resource-card');
+            for (const card of cards) {
+                const header = card.querySelector('.card-header h5');
+                if (header && header.textContent.includes(headerText)) {
+                    return card;
+                }
+            }
+            return null;
+        }
+
+        // Function to update analysis text with data from API
+        function updateAnalysisText(cardTitle, data) {
+            if (!data || !data.analysis) return;
+            
+            // Find the card by title
+            const cards = document.querySelectorAll('.resource-card');
+            let card = null;
+            
+            for (const c of cards) {
+                const header = c.querySelector('.card-header h5');
+                if (header && header.textContent === cardTitle) {
+                    card = c;
+                    break;
+                }
+            }
+            
+            if (!card) return;
+            
+            // Get the resource forecast section
+            const resourceForecast = card.querySelector('.resource-forecast');
+            if (!resourceForecast) return;
+            
+            // Update confidence value
+            const confidenceBadge = resourceForecast.querySelector('.forecast-header .badge');
+            if (confidenceBadge && data.analysis.confidence) {
+                confidenceBadge.textContent = `${data.analysis.confidence}% Confidence`;
+            }
+            
+            // Update analysis text
+            const analysisParagraph = resourceForecast.querySelector('p.mb-2');
+            if (analysisParagraph && data.analysis.text) {
+                analysisParagraph.textContent = data.analysis.text;
+            }
+            
+            // Update recommendations
+            if (data.analysis.recommendation) {
+                const recommendations = resourceForecast.querySelector('ul.mb-0');
+                if (recommendations) {
+                    // Clear existing recommendations
+                    recommendations.innerHTML = '';
+                    
+                    // Add new recommendations
+                    data.analysis.recommendation.forEach(rec => {
+                        const li = document.createElement('li');
+                        li.textContent = rec;
+                        recommendations.appendChild(li);
+                    });
+                }
+            }
+            
+            // Special handling for log volume breakdown
+            if (cardTitle === 'Log Volume Prediction' && data.analysis.log_breakdown) {
+                // Find the log breakdown section (assuming it's the first list)
+                const logBreakdown = resourceForecast.querySelector('ul');
+                if (logBreakdown) {
+                    const apache = data.analysis.log_breakdown.apache || '0.0 GB/week';
+                    const mysql = data.analysis.log_breakdown.mysql || '0.0 GB/week';
+                    const system = data.analysis.log_breakdown.system || '0.0 GB/week';
+                    
+                    logBreakdown.innerHTML = `
+                        <li>Apache Access Logs: ${data.apache_size} GB (${apache})</li>
+                        <li>MySQL Logs: ${data.mysql_size} GB (${mysql})</li>
+                        <li>System Logs: ${data.system_size} GB (${system})</li>
+                    `;
+                }
+            }
+        }
+
+        // Function to update prediction card values
+        function updatePredictionCard(cardTitle, data) {
+            if (!data) return;
+            
+            // Find the card by title
+            const cards = document.querySelectorAll('.resource-card');
+            let card = null;
+            
+            for (const c of cards) {
+                const header = c.querySelector('.card-header h5');
+                if (header && header.textContent === cardTitle) {
+                    card = c;
+                    break;
+                }
+            }
+            
+            if (!card) return;
+            
+            // Update usage percentage
+            const usageHeading = card.querySelector('.card-body h3');
+            if (usageHeading && data.usage !== undefined) {
+                usageHeading.textContent = `${data.usage.toFixed(1)}% Used`;
+            }
+            
+            // Update status badge based on usage
+            const statusBadge = card.querySelector('.card-header .badge');
+            if (statusBadge) {
+                if (data.usage > 80) {
+                    statusBadge.className = 'badge bg-warning';
+                    statusBadge.textContent = 'Warning';
+                } else {
+                    statusBadge.className = 'badge bg-success';
+                    statusBadge.textContent = 'Normal';
+                }
+            }
+            
+            // Update prediction text based on trend
+            const predictionText = card.querySelector('.card-body p.mb-0.text-warning, .card-body p.mb-0.text-success');
+            if (predictionText) {
+                if (data.trend === 'increasing' && data.usage > 70) {
+                    predictionText.className = 'mb-0 text-warning mt-2';
+                    
+                    // Calculate days to threshold based on trend_value
+                    let daysToThreshold = 30;
+                    if (data.trend_value > 0) {
+                        let threshold = cardTitle.includes('Disk') ? 95 : 90;
+                        daysToThreshold = Math.ceil((threshold - data.usage) / data.trend_value);
+                        daysToThreshold = Math.max(1, Math.min(daysToThreshold, 30));  // Keep between 1 and 30 days
+                    }
+                    
+                    predictionText.innerHTML = `<i class="fas fa-exclamation-triangle me-1"></i> Predicted to reach threshold in ${daysToThreshold} days`;
+                } else {
+                    predictionText.className = 'mb-0 text-success mt-2';
+                    predictionText.innerHTML = '<i class="fas fa-check-circle me-1"></i> No exhaustion predicted within 7 days';
+                }
+            }
+            
+            // Update details text for memory and disk
+            if (data.used !== undefined && data.total !== undefined) {
+                const detailsText = card.querySelector('.card-body p.mb-0.text-muted');
+                if (detailsText) {
+                    if (cardTitle.includes('Memory') || cardTitle.includes('Disk')) {
+                        detailsText.textContent = `Current usage of ${data.used} GB / ${data.total} GB`;
+                    } else if (cardTitle.includes('Log')) {
+                        detailsText.textContent = `${data.used} GB of allocated log space`;
+                    }
+                }
+            }
+        }
+
+        // Special function to ensure disk usage updates correctly
+        function ensureDiskUsageUpdates(diskData) {
+            if (!diskData) return;
+            
+            // 1. Update the top summary card
+            const diskValueElement = document.getElementById('current-disk');
+            if (diskValueElement) {
+                diskValueElement.textContent = `${diskData.usage.toFixed(1)}%`;
+            }
+            
+            // 2. Update the disk prediction card - FIX THIS LINE THAT'S CAUSING THE ERROR
+            const diskCard = findCardByHeaderText('Disk Usage Prediction');
+            
+            if (diskCard) {
+                const usageHeading = diskCard.querySelector('.card-body h3');
+                if (usageHeading) {
+                    usageHeading.textContent = `${diskData.usage.toFixed(1)}% Used`;
+                }
+                
+                if (diskData.used !== undefined && diskData.total !== undefined) {
+                    const detailsText = diskCard.querySelector('.card-body p.mb-0.text-muted');
+                    if (detailsText) {
+                        detailsText.textContent = `Current usage of ${diskData.used} GB / ${diskData.total} GB`;
+                    }
+                }
+                
+                // Update gauge chart
+                if (window.diskGauge) {
+                    window.diskGauge.data.datasets[0].data = [diskData.usage, 100 - diskData.usage];
+                    updateGaugeColors(window.diskGauge, diskData.usage);
+                    window.diskGauge.update();
+                }
+            }
+            
+            // 3. Update system health summary table
+            const summaryTable = document.querySelector('.table-hover tbody');
+            if (summaryTable && summaryTable.rows.length > 1) {
+                const diskRow = summaryTable.rows[1];  // Disk is typically the second row
+                if (diskRow) {
+                    diskRow.cells[1].textContent = `${diskData.usage.toFixed(1)}%`;
+                    
+                    // Update trend display in summary table
+                    if (diskData.trend && diskData.trend_value) {
+                        const trendCell = diskRow.cells[3];
+                        if (trendCell) {
+                            let trendHTML = '';
+                            let trendClass = 'text-success';
+                            
+                            if (diskData.trend === 'increasing') {
+                                trendHTML = `<i class="fas fa-arrow-up"></i> +${diskData.trend_value.toFixed(1)}%/day`;
+                                trendClass = 'text-warning';
+                            } else if (diskData.trend === 'decreasing') {
+                                trendHTML = `<i class="fas fa-arrow-down"></i> -${Math.abs(diskData.trend_value).toFixed(1)}%/day`;
+                                trendClass = 'text-success';
+                            } else {
+                                trendHTML = `<i class="fas fa-arrow-right"></i> ${diskData.trend_value.toFixed(1)}%/day`;
+                            }
+                            
+                            trendCell.innerHTML = `<span class="${trendClass}">${trendHTML}</span>`;
+                        }
+                    }
+                }
+            }
         }
     </script>
 </body>
