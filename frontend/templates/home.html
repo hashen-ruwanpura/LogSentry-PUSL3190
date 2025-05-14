@@ -1,11 +1,14 @@
 <!DOCTYPE html>
+{% load static %}
 <html lang="en">
 <head>
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LogSentry - Vigilant log analysis for enterprise security</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="{% static 'js/notifications.js' %}"></script>
     <style>
         :root {
             --primary-color: #3f51b5;
@@ -820,9 +823,34 @@
             padding-right: 0.75rem;
             display: inline-block;
         }
+
+        /* Add notification container styles with high specificity */
+        body #notification-container {
+            position: fixed !important;
+            top: 20px !important;
+            right: 20px !important;
+            z-index: 999999 !important;
+            width: 350px !important;
+            max-width: 90% !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 10px !important;
+            pointer-events: auto !important;
+        }
+        
+        /* Animation keyframes */
+        @keyframes bounceIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            50% { transform: scale(1.05); }
+            70% { transform: scale(0.95); }
+            100% { transform: scale(1); opacity: 1; }
+        }
     </style>
 </head>
 <body>
+    <!-- Notification Container -->
+    <div id="notification-container"></div>
+
     <!-- Navigation -->
     <nav class="navbar navbar-expand-lg">
         <div class="container">
@@ -1311,6 +1339,16 @@
         </div>
     </footer>
 
+    <!-- Notification Container -->
+    <div id="notification-container"></div>
+
+    <!-- Add this button somewhere in the page for testing -->
+    <div style="position: fixed; bottom: 20px; right: 20px; z-index: 1000; display: none;">
+        <button id="test-notification-btn" class="btn btn-primary" onclick="testNotificationSystem()">
+            Test Notification
+        </button>
+    </div>
+
     <!-- Login Modal -->
     <div class="modal fade" id="loginModal" tabindex="-1" aria-labelledby="loginModalLabel" aria-hidden="true">
         <div class="modal-dialog">
@@ -1333,6 +1371,8 @@
 
     <!-- Bootstrap and other scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/js/all.min.js"></script> <!-- For notification icons -->
+    <script src="{% static 'js/notifications.js' %}"></script>
     <script>
         // Store authentication as string values
         const isLoggedInValue = "{% if user.is_authenticated %}true{% else %}false{% endif %}";
@@ -1405,6 +1445,61 @@
                     });
                 }
             });
+        });
+
+        // Initialize notification system when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check for admin status
+            const isAdmin = "{% if user.is_superuser %}true{% else %}false{% endif %}" === "true";
+            
+            // Show test button only for admins (adjust as needed)
+            if (isAdmin) {
+                document.getElementById('test-notification-btn').parentElement.style.display = 'block';
+            }
+            
+            // Additional initialization...
+        });
+    </script>
+    <script>
+    // Simple backup notification test function
+    function testSimpleNotification(severity) {
+        alert(`TEST ${severity.toUpperCase()} NOTIFICATION: This is a simple test alert.`);
+        
+        if (window.Notification && Notification.permission === 'granted') {
+            new Notification(`Test ${severity.toUpperCase()} Alert`, {
+                body: 'This is a test notification',
+                icon: '/static/images/notification-icon.png'
+            });
+            return true;
+        } else if (window.Notification) {
+            Notification.requestPermission();
+        }
+        return false;
+    }
+</script>
+    <script>
+        // Initialize notification system directly
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log("Initializing notification system directly");
+            
+            // Initialize the notification system
+            if (typeof NotificationSystem !== 'undefined') {
+                window.notificationSystem = new NotificationSystem({
+                    redirectUrl: '/notifications/',
+                    autoGroupSimilar: true,
+                    desktopNotifications: false
+                });
+                console.log("Notification system initialized successfully");
+            } else {
+                console.warn("NotificationSystem class not found - notifications may not work");
+                // Try again after a delay
+                setTimeout(() => {
+                    if (typeof NotificationSystem !== 'undefined') {
+                        window.notificationSystem = new NotificationSystem();
+                        console.log("Notification system initialized after delay");
+                    }
+                }, 1000);
+            }
         });
     </script>
 </body>

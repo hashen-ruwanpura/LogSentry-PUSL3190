@@ -55,7 +55,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'LogDetection.middleware.DebugMiddleware', 
+    'LogDetection.middleware.NotificationMiddleware',
 ]
 
 ROOT_URLCONF = 'LogDetection.urls'
@@ -83,6 +83,14 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'LogDetection.wsgi.application'
+ASGI_APPLICATION = 'LogDetection.asgi.application'
+
+# Channel layers configuration
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    },
+}
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
@@ -134,24 +142,15 @@ LOGIN_REDIRECT_URL = '/'  # Redirect to homepage after login
 LOGOUT_REDIRECT_URL = '/login/'  # Redirect to login page after logout
 SIGNUP_REDIRECT_URL = '/login/'  # Redirect to login page after signup
 
-# WebSocket settings
-ASGI_APPLICATION = "routing.application"
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer"
-        # For production, consider using Redis:
-        # "BACKEND": "channels_redis.core.RedisChannelLayer",
-        # "CONFIG": {
-        #     "hosts": [("127.0.0.1", 6379)],
-        # },
-    },
-}
+# Update the login redirect settings
+LOGIN_URL = '/login/'  # URL where users should be redirected for login
 
 # Email Configuration
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
 EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
 EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
 EMAIL_HOST_USER = config('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD') 
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='Log Analyzer <noreply.loganalyzer@gmail.com>')
@@ -251,4 +250,11 @@ KAFKA_RAW_LOGS_TOPIC = config('KAFKA_RAW_LOGS_TOPIC', default='raw_logs')
 KAFKA_APACHE_LOGS_TOPIC = config('KAFKA_APACHE_LOGS_TOPIC', default='apache_logs')
 KAFKA_MYSQL_LOGS_TOPIC = config('KAFKA_MYSQL_LOGS_TOPIC', default='mysql_logs')
 KAFKA_CONSUMER_GROUP = config('KAFKA_CONSUMER_GROUP', default='log_parser_group')
+
+# Required API Keys for notifications
+FCM_API_KEY = config('FCM_API_KEY', default='')
+SITE_URL = config('SITE_URL', default='http://localhost:8000')
+
+# Add to LogDetection/settings.py for development only
+CELERY_TASK_ALWAYS_EAGER = True  # Run tasks synchronously
 

@@ -9,6 +9,9 @@ from django.utils.html import strip_tags
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 import logging
+import requests
+import json
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -245,501 +248,404 @@ def create_notification_preferences(sender, instance, created, **kwargs):
     if created:
         NotificationPreference.objects.create(user=instance)
 
+class NotificationEvent(models.Model):
+    """Track notification events for analytics purposes"""
+    EVENT_TYPES = [
+        ('sent', 'Sent'),
+        ('delivered', 'Delivered'),
+        ('opened', 'Opened'),
+        ('clicked', 'Clicked'),
+        ('failed', 'Failed'),
+    ]
+    
+    NOTIFICATION_TYPES = [
+        ('email', 'Email'),
+        ('in_app', 'In-App'),
+        ('push', 'Push Notification'),
+        ('sms', 'SMS'),
+        ('slack', 'Slack'),
+    ]
+    
+    event_type = models.CharField(max_length=20, choices=EVENT_TYPES)
+    notification_type = models.CharField(max_length=20, choices=NOTIFICATION_TYPES)
+    alert_id = models.IntegerField(null=True, blank=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    details = models.JSONField(null=True, blank=True)
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['notification_type']),
+            models.Index(fields=['event_type']),
+            models.Index(fields=['timestamp']),
+            models.Index(fields=['user']),
+        ]
+
 class EmailNotifier:
     """Service class to handle sending email notifications"""
     
     # HTML email template stored as class variable to avoid creating separate files
-    ALERT_EMAIL_TEMPLATE = '''
+    HTML_TEMPLATE = """
     <!DOCTYPE html>
     <html>
     <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta charset="UTF-8">
         <title>{{ subject }}</title>
         <style>
             body {
-                font-family: Arial, sans-serif;
+                font-family: 'Segoe UI', Arial, sans-serif;
                 line-height: 1.6;
                 color: #333;
                 margin: 0;
                 padding: 0;
+                background-color: #f5f5f5;
             }
             .container {
-                width: 100%;
                 max-width: 600px;
-                margin: 0 auto;
-                padding: 20px;
+                margin: 20px auto;
+                border-radius: 8px;
+                overflow: hidden;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                background-color: #fff;
             }
             .header {
-                background-color: #f8f9fa;
-                padding: 20px;
-                text-align: center;
-                border-bottom: 3px solid #3f51b5;
+                background-color: #{{ color }};
+                color: white;
+                padding: 20px 25px;
+                border-radius: 5px 5px 0 0;
+            }
+            .header h1 {
+                margin: 0;
+                font-size: 24px;
+                font-weight: 600;
             }
             .content {
-                padding: 20px;
+                background-color: #ffffff;
+                padding: 25px;
+                border: 1px solid #ddd;
+                border-top: none;
             }
-            .footer {
+            .alert-badge {
+                display: inline-block;
+                padding: 6px 12px;
+                background-color: #{{ color }};
+                color: white;
+                border-radius: 4px;
+                font-weight: bold;
+                margin-bottom: 15px;
+                font-size: 14px;
+                letter-spacing: 0.5px;
+            }
+            .alert-info {
                 background-color: #f8f9fa;
-                padding: 20px;
-                text-align: center;
-                font-size: 12px;
-                color: #6c757d;
+                border-left: 4px solid #{{ color }};
+                padding: 12px 15px;
+                margin: 15px 0;
+                border-radius: 0 4px 4px 0;
             }
-            .alert-critical {
-                border-left: 4px solid #dc3545;
-                background-color: #f8d7da;
-                padding: 15px;
-            }
-            .alert-high {
-                border-left: 4px solid #fd7e14;
-                background-color: #fff3cd;
-                padding: 15px;
-            }
-            .alert-medium {
-                border-left: 4px solid #ffc107;
-                background-color: #fff9e6;
-                padding: 15px;
-            }
-            .alert-low {
-                border-left: 4px solid #17a2b8;
-                background-color: #d1ecf1;
-                padding: 15px;
-            }
-            .btn {
+            .action-btn {
                 display: inline-block;
                 background-color: #3f51b5;
                 color: white;
-                padding: 10px 20px;
                 text-decoration: none;
+                padding: 12px 24px;
                 border-radius: 4px;
-                margin-top: 15px;
+                margin-top: 20px;
+                font-weight: 600;
+                text-align: center;
+                transition: background-color 0.3s;
             }
-            table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-top: 15px;
+            .action-btn:hover {
+                background-color: #303f9f;
             }
-            table th, table td {
-                padding: 8px;
-                text-align: left;
-                border-bottom: 1px solid #dee2e6;
+            .footer {
+                margin-top: 25px;
+                padding-top: 15px;
+                font-size: 13px;
+                color: #777;
+                text-align: center;
+                border-top: 1px solid #eee;
             }
-            table th {
+            .timestamp {
                 background-color: #f8f9fa;
+                padding: 8px;
+                border-radius: 4px;
+                font-size: 12px;
+                text-align: center;
+                margin-top: 10px;
+                color: #666;
+            }
+            .meta-info {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+                margin: 15px 0;
+            }
+            .meta-item {
+                padding: 8px 12px;
+                background-color: #f8f9fa;
+                border-radius: 4px;
+            }
+            .meta-item strong {
+                display: block;
+                font-size: 13px;
+                color: #555;
+            }
+            .meta-item span {
+                font-size: 15px;
+                word-break: break-word;
+            }
+            .cta-container {
+                text-align: center;
+                margin: 25px 0 15px;
+            }
+            .message-content {
+                line-height: 1.7;
             }
         </style>
     </head>
     <body>
         <div class="container">
             <div class="header">
-                <h1>Security Alert</h1>
+                <h1>{{ title }}</h1>
             </div>
             <div class="content">
-                <div class="alert-{{ severity }}">
-                    <h2>{{ subject }}</h2>
-                    <p>{{ message|linebreaks }}</p>
-                    
-                    {% if alert_details %}
-                    <table>
-                        <tr>
-                            <th>Alert Severity</th>
-                            <td>{{ severity|title }}</td>
-                        </tr>
-                        {% if source_ip %}
-                        <tr>
-                            <th>Source IP</th>
-                            <td>{{ source_ip }}</td>
-                        </tr>
-                        {% endif %}
-                        {% if affected_system %}
-                        <tr>
-                            <th>Affected System</th>
-                            <td>{{ affected_system }}</td>
-                        </tr>
-                        {% endif %}
-                        {% if timestamp %}
-                        <tr>
-                            <th>Detected At</th>
-                            <td>{{ timestamp }}</td>
-                        </tr>
-                        {% endif %}
-                    </table>
-                    {% endif %}
-                    
-                    {% if alert_id %}
-                    <a href="{{ base_url }}/alert-detail/{{ alert_id }}/" class="btn">View Alert Details</a>
-                    {% endif %}
-                </div>
-            </div>
-            <div class="footer">
-                <p>This is an automated message from your Log Detection Platform.</p>
-                <p>© {% now "Y" %} Log Detection Platform | Please do not reply to this email.</p>
-            </div>
-        </div>
-    </body>
-    </html>
-    '''
-    
-    INCIDENT_EMAIL_TEMPLATE = '''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>{{ subject }}</title>
-        <style>
-            body {
-                font-family: Arial, sans-serif;
-                line-height: 1.6;
-                color: #333;
-                margin: 0;
-                padding: 0;
-            }
-            .container {
-                width: 100%;
-                max-width: 600px;
-                margin: 0 auto;
-                padding: 20px;
-            }
-            .header {
-                background-color: #f8f9fa;
-                padding: 20px;
-                text-align: center;
-                border-bottom: 3px solid #3f51b5;
-            }
-            .content {
-                padding: 20px;
-            }
-            .footer {
-                background-color: #f8f9fa;
-                padding: 20px;
-                text-align: center;
-                font-size: 12px;
-                color: #6c757d;
-            }
-            .incident-critical {
-                border-left: 4px solid #dc3545;
-                background-color: #f8d7da;
-                padding: 15px;
-            }
-            .incident-high {
-                border-left: 4px solid #fd7e14;
-                background-color: #fff3cd;
-                padding: 15px;
-            }
-            .incident-medium {
-                border-left: 4px solid #ffc107;
-                background-color: #fff9e6;
-                padding: 15px;
-            }
-            .incident-low {
-                border-left: 4px solid #17a2b8;
-                background-color: #d1ecf1;
-                padding: 15px;
-            }
-            .btn {
-                display: inline-block;
-                background-color: #3f51b5;
-                color: white;
-                padding: 10px 20px;
-                text-decoration: none;
-                border-radius: 4px;
-                margin-top: 15px;
-            }
-            table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-top: 15px;
-            }
-            table th, table td {
-                padding: 8px;
-                text-align: left;
-                border-bottom: 1px solid #dee2e6;
-            }
-            table th {
-                background-color: #f8f9fa;
-            }
-            .related-alerts {
-                margin-top: 15px;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>Security Incident</h1>
-            </div>
-            <div class="content">
-                <div class="incident-{{ severity }}">
-                    <h2>{{ subject }}</h2>
-                    <p>{{ message|linebreaks }}</p>
-                    
-                    <table>
-                        <tr>
-                            <th>Incident ID</th>
-                            <td>#{{ incident_id }}</td>
-                        </tr>
-                        <tr>
-                            <th>Severity</th>
-                            <td>{{ severity|title }}</td>
-                        </tr>
-                        <tr>
-                            <th>Status</th>
-                            <td>{{ status|title }}</td>
-                        </tr>
-                        <tr>
-                            <th>Start Time</th>
-                            <td>{{ start_time }}</td>
-                        </tr>
-                        {% if affected_systems %}
-                        <tr>
-                            <th>Affected Systems</th>
-                            <td>{{ affected_systems }}</td>
-                        </tr>
-                        {% endif %}
-                    </table>
-                    
-                    {% if related_alerts %}
-                    <div class="related-alerts">
-                        <h3>Related Alerts</h3>
-                        <ul>
-                            {% for alert in related_alerts %}
-                            <li>{{ alert.description }}</li>
-                            {% endfor %}
-                        </ul>
+                <div class="alert-badge">{{ severity }}</div>
+                
+                <div class="message-content">{{ message|linebreaks }}</div>
+                
+                <div class="meta-info">
+                    {% if source_ip %}
+                    <div class="meta-item">
+                        <strong>Source IP:</strong>
+                        <span>{{ source_ip }}</span>
                     </div>
                     {% endif %}
                     
-                    <a href="{{ base_url }}/incidents/{{ incident_id }}/" class="btn">View Incident Details</a>
+                    {% if affected_system %}
+                    <div class="meta-item">
+                        <strong>Affected System:</strong>
+                        <span>{{ affected_system }}</span>
+                    </div>
+                    {% endif %}
+                    
+                    {% if mitre_tactics %}
+                    <div class="meta-item">
+                        <strong>MITRE Tactics:</strong>
+                        <span>{{ mitre_tactics }}</span>
+                    </div>
+                    {% endif %}
+                    
+                    {% if detection_time %}
+                    <div class="meta-item">
+                        <strong>Detection Time:</strong>
+                        <span>{{ detection_time }} ms</span>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="alert-info">
+                    <p>Please take appropriate action based on the severity of this alert.</p>
+                </div>
+                
+                <div class="cta-container">
+                    {% if alert_id %}
+                    <a href="{{ base_url }}/alerts/{{ alert_id }}/" class="action-btn" style="display: inline-block; background-color: #3f51b5; color: #FFFFFF !important; text-decoration: none; padding: 12px 24px; border-radius: 4px; margin-top: 20px; font-weight: 600; text-align: center; font-family: Arial, sans-serif; font-size: 16px; line-height: 1.5;">
+                        <span style="color: #FFFFFF !important; text-decoration: none; display: inline-block;">View Alert Details</span>
+                    </a>
+                    {% endif %}
                 </div>
             </div>
             <div class="footer">
-                <p>This is an automated message from your Log Detection Platform.</p>
-                <p>© {% now "Y" %} Log Detection Platform | Please do not reply to this email.</p>
+                <p>This is an automated security alert from your Log Detection Platform.</p>
+                <div class="timestamp">Time of detection: {{ timestamp }}</div>
             </div>
         </div>
     </body>
     </html>
-    '''
-    
-    @staticmethod
-    def send_alert(subject, message, severity, recipients=None, alert_id=None, source_ip=None, affected_system=None, include_html=True):
-        """
-        Send an email alert about a security event
+    """
+
+    @classmethod
+    def send_alert(cls, subject, message, severity, recipients, alert_id=None, source_ip=None, affected_system=None, mitre_tactics=None, detection_time=None):
+        """Send an email alert using Django's email system"""
+        from django.core.mail import EmailMultiAlternatives
+        from django.utils import timezone
+        from django.conf import settings
+        import logging
         
-        Args:
-            subject: Email subject line
-            message: Plain text message
-            severity: Alert severity (critical, high, medium, low)
-            recipients: List of email recipients (if None, uses default admins)
-            alert_id: ID of the related alert object
-            source_ip: Source IP of the threat (optional)
-            affected_system: Affected system name (optional)
-            include_html: Whether to include HTML version of the email
-        """
-        if recipients is None:
-            # Default to system admins if no recipients specified
-            recipients = [admin[1] for admin in settings.ADMINS]
-            
-        if not recipients:
-            logger.warning("No recipients specified for email alert")
-            return False
-            
-        config = SMTPConfiguration.get_active_config()
-        if not config:
-            logger.error("No active SMTP configuration found")
-            return False
-            
-        # Update Django email settings with our configuration
-        settings.EMAIL_HOST = config.host
-        settings.EMAIL_PORT = config.port
-        settings.EMAIL_HOST_USER = config.username
-        settings.EMAIL_HOST_PASSWORD = config.password
-        settings.EMAIL_USE_TLS = config.use_tls
-        settings.EMAIL_USE_SSL = config.use_ssl
-        settings.DEFAULT_FROM_EMAIL = config.default_from_email
+        logger = logging.getLogger(__name__)
         
-        # Create records for each recipient
-        email_records = []
-        for recipient in recipients:
-            email_alert = EmailAlert(
-                subject=subject,
-                message=message,
-                recipient=recipient,
-                severity=severity,
-                related_alert_id=alert_id
-            )
-            email_alert.save()
-            email_records.append(email_alert)
-            
         try:
-            # Prepare HTML version if requested
-            html_message = None
-            if include_html:
-                from django.template import Context, Template
-                from django.contrib.sites.models import Site
-                
-                # Get base URL for links in email
-                try:
-                    site = Site.objects.get_current()
-                    base_url = f"https://{site.domain}"
-                except:
-                    base_url = settings.BASE_URL if hasattr(settings, 'BASE_URL') else ''
-                
-                context = {
-                    'subject': subject,
-                    'message': message,
-                    'severity': severity,
-                    'alert_id': alert_id,
-                    'source_ip': source_ip,
-                    'affected_system': affected_system,
-                    'timestamp': timezone.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    'base_url': base_url,
-                    'alert_details': True
-                }
-                
-                # Use the inline template instead of a file
-                template = Template(EmailNotifier.ALERT_EMAIL_TEMPLATE)
-                html_message = template.render(Context(context))
+            # Determine color based on severity
+            severity_colors = {
+                'critical': 'dc3545',
+                'high': 'fd7e14',
+                'medium': '17a2b8',
+                'low': '28a745'
+            }
+            color = severity_colors.get(severity.lower(), '17a2b8')
             
-            # Create email message
-            email = EmailMultiAlternatives(
-                subject=subject,
-                body=message,
-                from_email=config.default_from_email,
-                to=recipients
-            )
-            
-            # Attach HTML version if available
-            if html_message:
-                email.attach_alternative(html_message, "text/html")
-                
-            # Send email
-            email.send(fail_silently=False)
-            
-            # Update records
-            for record in email_records:
-                record.status = 'sent'
-                record.sent_at = timezone.now()
-                record.save()
-                
-            logger.info(f"Successfully sent email alert to {len(recipients)} recipients")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error sending email alert: {e}")
-            
-            # Update records with error
-            for record in email_records:
-                record.status = 'failed'
-                record.error_message = str(e)
-                record.save()
-                
-            return False
-    
-    @staticmethod
-    def send_incident_notification(incident, recipients=None):
-        """
-        Send an email notification about a security incident
-        
-        Args:
-            incident: The Incident object
-            recipients: List of email recipients (if None, uses default admins)
-        """
-        if recipients is None:
-            # Default to system admins if no recipients specified
-            recipients = [admin[1] for admin in settings.ADMINS]
-            
-        if not recipients:
-            logger.warning("No recipients specified for incident notification")
-            return False
-        
-        # Format the incident information
-        subject = f"[{incident.severity.upper()}] Security Incident: {incident.name}"
-        message = f"{incident.description}\n\n"
-        message += f"Status: {incident.status}\n"
-        message += f"Start Time: {incident.start_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
-        
-        if incident.affected_ips:
-            message += f"Affected IPs: {incident.affected_ips}\n"
-            
-        if incident.affected_users:
-            message += f"Affected Users: {incident.affected_users}\n"
-            
-        # Add related threats information
-        related_threats_count = incident.threats.count()
-        if related_threats_count > 0:
-            message += f"\nRelated Threats: {related_threats_count}\n"
-            
-            # List first 5 threats
-            for threat in incident.threats.all()[:5]:
-                message += f"- {threat.description[:100]}...\n"
-                
-            if related_threats_count > 5:
-                message += f"... and {related_threats_count - 5} more\n"
-                
-        # Get HTML content
-        try:
-            from django.template import Context, Template
-            from django.contrib.sites.models import Site
-            
-            # Get base URL for links in email
-            try:
-                site = Site.objects.get_current()
-                base_url = f"https://{site.domain}"
-            except:
-                base_url = settings.BASE_URL if hasattr(settings, 'BASE_URL') else ''
-            
+            # Prepare context for HTML template
             context = {
-                'subject': subject,
-                'message': incident.description,
-                'severity': incident.severity,
-                'incident_id': incident.id,
-                'status': incident.status,
-                'start_time': incident.start_time.strftime('%Y-%m-%d %H:%M:%S'),
-                'end_time': incident.end_time.strftime('%Y-%m-%d %H:%M:%S') if incident.end_time else 'Ongoing',
-                'affected_systems': incident.affected_ips,
-                'related_alerts': incident.threats.all()[:5],
-                'base_url': base_url
+                'title': subject,
+                'message': message,
+                'severity': severity.upper(),
+                'color': color,
+                'source_ip': source_ip,
+                'affected_system': affected_system,
+                'mitre_tactics': mitre_tactics,
+                'detection_time': detection_time,
+                'alert_id': alert_id,
+                'base_url': settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://localhost:8000',
+                'timestamp': timezone.now().strftime('%Y-%m-%d %H:%M:%S')
             }
             
-            # Use the inline template instead of a file
-            template = Template(EmailNotifier.INCIDENT_EMAIL_TEMPLATE)
-            html_message = template.render(Context(context))
+            # Render HTML content using template
+            from django.template import Template, Context
+            template = Template(cls.HTML_TEMPLATE)
+            html_content = template.render(Context(context))
             
-            # Configure and send email
-            config = SMTPConfiguration.get_active_config()
-            if not config:
-                logger.error("No active SMTP configuration found")
-                return False
-                
-            # Update Django email settings with our configuration
-            settings.EMAIL_HOST = config.host
-            settings.EMAIL_PORT = config.port
-            settings.EMAIL_HOST_USER = config.username
-            settings.EMAIL_HOST_PASSWORD = config.password
-            settings.EMAIL_USE_TLS = config.use_tls
-            settings.EMAIL_USE_SSL = config.use_ssl
-            settings.DEFAULT_FROM_EMAIL = config.default_from_email
+            # Create plain text version
+            text_content = f"""
+SECURITY ALERT: {subject}
+
+Severity: {severity.upper()}
+
+{message}
+
+{f"Source IP: {source_ip}" if source_ip else ""}
+{f"Affected System: {affected_system}" if affected_system else ""}
+{f"MITRE Tactics: {mitre_tactics}" if mitre_tactics else ""}
+
+{f"Alert ID: {alert_id}" if alert_id else ""}
+{f"View Alert Details: {settings.SITE_URL}/alerts/{alert_id}/" if alert_id and hasattr(settings, 'SITE_URL') else ""}
+
+This is an automated security alert.
+            """
             
-            # Create email message
+            # Create email
             email = EmailMultiAlternatives(
                 subject=subject,
-                body=message,
-                from_email=config.default_from_email,
+                body=text_content,
+                from_email=settings.DEFAULT_FROM_EMAIL,
                 to=recipients
             )
             
-            # Attach HTML version
-            email.attach_alternative(html_message, "text/html")
-                
-            # Send email
-            email.send(fail_silently=False)
+            # Attach HTML alternative
+            email.attach_alternative(html_content, "text/html")
             
-            logger.info(f"Successfully sent incident notification to {len(recipients)} recipients")
+            # Send email
+            email.send()
+            
+            logger.info(f"Email alert sent to {', '.join(recipients)}")
             return True
             
         except Exception as e:
-            logger.error(f"Error sending incident notification: {e}")
+            logger.error(f"Failed to send email alert: {e}")
             return False
+
+class PushNotificationService:
+    """Service to handle push notifications using Firebase Cloud Messaging"""
+    
+    def send_notification(self, device_tokens, title, message, data=None):
+        """Send push notification to device token(s)"""
+        if not device_tokens:
+            logger.warning("No device tokens provided for push notification")
+            return False
+            
+        if not settings.FCM_API_KEY:
+            logger.error("FCM API key not configured")
+            return False
+            
+        headers = {
+            'Authorization': f'key={settings.FCM_API_KEY}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Ensure data is a dict
+        if data is None:
+            data = {}
+            
+        # Construct notification payload
+        payload = {
+            'notification': {
+                'title': title,
+                'body': message,
+                'click_action': settings.SITE_URL,
+                'icon': '/static/images/notification-icon.png'
+            },
+            'data': data
+        }
+        
+        success_count = 0
+        # Send to each token individually to handle failures better
+        for token in device_tokens:
+            try:
+                payload['to'] = token
+                
+                # Send request to FCM
+                response = requests.post(
+                    'https://fcm.googleapis.com/fcm/send',
+                    headers=headers,
+                    data=json.dumps(payload)
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    if result.get('success', 0) == 1:
+                        success_count += 1
+                    else:
+                        logger.warning(f"FCM rejected notification: {result}")
+                else:
+                    logger.error(f"FCM API error: {response.status_code}, {response.text}")
+            except Exception as e:
+                logger.error(f"Error sending push notification: {e}")
+        
+        return success_count > 0
+
+class SlackNotifier:
+    """Service class to handle sending Slack notifications"""
+    
+    def __init__(self, webhook_url=None):
+        self.webhook_url = webhook_url or settings.SLACK_WEBHOOK_URL
+        
+    def send_alert(self, alert):
+        """Send alert notification to Slack channel"""
+        color_map = {
+            'critical': '#dc3545',
+            'high': '#fd7e14',
+            'medium': '#ffc107',
+            'low': '#17a2b8'
+        }
+        
+        payload = {
+            'attachments': [{
+                'fallback': f"[{alert.severity.upper()}] {alert.title}",
+                'color': color_map.get(alert.severity, '#6c757d'),
+                'title': f"[{alert.severity.upper()}] {alert.title}",
+                'title_link': f"{settings.SITE_URL}/alert-detail/{alert.id}/",
+                'text': alert.description,
+                'fields': [
+                    {
+                        'title': 'Severity',
+                        'value': alert.severity.capitalize(),
+                        'short': True
+                    },
+                    {
+                        'title': 'Source IP',
+                        'value': alert.source_ip or 'N/A',
+                        'short': True
+                    }
+                ],
+                'footer': 'Threat Detection Platform',
+                'ts': int(time.time())
+            }]
+        }
+        
+        response = requests.post(
+            self.webhook_url,
+            data=json.dumps(payload),
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        return response.status_code == 200

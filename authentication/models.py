@@ -122,3 +122,20 @@ class AdminReply(models.Model):
     
     class Meta:
         ordering = ['created_at']
+
+class UserDeviceToken(models.Model):
+    """Model to store device tokens for push notifications"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='device_tokens')
+    device_token = models.CharField(max_length=255)
+    device_type = models.CharField(max_length=20, default='web')  # web, android, ios
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ('user', 'device_token')
+        verbose_name = 'User Device Token'
+        verbose_name_plural = 'User Device Tokens'
+
+    def __str__(self):
+        return f"{self.user.username} - {self.device_type} ({self.device_token[:10]}...)"

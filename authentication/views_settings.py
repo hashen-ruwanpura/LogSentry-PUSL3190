@@ -21,6 +21,7 @@ from django.core.files.storage import FileSystemStorage
 from log_ingestion.models import LogSource, RawLog, ParsedLog, LogFilePosition
 from threat_detection.models import Threat, DetectionRule
 from alerts.models import NotificationPreference
+from .views import validate_log_file
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -312,6 +313,17 @@ def save_log_settings(request):
                 if not mysql_log_path and request.POST.get('mysql_log_path'):
                     mysql_log_path = request.POST.get('mysql_log_path').strip()
         
+        # Validate log files
+        if apache_log_path:
+            apache_validation = validate_log_file(apache_log_path, 'apache')
+            if not apache_validation['valid_log']:
+                messages.warning(request, f"Apache log file may have issues: {apache_validation['error']}")
+
+        if mysql_log_path:
+            mysql_validation = validate_log_file(mysql_log_path, 'mysql')  
+            if not mysql_validation['valid_log']:
+                messages.warning(request, f"MySQL log file may have issues: {mysql_validation['error']}")
+
         # Don't update database if no paths are provided
         if not apache_log_path and not mysql_log_path:
             messages.error(request, "No log paths specified. Please enter at least one valid log file path.")
@@ -613,6 +625,7 @@ def process_logs_from_sources(sources):
 def create_parsed_log_from_raw(raw_log):
     """Create and return a ParsedLog from a RawLog with basic analysis"""
     import re
+    from urllib.parse import unquote  # Add URL decoding
     
     try:
         # Get source type safely
@@ -621,39 +634,84 @@ def create_parsed_log_from_raw(raw_log):
         # Get content
         log_content = raw_log.content
         
+        # Decode URL-encoded content for better detection
+        decoded_content = unquote(log_content)
+        
         # Extract IP address
         ip_match = re.search(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', log_content)
         source_ip = ip_match.group(0) if ip_match else None
         
         # Check for common attack patterns
         status = 'normal'
+
+        # Define attack patterns with documentation
         patterns = [
-            'union select.*from', 
-            'exec\\s*\\(', 
-            'eval\\s*\\(', 
-            '<script>.*</script>', 
-            'select.*from.*where.*=.*--',
-            '../../',
-            'etc/passwd'
+            # SQL Injection patterns - attempts to manipulate database queries
+            'union select.*from',  # UNION-based SQL injection to combine result sets
+            'exec\\s*\\(',         # SQL stored procedure execution attempts
+            'eval\\s*\\(',         # Code evaluation function often used in injection attacks
+            
+            # Cross-Site Scripting (XSS) patterns - attempts to inject client-side scripts
+            '<script>.*</script>', # Basic script tag injection attempt
+            
+            # SQL Comment attack patterns - attempts to alter query logic with comments
+            'select.*from.*where.*=.*--', # SQL query with comment operator to remove remainder
+            
+            # Directory/Path Traversal - attempts to access files outside web root
+            '../../',              # Path traversal sequence to navigate up directories
+            'etc/passwd',          # Common target file for unauthorized access on Linux
+            
+            # Additional patterns for common SQL injection variants
+            "'\\s*or\\s*'1'\\s*=\\s*'1", # Common login bypass pattern like ' OR '1'='1
+            "--",                         # SQL comment used in injection
+            "=\"\"=\"\"",                 # Another bypass technique
         ]
-        high_severity_patterns = ['union select.*from', 'exec\\s*\\(', 'eval\\s*\\(']
-        medium_severity_patterns = ['<script>.*</script>', 'select.*from.*where.*=.*--']
-        low_severity_patterns = ['../../', 'etc/passwd']
+
+        # Categorize patterns by severity for prioritization
+        high_severity_patterns = [
+            'union select.*from',  # Direct database manipulation 
+            'exec\\s*\\(',         # Direct code execution
+            'eval\\s*\\(',         # Direct code execution
+            "'\\s*or\\s*'1'\\s*=\\s*'1",  # Login bypass
+            'union select.*concat\\(.*,.*\\)'  # Detects data concatenation in UNION attacks
+        ]
         
-        # High severity patterns
-        if any(pattern in log_content.lower() for pattern in high_severity_patterns):
-            status = 'attack'
-        # Medium severity patterns
-        elif any(pattern in log_content.lower() for pattern in medium_severity_patterns):
-            status = 'suspicious'
-        # Low severity patterns - just log, don't alert
-        elif any(pattern in log_content.lower() for pattern in low_severity_patterns):
-            status = 'unusual'
-        
-        # For example, only flag 'password' if it appears near suspicious terms
-        if 'password' in log_content.lower() and any(term in log_content.lower() for term in ['failed', 'incorrect', 'invalid', 'attempt']):
-            # More likely to be a real issue
-            status = 'suspicious'
+        # Define medium severity patterns
+        medium_severity_patterns = [
+            '<script>.*</script>', # XSS attempts
+            'select.*from.*where.*=.*--', # SQL injection with comments
+            '../../',              # Path traversal
+            'etc/passwd',          # Sensitive file access
+            "--",                   # SQL comment
+            '<img[^>]+onerror=',  # Catches img tag XSS
+            '<iframe[^>]+src=["\']javascript:',  # Catches iframe XSS
+            '<svg[^>]+onload=',  # Catches SVG XSS
+            'on(mouse|click|load|error)='  # Catches event handler XSS
+        ]
+
+        # Check both original and decoded content against patterns
+        for content in [log_content, decoded_content]:
+            # High severity patterns
+            if any(re.search(pattern, content, re.IGNORECASE) for pattern in high_severity_patterns):
+                status = 'attack'
+                break
+            # Medium severity patterns
+            elif any(re.search(pattern, content, re.IGNORECASE) for pattern in medium_severity_patterns):
+                status = 'suspicious'
+                break
+                
+        # Create normalized data with both original and decoded content
+        normalized_data = {
+            'content': log_content,
+            'decoded_content': decoded_content,
+            'message': log_content[:1000],
+            'source_type': source_type,
+            'source_ip': source_ip,
+            'analysis': {
+                'suspicious_patterns': status != 'normal',
+                'time': timezone.now().isoformat()
+            }
+        }
         
         # Create a ParsedLog entry
         parsed_log = ParsedLog.objects.create(
@@ -662,16 +720,7 @@ def create_parsed_log_from_raw(raw_log):
             source_ip=source_ip,
             source_type=source_type,
             status=status,
-            normalized_data={
-                'content': log_content,
-                'message': log_content[:1000],
-                'source_type': source_type,
-                'source_ip': source_ip,
-                'analysis': {
-                    'suspicious_patterns': bool(status == 'suspicious'),
-                    'time': timezone.now().isoformat()
-                }
-            },
+            normalized_data=normalized_data,
             analyzed=True,
             analysis_time=timezone.now()
         )

@@ -15,23 +15,30 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from django.conf import settings  # Add this import
 from django.conf.urls.static import static  # Add this import if not already present
 from django.contrib.auth import views as auth_views
 from authentication.views import signup_view
 from .views import home  # Import the home view
 from authentication import views
-from authentication.views import signup_view, CustomLoginView, admin_home
+from authentication import notification_views
+from authentication.views import signup_view, CustomLoginView, admin_home, alert_detail  # Updated import
 from authentication import views_admin
 from authentication import views_admin_logs
 from authentication import views_admin_alerts
 from authentication import views_admin_settings
 from analytics import views as analytics_views
 from django.shortcuts import redirect
-from authentication import views_admin
+from alerts import views as alert_views
+from alerts import notification_api
+from alerts import consumers  # Import the consumers module
 from authentication import views_reports  # Import the new views
 from authentication import views_settings  # Add this import
+from django.views.generic import TemplateView
+from authentication.views_apache_logs import apache_logs_view  # Add this import
+from authentication.views_mysql_logs import mysql_logs_view  # Add this new import
+from authentication import views_explore_agent  # Add this import
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -51,14 +58,16 @@ urlpatterns = [
     path('alert/<int:alert_id>/', views.alert_detail, name='alert_detail'),
     path('', include('authentication.urls')),
 
+    # Add this line to handle the email alert links:
+    path('alerts/<int:alert_id>/', alert_detail, name='alert_detail'),
 
     path('events/', views.events_view, name='events'),
     path('events/export/', views.export_events, name='export_events'),
-    path('apache-logs/', views.apache_logs_view, name='apache_logs'),
-    path('mysql-logs/', views.mysql_logs_view, name='mysql_logs'),
+    path('apache-logs/', apache_logs_view, name='apache_logs'),
+    path('mysql-logs/', mysql_logs_view, name='mysql_logs'),
     path('reports/', views.generate_report, name='reports'),
     path('settings/', views_settings.settings_view, name='settings'),  # NEW
-    path('explore-agent/', views.explore_agent_view, name='explore_agent'),
+    path('explore-agent/', views_explore_agent.explore_agent_view, name='explore_agent'),
     path('generate-report/', views.generate_report, name='generate_report'),
     path('alerts-details/', views.alerts_details_view, name='alerts_details'),
     path('mitre-details/', views.mitre_details_view, name='mitre_details'),
@@ -133,6 +142,26 @@ urlpatterns = [
 
     # Add the export_events URL pattern here
     path('export_events/', views.export_events, name='export_events'),
+    
+     # Add these patterns
+    path('notifications/<int:notification_id>/read/', alert_views.mark_notification_read, name='mark_notification_read'),
+    path('notifications/', notification_views.notifications_view, name='notifications'),
+    
+    path('api/notifications/', notification_api.get_notifications, name='get_notifications'),
+    path('api/notifications/<int:notification_id>/read/', notification_api.mark_notification_read, name='mark_notification_read'),
+    path('api/notifications/mark-all-read/', notification_api.mark_all_read, name='mark_all_read'),
+    path('api/notifications/recent/', notification_api.recent_notifications, name='recent_notifications'),
+    
+    # Catch-all for the single-page application
+
+    # Add the notification-test URL pattern here
+    path('notification-test/', TemplateView.as_view(template_name='notification_test.html'), name='notification_test'),
+
+    # Add these URL patterns
+    path('api/auth/register-device/', notification_api.register_device, name='register_device'),
+
+    # Add the alerts URLs
+    path('alerts/', alert_views.alerts_list, name='alerts_list'),
 ]
 
 # AI ANALYTICS

@@ -1,150 +1,143 @@
 import json
-import logging
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
+from django.contrib.auth import get_user_model
+from .models import AlertNotification
 
-logger = logging.getLogger(__name__)
+User = get_user_model()
 
-# --- WEBSOCKET CONSUMERS ---
-
-# Purpose: WebSocket consumer for real-time alerts
-# Usage: Establishes persistent connection for pushing real-time notifications
-# Related Frontend: JavaScript in base.html and dashboard.html listens for these messages
 class AlertConsumer(AsyncWebsocketConsumer):
+    """
+    WebSocket consumer for handling real-time alert notifications.
+    This class handles WebSocket connections with proper lifecycle methods.
+    """
+    
     async def connect(self):
-        self.user = self.scope["user"]
-        
-        # Anonymous users can't receive alerts
-        if not self.user.is_authenticated:
-            await self.close()
-            return
-            
-        # Add to user-specific group
-        self.group_name = f"user_{self.user.id}_alerts"
-        await self.channel_layer.group_add(self.group_name, self.channel_name)
-        
-        # Add to severity-based groups if admin
-        if self.user.is_staff:
-            for severity in ['critical', 'high', 'medium', 'low']:
-                group_name = f"severity_{severity}_alerts"
-                await self.channel_layer.group_add(group_name, self.channel_name)
-        
-        # Accept the connection
-        await self.accept()
-        
-        # Send pending alerts on connection (fetch last 5 unread notifications)
-        if self.user.is_authenticated:
-            pending_alerts = await self.get_pending_alerts()
-            if pending_alerts:
-                await self.send(text_data=json.dumps({
-                    'type': 'pending_alerts',
-                    'alerts': pending_alerts
-                }))
-        
-        logger.info(f"WebSocket connected for user {self.user.username}")
-
-    # Add method to fetch pending alerts
-    @database_sync_to_async
-    def get_pending_alerts(self):
-        from alerts.models import AlertNotification
+        """Handle new WebSocket connection"""
         try:
-            # Get last 5 unread notifications
-            notifications = AlertNotification.objects.filter(
-                user=self.user,
-                is_read=False
-            ).order_by('-created_at')[:5]
+            # Get the user from the scope
+            self.user = self.scope["user"]
             
-            if not notifications:
-                return []
+            # Reject connection if user is not authenticated
+            if not self.user.is_authenticated:
+                print(f"WebSocket connection rejected: User not authenticated")
+                await self.close()
+                return
+            
+            print(f"WebSocket connect attempt for user {self.user.username}")
+            
+            # Add to user-specific notification group
+            self.user_group_name = f"user_{self.user.id}_alerts"
+            await self.channel_layer.group_add(
+                self.user_group_name,
+                self.channel_name
+            )
+            
+            # Add to admin notifications group if user is admin/staff
+            if self.user.is_staff or self.user.is_superuser:
+                self.admin_group_name = "admin_alerts"
+                await self.channel_layer.group_add(
+                    self.admin_group_name,
+                    self.channel_name
+                )
                 
-            # Convert to dict for JSON serialization
-            result = []
-            for notif in notifications:
-                result.append({
-                    'id': notif.id,
-                    'title': notif.title,
-                    'message': notif.message,
-                    'severity': notif.severity,
-                    'threat_id': notif.threat_id,
-                    'source_ip': notif.source_ip,
-                    'affected_system': notif.affected_system,
-                    'timestamp': notif.created_at.isoformat()
-                })
-            return result
+            # Accept the connection
+            await self.accept()
+            print(f"WebSocket connection accepted for user {self.user.username}")
+            
+            # Send connection confirmation
+            await self.send(text_data=json.dumps({
+                'type': 'connection_established',
+                'message': 'Connected to notification server'
+            }))
+            
+            # Send recent notifications on connect
+            recent_notifications = await self.get_recent_notifications()
+            if recent_notifications:
+                await self.send(text_data=json.dumps({
+                    'type': 'recent_notifications',
+                    'notifications': recent_notifications
+                }))
+                
         except Exception as e:
-            logger.error(f"Error fetching pending alerts: {e}")
-            return []
+            print(f"Error in WebSocket connect: {str(e)}")
+            # If connection is still open, close it
+            if hasattr(self, 'channel_name'):
+                await self.close()
 
-    # Purpose: Handle WebSocket disconnection
-    # Usage: Automatically called when user navigates away or closes browser
     async def disconnect(self, close_code):
-        # Remove from user-specific group
-        if hasattr(self, 'group_name'):
-            await self.channel_layer.group_discard(self.group_name, self.channel_name)
-        
-        # Remove from severity groups if admin
-        if hasattr(self, 'user') and self.user.is_staff:
-            for severity in ['critical', 'high', 'medium', 'low']:
-                group_name = f"severity_{severity}_alerts"
-                await self.channel_layer.group_discard(group_name, self.channel_name)
+        """Handle WebSocket disconnection"""
+        try:
+            # Leave user-specific group
+            if hasattr(self, 'user_group_name'):
+                await self.channel_layer.group_discard(
+                    self.user_group_name,
+                    self.channel_name
+                )
                 
-        logger.info(f"WebSocket disconnected for user {self.user.username if hasattr(self, 'user') else 'unknown'}")
+            # Leave admin group if part of it
+            if hasattr(self, 'admin_group_name'):
+                await self.channel_layer.group_discard(
+                    self.admin_group_name,
+                    self.channel_name
+                )
+                
+            print(f"WebSocket disconnected for user {self.user.username if hasattr(self, 'user') else 'unknown'}, code: {close_code}")
+        except Exception as e:
+            print(f"Error in WebSocket disconnect: {str(e)}")
 
-    # Purpose: Handle messages from client to server
-    # Usage: Client can send commands like 'ping' or 'mark_read'
-    # Related Frontend: JavaScript in notifications.js sends these commands
     async def receive(self, text_data):
-        """Handle messages from the client"""
+        """Handle incoming messages from WebSocket"""
         try:
             data = json.loads(text_data)
-            command = data.get('command', '')
+            command = data.get('command')
             
+            # Handle ping command
             if command == 'ping':
-                await self.send(text_data=json.dumps({'type': 'pong'}))
-            elif command == 'mark_read':
-                alert_id = data.get('alert_id')
-                if alert_id:
-                    await self.mark_alert_read(alert_id)
-                    await self.send(text_data=json.dumps({
-                        'type': 'alert_updated',
-                        'alert_id': alert_id,
-                        'status': 'read'
-                    }))
+                await self.send(text_data=json.dumps({
+                    'type': 'pong',
+                    'timestamp': data.get('timestamp')
+                }))
+                
+            # You can add handlers for other commands here
+                
         except Exception as e:
-            logger.error(f"Error processing WebSocket message: {e}")
+            print(f"Error in WebSocket receive: {str(e)}")
 
-    # Enhance the alert_notification method to support more interactive features
+    # Handler for alert_notification type messages from channel layer
     async def alert_notification(self, event):
-        """Send alert notification to the client with enhanced data"""
-        alert = event['alert']
-        
-        # Add additional fields based on severity
-        if alert.get('severity') == 'critical':
-            alert['requires_acknowledgment'] = True
-            alert['auto_close'] = False
-        elif alert.get('severity') == 'high':
-            alert['requires_acknowledgment'] = False
-            alert['auto_close'] = False
-        else:
-            alert['requires_acknowledgment'] = False
-            alert['auto_close'] = True
-            
-        await self.send(text_data=json.dumps({
-            'type': 'alert_notification',
-            'alert': alert
-        }))
-
-    # Purpose: Mark a notification as read from WebSocket
-    # Usage: Called when user marks alert as read from notification popup
-    @database_sync_to_async
-    def mark_alert_read(self, alert_id):
-        """Mark an alert as read"""
-        from alerts.models import AlertNotification
+        """Handle alert notifications sent via channel layer"""
         try:
-            notification = AlertNotification.objects.get(id=alert_id, user=self.user)
-            notification.is_read = True
-            notification.save()
-            return True
+            # Forward the notification to the WebSocket
+            await self.send(text_data=json.dumps({
+                'type': 'notification',
+                'notification': event['alert']
+            }))
         except Exception as e:
-            logger.error(f"Error marking alert as read: {e}")
-            return False
+            print(f"Error sending notification to WebSocket: {str(e)}")
+
+    @database_sync_to_async
+    def get_recent_notifications(self):
+        """Get recent unread notifications for the user"""
+        try:
+            # Get last 5 unread notifications for the user
+            notifications = AlertNotification.objects.filter(
+                user=self.user,
+                read=False
+            ).order_by('-created_at')[:5]
+            
+            # Format for JSON response
+            return [
+                {
+                    'id': notification.id,
+                    'title': notification.title,
+                    'message': notification.message,
+                    'severity': notification.severity,
+                    'created_at': notification.created_at.isoformat(),
+                    'threat_id': notification.threat_id
+                }
+                for notification in notifications
+            ]
+        except Exception as e:
+            print(f"Error getting recent notifications: {str(e)}")
+            return []

@@ -1,14 +1,16 @@
 from django.urls import path
 from . import views
+from . import notification_api
+from authentication import notification_views
 
 urlpatterns = [
-    path('notifications/', views.notifications_view, name='notifications'),
-    path('notification-preferences/', views.notification_preferences, name='notification_preferences'),
-    path('smtp-settings/', views.smtp_settings_view, name='smtp_settings'),
-    path('api/test-smtp/', views.test_smtp_settings, name='test_smtp'),
+    # Regular HTTP endpoints
+    path('', views.alerts_list, name='alerts_list'),
+    path('<int:alert_id>/', views.alert_detail, name='alert_detail'),
     
-    # Consolidated notification API endpoints
-    path('api/notifications/', views.api_notifications, name='api_notifications'),
-    path('api/notifications/<int:notification_id>/read/', views.api_mark_notification_read, name='api_mark_notification_read'),
-    path('api/notifications/mark-all-read/', views.api_mark_all_read, name='api_mark_all_read'),
+    # Notification API endpoints
+    path('api/notifications/', notification_api.get_notifications, name='get_notifications'),
+    path('api/notifications/<int:notification_id>/read/', notification_api.mark_notification_read, name='mark_notification_read'),
+    path('api/notifications/mark-all-read/', notification_api.mark_all_read, name='mark_all_read'),
+    path('api/notifications/recent/', notification_api.recent_notifications, name='recent_notifications'),
 ]

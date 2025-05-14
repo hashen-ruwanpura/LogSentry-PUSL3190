@@ -1,11 +1,11 @@
 from .models import SMTPConfiguration
 from django.shortcuts import render
 from django.http import JsonResponse
-from django.views.decorators.http import require
+from django.views.decorators.http import require_POST, require_GET
 from django.views.decorators.csrf import csrf_protect
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.utils import timezone
-from .models import AlertNotification, NotificationPreference
+from .models import AlertNotification, NotificationPreference, Alert
 import json
 import logging
 
@@ -13,115 +13,111 @@ logger = logging.getLogger(__name__)
 
 # --- NOTIFICATION VIEWS ---
 
-# Frontend: templates/alerts/notifications.html
-# Purpose: Displays all notifications for the current user
-# Features: Lists recent alerts with unread count
 @login_required
-def notifications_view(request):
-    """View all notifications for the current user"""
-    # Get user's notifications
-    notifications = AlertNotification.objects.filter(user=request.user).order_by('-created_at')[:50]
-    
-    return render(request, 'alerts/notifications.html', {
-        'notifications': notifications,
-        'unread_count': notifications.filter(is_read=False).count()
-    })
-
-# Frontend: No direct template (API endpoint for notifications bell in header)
-# Purpose: JSON API for retrieving notifications via AJAX/Fetch
-# Usage: Called by JavaScript in base.html to update notification bell
-@login_required
-def api_notifications(request):
-    """API endpoint to get notifications for the current user"""
-    # Get last 20 notifications
-    notifications = AlertNotification.objects.filter(user=request.user).order_by('-created_at')[:20]
-    unread_count = notifications.filter(is_read=False).count()
-    
-    # Convert to dict for JSON serialization
-    notification_data = []
-    for notif in notifications:
-        notification_data.append({
-            'id': notif.id,
-            'title': notif.title,
-            'message': notif.message,
-            'severity': notif.severity,
-            'alert_id': notif.alert_id,
-            'source_ip': notif.source_ip,
-            'affected_system': notif.affected_system,
-            'is_read': notif.is_read,
-            'timestamp': notif.created_at.isoformat()
+@require_GET
+def get_notifications(request):
+    """API endpoint to get user's notifications"""
+    try:
+        notifications = AlertNotification.objects.filter(
+            user=request.user
+        ).order_by('-created_at')[:50]
+        
+        unread_count = AlertNotification.objects.filter(
+            user=request.user, 
+            is_read=False
+        ).count()
+        
+        notifications_list = []
+        for notification in notifications:
+            notifications_list.append({
+                'id': notification.id,
+                'title': notification.title,
+                'message': notification.message,
+                'severity': notification.severity,
+                'is_read': notification.is_read,
+                'created_at': notification.created_at.isoformat() if notification.created_at else None,
+                'threat_id': notification.alert_id,
+                'source_ip': notification.source_ip,
+                'affected_system': notification.affected_system
+            })
+        
+        return JsonResponse({
+            'notifications': notifications_list,
+            'unread_count': unread_count
         })
-    
-    return JsonResponse({
-        'notifications': notification_data,
-        'unread_count': unread_count
-    })
+    except Exception as e:
+        logger.error(f"Error in get_notifications: {e}", exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
 
-# Frontend: No direct template (API endpoint for notifications.html)
-# Purpose: Mark individual notification as read via AJAX
-# Usage: Called by JavaScript when user clicks on notification
 @login_required
 @require_POST
-def api_mark_notification_read(request, notification_id):
-    """API endpoint to mark a notification as read"""
+def mark_notification_read(request, notification_id):
+    """Mark notification as read"""
     try:
-        notification = AlertNotification.objects.get(id=notification_id, user=request.user)
+        notification = AlertNotification.objects.get(
+            id=notification_id,
+            user=request.user
+        )
         notification.is_read = True
         notification.save()
+        
+        logger.info(f"Notification {notification_id} marked as read by {request.user.username}")
         return JsonResponse({'success': True})
+    except AlertNotification.DoesNotExist:
+        logger.warning(f"Notification {notification_id} not found for user {request.user.username}")
+        return JsonResponse({'success': False, 'error': 'Notification not found'}, status=404)
     except Exception as e:
-        logger.error(f"Error marking notification as read: {e}")
-        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+        logger.error(f"Error marking notification as read: {e}", exc_info=True)
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
-# Frontend: No direct template (API endpoint for notifications.html)
-# Purpose: Mark all notifications as read via AJAX
-# Usage: Called by JavaScript when user clicks "Mark All Read" button
 @login_required
 @require_POST
-def api_mark_all_read(request):
-    """API endpoint to mark all notifications as read"""
+def mark_all_read(request):
+    """Mark all notifications as read"""
     try:
-        AlertNotification.objects.filter(user=request.user, is_read=False).update(
-            is_read=True
-        )
-        return JsonResponse({'success': True})
+        updated_count = AlertNotification.objects.filter(
+            user=request.user,
+            is_read=False
+        ).update(is_read=True)
+        
+        logger.info(f"Marked {updated_count} notifications as read for {request.user.username}")
+        return JsonResponse({'success': True, 'count': updated_count})
     except Exception as e:
-        logger.error(f"Error marking all notifications as read: {e}")
-        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+        logger.error(f"Error marking all notifications as read: {e}", exc_info=True)
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
-# Frontend: templates/alerts/preferences.html
-# Purpose: User interface for notification preferences
-# Features: Configure email, in-app, and push notification settings
 @login_required
-def notification_preferences(request):
-    """View and update notification preferences"""
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            preferences = NotificationPreference.objects.get(user=request.user)
-            
-            # Update email preferences
-            if 'email_alerts' in data:
-                preferences.email_alerts = data['email_alerts']
-            if 'email_threshold' in data:
-                preferences.email_threshold = data['email_threshold']
-            
-            # Update in-app preferences
-            if 'in_app_alerts' in data:
-                preferences.in_app_alerts = data['in_app_alerts'] 
-            if 'in_app_threshold' in data:
-                preferences.in_app_threshold = data['in_app_threshold']
-            
-            preferences.save()
-            return JsonResponse({'success': True})
-        except Exception as e:
-            logger.error(f"Error updating notification preferences: {e}")
-            return JsonResponse({'success': False, 'error': str(e)}, status=400)
-    else:
-        preferences = NotificationPreference.objects.get(user=request.user)
-        return render(request, 'alerts/preferences.html', {
-            'preferences': preferences
+@require_GET
+def recent_notifications(request):
+    """Get only recent unread notifications"""
+    try:
+        recent_time = timezone.now() - timezone.timedelta(minutes=30)
+        notifications = AlertNotification.objects.filter(
+            user=request.user,
+            is_read=False,
+            created_at__gt=recent_time
+        ).order_by('-created_at')
+        
+        notifications_list = []
+        for notification in notifications:
+            notifications_list.append({
+                'id': notification.id,
+                'title': notification.title,
+                'message': notification.message,
+                'severity': notification.severity,
+                'is_read': notification.is_read,
+                'created_at': notification.created_at.isoformat() if notification.created_at else None,
+                'threat_id': notification.alert_id,
+                'source_ip': notification.source_ip,
+                'affected_system': notification.affected_system
+            })
+        
+        return JsonResponse({
+            'notifications': notifications_list
         })
+    except Exception as e:
+        logger.error(f"Error in recent_notifications: {e}", exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
 
 @login_required
 @user_passes_test(lambda u: u.is_superuser)
@@ -214,3 +210,29 @@ def test_smtp_settings(request):
     except Exception as e:
         logger.error(f"Error sending test email: {e}")
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+def events_view(request):
+    """View for events page"""
+    return render(request, 'authentication/events.html')
+
+@login_required
+def alerts_list(request):
+    """View to display list of alerts"""
+    # Get all alerts, sorted by most recent first
+    alerts = Alert.objects.all().order_by('-created_at')
+    
+    # Count alerts by severity
+    severity_counts = {
+        'critical': Alert.objects.filter(severity='critical').count(),
+        'high': Alert.objects.filter(severity='high').count(),
+        'medium': Alert.objects.filter(severity='medium').count(),
+        'low': Alert.objects.filter(severity='low').count()
+    }
+    
+    context = {
+        'alerts': alerts,
+        'severity_counts': severity_counts,
+        'total_alerts': alerts.count()
+    }
+    
+    return render(request, 'alerts/alerts_list.html', context)

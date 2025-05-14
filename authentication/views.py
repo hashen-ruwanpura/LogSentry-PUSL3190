@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from datetime import datetime, timedelta
 from django.utils import timezone
 from django.shortcuts import render, redirect
@@ -89,7 +90,7 @@ class CustomLoginView(LoginView):
         if self.request.user.is_authenticated and self.request.user.is_superuser:
             return reverse_lazy('admin_home')
         else:
-            return reverse_lazy('dashboard')
+            return reverse_lazy('/')
 
 # Helper function to check if a user is a superuser
 def is_superuser(user):
@@ -652,344 +653,6 @@ def explore_logs(request):
     
     return render(request, 'authentication/explore_logs.html', context)
 
-@login_required
-def explore_agent_view(request):
-    """
-    View for exploring log collection agent information and status.
-    Shows agent health, configuration, and recent activities.
-    """
-    # Get filter parameters
-    status = request.GET.get('status', 'all')
-    agent_type = request.GET.get('type', 'all')
-    search_query = request.GET.get('search', '')
-    page = int(request.GET.get('page', 1))
-    
-    # Base queryset - assuming you have an Agent model
-    # If you don't have this model, you'll need to adjust this accordingly
-    try:
-        from log_ingestion.models import LogAgent
-        agents = LogAgent.objects.all()
-        
-        # Apply filters
-        if status != 'all':
-            agents = agents.filter(status=status)
-        
-        if agent_type != 'all':
-            agents = agents.filter(agent_type=agent_type)
-        
-        if search_query:
-            agents = agents.filter(
-                Q(name__icontains=search_query) |
-                Q(hostname__icontains=search_query) |
-                Q(ip_address__icontains=search_query)
-            )
-        
-        # Get status counts for filters
-        active_count = LogAgent.objects.filter(status='active').count()
-        inactive_count = LogAgent.objects.filter(status='inactive').count()
-        error_count = LogAgent.objects.filter(status='error').count()
-        
-        # Get agent types for filters
-        agent_types = LogAgent.objects.values_list('agent_type', flat=True).distinct()
-        
-        # Pagination
-        per_page = 20
-        paginator = Paginator(agents, per_page)
-        
-        try:
-            agents_page = paginator.page(page)
-        except (EmptyPage, PageNotAnInteger):
-            agents_page = paginator.page(1)
-            page = 1
-        
-        context = {
-            'agents': agents_page,
-            'total_agents': agents.count(),
-            'active_count': active_count,
-            'inactive_count': inactive_count,
-            'error_count': error_count,
-            'agent_types': agent_types,
-            'current_status': status,
-            'current_type': agent_type,
-            'search_query': search_query,
-            'current_page': page,
-            'total_pages': paginator.num_pages,
-            'page_range': paginator.get_elided_page_range(page, on_each_side=2, on_ends=1),
-        }
-    except ImportError:
-        # Fallback if LogAgent model doesn't exist
-        context = {
-            'error_message': "Agent monitoring is not available. The LogAgent model is not defined.",
-            'agents': [],
-            'total_agents': 0,
-        }
-    except Exception as e:
-        # General error handling
-        context = {
-            'error_message': f"An error occurred while loading agent data: {str(e)}",
-            'agents': [],
-            'total_agents': 0,
-        }
-        
-    return render(request, 'authentication/explore_agent.html', context)
-
-@login_required
-def apache_logs_view(request):
-    """
-    View for displaying and analyzing Apache web server logs.
-    Provides filtering, search and statistics specific to Apache logs.
-    """
-    # Get filter parameters
-    time_range = request.GET.get('time_range', '24h')
-    status_code = request.GET.get('status_code', 'all')
-    request_method = request.GET.get('method', 'all')
-    search_query = request.GET.get('search', '')
-    page = int(request.GET.get('page', 1))
-    
-    # Determine time period based on selected range
-    now = timezone.now()
-    if time_range == '1h':
-        start_time = now - timedelta(hours=1)
-        period_name = 'Last Hour'
-    elif time_range == '12h':
-        start_time = now - timedelta(hours=12)
-        period_name = 'Last 12 Hours'
-    elif time_range == '7d':
-        start_time = now - timedelta(days=7)
-        period_name = 'Last 7 Days'
-    elif time_range == '30d':
-        start_time = now - timedelta(days=30)
-        period_name = 'Last 30 Days'
-    else:  # Default to 24h
-        start_time = now - timedelta(days=1)
-        period_name = 'Last 24 Hours'
-        time_range = '24h'
-    
-    # Base queryset - filter for Apache logs only
-    logs = ParsedLog.objects.filter(
-        raw_log__source__source_type='apache',
-        raw_log__timestamp__gte=start_time
-    ).select_related('raw_log')
-    
-    # Apply status code filter
-    if status_code != 'all':
-        if status_code == '2xx':
-            logs = logs.filter(status_code__gte=200, status_code__lt=300)
-        elif status_code == '3xx':
-            logs = logs.filter(status_code__gte=300, status_code__lt=400)
-        elif status_code == '4xx':
-            logs = logs.filter(status_code__gte=400, status_code__lt=500)
-        elif status_code == '5xx':
-            logs = logs.filter(status_code__gte=500)
-        else:
-            # Try to filter by specific status code
-            try:
-                logs = logs.filter(status_code=int(status_code))
-            except ValueError:
-                pass
-    
-    # Apply request method filter
-    if request_method != 'all':
-        logs = logs.filter(request_method=request_method)
-    
-    # Apply search filter if provided
-    if search_query:
-        logs = logs.filter(
-            Q(request_path__icontains=search_query) | 
-            Q(source_ip__icontains=search_query) |
-            Q(user_agent__icontains=search_query)
-        )
-    
-    # Get statistics
-    total_logs = logs.count()
-    status_2xx = logs.filter(status_code__gte=200, status_code__lt=300).count()
-    status_3xx = logs.filter(status_code__gte=300, status_code__lt=400).count()
-    status_4xx = logs.filter(status_code__gte=400, status_code__lt=500).count()
-    status_5xx = logs.filter(status_code__gte=500).count()
-    
-    # Get common request methods
-    common_methods = logs.values('request_method').annotate(
-        count=Count('request_method')
-    ).order_by('-count')[:5]
-    
-    # Get top requested paths
-    top_paths = logs.values('request_path').annotate(
-        count=Count('request_path')
-    ).order_by('-count')[:10]
-    
-    # Get top source IPs
-    top_ips = logs.values('source_ip').annotate(
-        count=Count('source_ip')
-    ).order_by('-count')[:10]
-    
-    # Pagination
-    per_page = 50
-    start_idx = (page - 1) * per_page
-    end_idx = start_idx + per_page
-    
-    logs_paginated = logs.order_by('-raw_log__timestamp')[start_idx:end_idx]
-    total_pages = (total_logs + per_page - 1) // per_page
-    
-    # Generate page range
-    if total_pages <= 7:
-        page_range = range(1, total_pages + 1)
-    else:
-        if page <= 4:
-            page_range = list(range(1, 6)) + ['...', total_pages]
-        elif page >= total_pages - 3:
-            page_range = [1, '...'] + list(range(total_pages - 4, total_pages + 1))
-        else:
-            page_range = [1, '...'] + list(range(page - 1, page + 2)) + ['...', total_pages]
-    
-    context = {
-        'logs': logs_paginated,
-        'total_logs': total_logs,
-        'period_name': period_name,
-        'time_range': time_range,
-        'status_code': status_code,
-        'request_method': request_method,
-        'search_query': search_query,
-        'status_2xx': status_2xx,
-        'status_3xx': status_3xx,
-        'status_4xx': status_4xx,
-        'status_5xx': status_5xx,
-        'common_methods': common_methods,
-        'top_paths': top_paths,
-        'top_ips': top_ips,
-        'current_page': page,
-        'total_pages': total_pages,
-        'page_range': page_range,
-        'has_next': page < total_pages,
-        'has_prev': page > 1,
-        'next_page': page + 1,
-        'prev_page': page - 1,
-    }
-    
-    return render(request, 'authentication/apache_logs.html', context)
-
-@login_required
-def mysql_logs_view(request):
-    """
-    View for displaying and analyzing MySQL database logs.
-    Provides filtering, search and statistics specific to MySQL logs.
-    """
-    # Get filter parameters
-    time_range = request.GET.get('time_range', '24h')
-    query_type = request.GET.get('query_type', 'all')
-    execution_time = request.GET.get('execution_time', 'all')
-    search_query = request.GET.get('search', '')
-    page = int(request.GET.get('page', 1))
-    
-    # Determine time period based on selected range
-    now = timezone.now()
-    if time_range == '1h':
-        start_time = now - timedelta(hours=1)
-        period_name = 'Last Hour'
-    elif time_range == '12h':
-        start_time = now - timedelta(hours=12)
-        period_name = 'Last 12 Hours'
-    elif time_range == '7d':
-        start_time = now - timedelta(days=7)
-        period_name = 'Last 7 Days'
-    elif time_range == '30d':
-        start_time = now - timedelta(days=30)
-        period_name = 'Last 30 Days'
-    else:  # Default to 24h
-        start_time = now - timedelta(days=1)
-        period_name = 'Last 24 Hours'
-        time_range = '24h'
-    
-    # Base queryset - filter for MySQL logs only
-    logs = ParsedLog.objects.filter(
-        raw_log__source__source_type='mysql',
-        raw_log__timestamp__gte=start_time
-    ).select_related('raw_log')
-    
-    # Apply query type filter
-    if query_type != 'all':
-        # Extract first word from query to determine type (SELECT, INSERT, etc.)
-        logs = logs.filter(query__istartswith=query_type)
-    
-    # Apply execution time filter
-    if execution_time == 'fast':
-        logs = logs.filter(execution_time__lt=1.0)
-    elif execution_time == 'medium':
-        logs = logs.filter(execution_time__gte=1.0, execution_time__lt=5.0)
-    elif execution_time == 'slow':
-        logs = logs.filter(execution_time__gte=5.0)
-    
-    # Apply search filter if provided
-    if search_query:
-        logs = logs.filter(
-            Q(query__icontains=search_query) | 
-            Q(user_id__icontains=search_query)
-        )
-    
-    # Get statistics
-    total_logs = logs.count()
-    slow_queries = logs.filter(execution_time__gte=1.0).count()
-    
-    # Get query type distribution
-    query_types = []
-    for qt in ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'ALTER', 'DROP']:
-        count = logs.filter(query__istartswith=qt).count()
-        if count > 0:
-            query_types.append({
-                'type': qt,
-                'count': count,
-                'percentage': round(count / total_logs * 100, 1) if total_logs > 0 else 0
-            })
-    
-    # Get top users
-    top_users = logs.values('user_id').annotate(
-        count=Count('user_id')
-    ).order_by('-count')[:10]
-    
-    # Get slowest queries
-    slowest_queries = logs.order_by('-execution_time')[:5]
-    
-    # Pagination
-    per_page = 50
-    start_idx = (page - 1) * per_page
-    end_idx = start_idx + per_page
-    
-    logs_paginated = logs.order_by('-raw_log__timestamp')[start_idx:end_idx]
-    total_pages = (total_logs + per_page - 1) // per_page
-    
-    # Generate page range
-    if total_pages <= 7:
-        page_range = range(1, total_pages + 1)
-    else:
-        if page <= 4:
-            page_range = list(range(1, 6)) + ['...', total_pages]
-        elif page >= total_pages - 3:
-            page_range = [1, '...'] + list(range(total_pages - 4, total_pages + 1))
-        else:
-            page_range = [1, '...'] + list(range(page - 1, page + 2)) + ['...', total_pages]
-    
-    context = {
-        'logs': logs_paginated,
-        'total_logs': total_logs,
-        'period_name': period_name,
-        'time_range': time_range,
-        'query_type': query_type,
-        'execution_time': execution_time,
-        'search_query': search_query,
-        'slow_queries': slow_queries,
-        'normal_queries': total_logs - slow_queries,
-        'query_types': query_types,
-        'top_users': top_users,
-        'slowest_queries': slowest_queries,
-        'current_page': page,
-        'total_pages': total_pages,
-        'page_range': page_range,
-        'has_next': page < total_pages,
-        'has_prev': page > 1,
-        'next_page': page + 1,
-        'prev_page': page - 1,
-    }
-    
-    return render(request, 'authentication/mysql_logs.html', context)
 
 @login_required
 def generate_report(request):
@@ -2240,11 +1903,20 @@ def profile_stats_api(request):
 def validate_log_file(file_path, log_type):
     """
     Helper function to validate if a file is a proper log file.
-    Handles both regular log files and test files with appropriate validation.
+    Validates format, structure and readability of the log file.
+    
+    Parameters:
+        file_path (str): Path to the log file
+        log_type (str): Type of log (apache or mysql)
+        
+    Returns:
+        dict: Validation result with keys:
+            - path: Original file path
+            - exists: Whether file exists
+            - readable: Whether file is readable
+            - valid_log: Whether the file contains valid log entries
+            - error: Error message if any
     """
-    import os
-    import re
-    import logging
     
     logger = logging.getLogger(__name__)
     logger.info(f"Validating {log_type} log file: {file_path}")
@@ -2268,46 +1940,35 @@ def validate_log_file(file_path, log_type):
         # If file doesn't exist, try to create it with sample content
         if not os.path.exists(file_path):
             try:
-                # Create parent directory if needed
-                dir_path = os.path.dirname(file_path)
-                if dir_path and not os.path.exists(dir_path):
-                    logger.info(f"Creating directory: {dir_path}")
-                    os.makedirs(dir_path, exist_ok=True)
-                    
-                # Create a sample log file with appropriate format
-                logger.info(f"Creating test {log_type} log file: {file_path}")
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    if log_type == 'apache':
-                        f.write("192.168.1.1 - - [01/May/2025:00:00:01 +0000] \"GET /index.html HTTP/1.1\" 200 2326\n")
-                        f.write("192.168.1.10 - - [01/May/2025:00:00:02 +0000] \"POST /login.php HTTP/1.1\" 302 185\n")
-                        f.write("192.168.1.15 - - [01/May/2025:00:00:03 +0000] \"GET /admin HTTP/1.1\" 404 345\n")
-                    elif log_type == 'mysql':
-                        f.write("2025-05-01T00:00:01.123456Z 1 [Note] MySQL: Test log entry\n")
-                        f.write("2025-05-01T00:00:02.654321Z 2 [Warning] MySQL: Slow query detected\n")
-                        f.write("2025-05-01T00:00:03.789012Z 3 [Note] MySQL: SELECT * FROM users WHERE id = 1\n")
+                # Create directory if it doesn't exist
+                os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
                 
-                # Mark as successfully created
-                result['exists'] = True
-                result['readable'] = True
-                result['valid_log'] = True
-                logger.info(f"Test log file created successfully at: {file_path}")
-                return result
+                # Create file with sample log entries
+                with open(file_path, 'w') as f:
+                    if log_type.lower() == 'apache':
+                        f.write('192.168.1.100 - - [10/Oct/2023:13:55:36 -0700] "GET /index.html HTTP/1.1" 200 1234\n')
+                        f.write('192.168.1.101 - - [10/Oct/2023:13:56:12 -0700] "GET /about.html HTTP/1.1" 200 4567\n')
+                    elif log_type.lower() == 'mysql':
+                        f.write('2023-10-10T13:55:36.123456Z 23 [Note] Access denied for user \'test\'@\'localhost\'\n')
+                        f.write('2023-10-10T13:56:12.123456Z 24 [Note] MySQL: Normal shutdown\n')
+                    else:
+                        f.write('This is a test log file\n')
+                
+                logger.info(f"Created test file at {file_path}")
             except Exception as e:
                 result['error'] = f"Could not create test file: {str(e)}"
-                logger.error(f"Failed to create test log file: {str(e)}")
+                logger.error(f"Failed to create test file {file_path}: {str(e)}")
                 return result
         
         # File exists, check if it's readable
         result['exists'] = True
         try:
-            result['readable'] = os.access(file_path, os.R_OK)
-            if not result['readable']:
-                result['error'] = f"File exists but is not readable: {file_path}"
-                logger.warning(f"File exists but is not readable: {file_path}")
-                return result
+            with open(file_path, 'r', errors='ignore') as f:
+                content = f.read(1024)  # Just read a small sample
+                result['readable'] = True
         except Exception as e:
-            result['error'] = f"Error checking file readability: {str(e)}"
-            logger.error(f"Error checking file readability: {str(e)}")
+            result['error'] = f"Cannot read test file: {str(e)}"
+            logger.error(f"Cannot read test file {file_path}: {str(e)}")
             return result
             
         # Test files are always considered valid if they exist and are readable
@@ -2319,31 +1980,29 @@ def validate_log_file(file_path, log_type):
     try:
         # Check if file exists
         if not os.path.exists(file_path):
-            result['error'] = f"File does not exist: {file_path}"
-            logger.warning(f"File does not exist: {file_path}")
+            result['error'] = "File does not exist"
+            logger.warning(f"Log file not found: {file_path}")
             return result
         
         result['exists'] = True
         
         # Check if it's a directory
         if os.path.isdir(file_path):
-            result['error'] = f"Path is a directory, not a file: {file_path}"
-            logger.warning(f"Path is a directory, not a file: {file_path}")
+            result['error'] = "Path is a directory, not a file"
+            logger.warning(f"Expected a file but found directory: {file_path}")
             return result
         
         # Check if file is readable
         if not os.access(file_path, os.R_OK):
-            result['error'] = f"File exists but is not readable: {file_path}"
-            logger.warning(f"File exists but is not readable: {file_path}")
+            result['error'] = "File is not readable"
+            logger.warning(f"File is not readable: {file_path}")
             return result
         
         result['readable'] = True
         
         # Handle empty files
         if os.path.getsize(file_path) == 0:
-            # Be lenient - empty files are considered valid with a warning
-            result['warning'] = "File is empty"
-            result['valid_log'] = True
+            result['error'] = "File is empty"
             logger.warning(f"File is empty: {file_path}")
             return result
         
@@ -2352,50 +2011,84 @@ def validate_log_file(file_path, log_type):
         sample_lines = []
         
         try:
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            with open(file_path, 'r', errors='ignore') as f:
                 # Read up to 10 lines for validation
                 for _ in range(10):
-                    try:
-                        line = next(f).strip()
-                        if line:  # Only add non-empty lines
-                            sample_lines.append(line)
-                    except StopIteration:
-                        break
+                    line = f.readline().strip()
+                    if line:
+                        sample_lines.append(line)
             
-            # Check for apache log format
-            if log_type == 'apache':
+            # Now validate the format based on log type
+            if log_type.lower() == 'apache':
+                # Check for combined log format: IP - - [date] "REQUEST" status size "referer" "user-agent"
+                # or common log format: IP - - [date] "REQUEST" status size
+                apache_pattern = re.compile(
+                    r'^(\S+) (\S+) (\S+) \[([\w:/]+\s[+\-]\d{4})\] "(.*?)" (\d{3}) (\d+|-)'
+                )
+                
+                # Check at least one line matches the pattern
                 for line in sample_lines:
-                    # Check Common Log Format or Combined Log Format patterns
-                    if re.match(r'(\S+) (\S+) (\S+) \[([\w:/]+\s[+\-]\d{4})\] "(\S+) (.+?) (\S+)" (\d{3}) (\d+|-)', line) or \
-                       re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', line) or \
-                       re.search(r'(GET|POST|PUT|DELETE|HEAD|OPTIONS)', line):
+                    if apache_pattern.match(line):
                         valid_formats = True
                         break
-            
-            # Check for MySQL log format
-            elif log_type == 'mysql':
+                
+                if not valid_formats:
+                    # Try alternative format (error log)
+                    alt_pattern = re.compile(r'^\[(.*?)\] \[(.*?)\] \[(.*?)\]')
+                    for line in sample_lines:
+                        if alt_pattern.match(line) or '[error]' in line or '[notice]' in line:
+                            valid_formats = True
+                            break
+                
+            elif log_type.lower() == 'mysql':
+                # MySQL general log, error log, or slow query log patterns
+                mysql_patterns = [
+                    # Error log pattern
+                    re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+Z'),
+                    # General query log pattern
+                    re.compile(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}'),
+                    # Slow query log pattern
+                    re.compile(r'^# Time: \d{6} \d{1,2}:\d{2}:\d{2}')
+                ]
+                
                 for line in sample_lines:
-                    # Check various MySQL log formats
-                    if re.search(r'\d{4}-\d{2}-\d{2}', line) or \
-                       re.search(r'(Warning|Note|Error|Info)', line) or \
-                       re.search(r'(SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER)', line):
-                        valid_formats = True
+                    for pattern in mysql_patterns:
+                        if pattern.match(line) or 'mysql' in line.lower():
+                            valid_formats = True
+                            break
+                    if valid_formats:
                         break
             
-            # If there's any content, be lenient for files with "test_" in the name
-            if not valid_formats and 'test_' in os.path.basename(file_path).lower() and sample_lines:
-                valid_formats = True
-                logger.info(f"Test file format check bypassed for: {file_path}")
+            # If we couldn't validate the format, be more lenient
+            # Just check if it looks like a log file with timestamps, IPs, etc.
+            if not valid_formats:
+                log_indicators = [
+                    r'\d{4}-\d{2}-\d{2}',          # YYYY-MM-DD date
+                    r'\d{2}:\d{2}:\d{2}',           # HH:MM:SS time
+                    r'\b(?:\d{1,3}\.){3}\d{1,3}\b', # IP address
+                    r'(ERROR|INFO|WARNING|DEBUG)',  # Log levels
+                    r'(GET|POST|PUT|DELETE) ',      # HTTP methods
+                    r'HTTP/\d\.\d',                 # HTTP version
+                ]
+                
+                for line in sample_lines:
+                    for indicator in log_indicators:
+                        if re.search(indicator, line):
+                            valid_formats = True
+                            break
+                    if valid_formats:
+                        break
         
         except Exception as e:
             result['error'] = f"Error reading file content: {str(e)}"
-            logger.error(f"Error reading file content: {str(e)}")
+            logger.error(f"Error reading file content for {file_path}: {str(e)}")
             return result
         
         # Update result based on validation - more lenient approach
         result['valid_log'] = valid_formats or bool(sample_lines)  # Accept if there's any content
         if not result['valid_log']:
-            result['error'] = f"File does not appear to be a valid {log_type} log"
+            result['error'] = "File doesn't contain recognizable log entries"
+            logger.warning(f"File doesn't contain valid log format: {file_path}")
         
         return result
         

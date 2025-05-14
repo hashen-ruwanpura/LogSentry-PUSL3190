@@ -8,28 +8,11 @@ from log_ingestion.models import ParsedLog
 from .models import Threat, Incident
 from threat_detection.rules import RuleEngine
 from .integrations import ThreatIntelligence
-# Import our new alert service
+# Import our alert service
 from alerts.services import AlertService
 
 # Configure logger
 logger = logging.getLogger(__name__)
-
-# Import notification system if it exists, otherwise provide a mock
-try:
-    from notifications import notifiers
-    has_notifiers = True
-except ImportError:
-    has_notifiers = False
-    logger.warning("Notifications module not found, using mock notifier")
-    
-    class MockNotifier:
-        @staticmethod
-        def send_alert(title, message, severity, recipients=None):
-            logger.info(f"MOCK NOTIFICATION - {severity}: {title} - {message}")
-    
-    class notifiers:
-        email = MockNotifier()
-        slack = MockNotifier()
 
 @receiver(post_save, sender=ParsedLog)
 def analyze_log_for_threats(sender, instance, created, **kwargs):
@@ -49,32 +32,28 @@ def analyze_log_for_threats(sender, instance, created, **kwargs):
             if threats:
                 logger.warning(f"Threats detected: {threats}")
                 
-                # Get all available notifiers
-                notifiers_list = [
-                    notifiers.email,
-                    notifiers.slack
-                ]
+                # Use AlertService directly instead of the mock notifiers
+                threat_list = ', '.join(threat.rule_name for threat in threats)
+                title = f"Security threat detected from {instance.source_ip}"
+                message = f"""
+                Threat details:
+                - IP Address: {instance.source_ip}
+                - Timestamp: {instance.timestamp}
+                - Path: {instance.path if hasattr(instance, 'path') else 'N/A'}
+                - Method: {instance.http_method if hasattr(instance, 'http_method') else 'N/A'}
+                - Status: {instance.status_code if hasattr(instance, 'status_code') else 'N/A'}
+                - User Agent: {instance.user_agent if hasattr(instance, 'user_agent') else 'N/A'}
+                - Threat type: {threat_list}
+                """
                 
-                # Send notifications through all available channels
-                for notifier in notifiers_list:
-                    try:
-                        notifier.send_alert(
-                            title=f"Security threat detected from {instance.source_ip}",
-                            message=f"""
-                            Threat details:
-                            - IP Address: {instance.source_ip}
-                            - Timestamp: {instance.timestamp}
-                            - Path: {instance.path}
-                            - Method: {instance.http_method}
-                            - Status: {instance.status_code}
-                            - User Agent: {instance.user_agent}
-                            - Threat type: {', '.join(threat.rule_name for threat in threats)}
-                            """,
-                            severity='high'
-                        )
-                    except Exception as e:
-                        logger.error(f"Failed to send notification via {notifier.__class__.__name__}: {e}")
-                        
+                AlertService.send_alert(
+                    title=title,
+                    message=message,
+                    severity='high',
+                    source_ip=instance.source_ip,
+                    affected_system=instance.source_type if hasattr(instance, 'source_type') else None
+                )
+                
         except Exception as e:
             logger.error(f"Error in threat analysis: {e}")
 
@@ -140,11 +119,6 @@ def notify_about_threat(sender, instance, created, **kwargs):
                     source_ip=instance.source_ip,
                     affected_system=instance.affected_system if hasattr(instance, 'affected_system') else None
                 )
-                
-                # Keep legacy notification for backward compatibility
-                if has_notifiers:
-                    notifiers.email.send_alert(title, message, instance.severity)
-                    notifiers.slack.send_alert(title, message, instance.severity)
                 
                 logger.info(f"Alert notifications sent for threat {instance.id}")
         except Exception as e:

@@ -1,0 +1,48 @@
+{% load static %}
+<!-- Notification container -->
+<div id="notification-container"></div>
+
+<!-- Notification scripts -->
+<script src="{% static 'js/notifications.js' %}"></script>
+<script>
+    // Initialize notifications when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        try {
+            console.log("Initializing notification system from template");
+            
+            // Make sure script is loaded before trying to use it
+            function ensureNotificationSystem() {
+                if (typeof NotificationSystem === 'undefined') {
+                    console.warn("NotificationSystem class not found, waiting for script to load...");
+                    setTimeout(ensureNotificationSystem, 500);
+                    return;
+                }
+                
+                // Create a global instance if it doesn't exist already
+                if (typeof window.notificationSystem === 'undefined') {
+                    window.notificationSystem = new NotificationSystem({
+                        redirectUrl: '/notifications/',
+                        autoGroupSimilar: true,
+                        desktopNotifications: false // Better to not request permissions by default
+                    });
+                    console.log("Notification system initialized successfully");
+                }
+            }
+            
+            // Start the initialization process
+            ensureNotificationSystem();
+        } catch (e) {
+            console.error("Error initializing notification system:", e);
+        }
+    });
+    
+    // Global function to test notifications
+    function testNotificationSystem(severity = 'critical') {
+        if (window.notificationSystem) {
+            return window.notificationSystem.testVisibleNotification(severity);
+        } else {
+            console.error("Notification system not initialized");
+            return false;
+        }
+    }
+</script>
