@@ -505,9 +505,14 @@ window.NotificationSystem = class NotificationSystem {
                 
                 // Otherwise navigate to alert detail page
                 if (alert.threat_id) {
+                    // Ensure we use the correct path format with alert-detail prefix
                     window.location.href = `/alert-detail/${alert.threat_id}/`;
-                } else {
+                } else if (alert.id) {
+                    // If only notification ID exists but no threat_id, go to notifications page
                     window.location.href = '/notifications/';
+                } else {
+                    // Fallback to dashboard if neither exist
+                    window.location.href = '/dashboard/';
                 }
             });
             

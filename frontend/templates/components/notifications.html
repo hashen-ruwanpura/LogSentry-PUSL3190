@@ -45,4 +45,13 @@
             return false;
         }
     }
+    
+    // Add a helper function to handle notification clicks
+    window.handleNotificationClick = function(threatId) {
+        if (threatId) {
+            window.location.href = `/alert-detail/${threatId}/`;
+        } else {
+            window.location.href = '/notifications/';
+        }
+    }
 </script>

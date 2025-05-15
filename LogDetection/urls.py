@@ -162,6 +162,9 @@ urlpatterns = [
 
     # Add the alerts URLs
     path('alerts/', alert_views.alerts_list, name='alerts_list'),
+
+    # Update this pattern to use alert_id instead of threat_id to match the function parameter
+    path('alert-detail/<int:alert_id>/', views.alert_detail, name='alert_detail'),
 ]
 
 # AI ANALYTICS
