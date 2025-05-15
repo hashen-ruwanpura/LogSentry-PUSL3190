@@ -7,6 +7,7 @@ from log_ingestion.models import ParsedLog
 from threat_detection.models import Threat
 from .models import DetectionRule, Threat
 from django.core.cache import cache
+from .mitre_mapping import mitre_mapper
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,13 @@ class SQLInjectionRule(Rule):
             r"(?i)UNION.*SELECT.*\d",  # Detects UNION SELECT statements with numbers
             r"(?i)admin.*--",          # Detects admin"; -- and similar
         ]
+        
+        # Add MITRE mapping
+        self.mitre_mapping = {
+            'tactic': 'initial_access',
+            'technique_id': 'T1190',
+            'technique_name': 'Exploit Public-Facing Application'
+        }
         
     def evaluate(self, log_entry):
         """Check for SQL injection patterns in request"""
@@ -661,6 +669,13 @@ class RuleEngine:
             # Find primary rule that matched (for DB reference)
             primary_rule = self._identify_primary_rule(threat_details)
             
+            # Get MITRE mapping information
+            mitre_tactic, mitre_technique_id, mitre_technique_name = mitre_mapper.map_threat(
+                rule_key,
+                threat_details.get(rule_key, {}),
+                primary_rule
+            )
+            
             # Create the threat record
             try:
                 threat = Threat.objects.create(
@@ -671,23 +686,22 @@ class RuleEngine:
                     source_ip=log_entry.source_ip,
                     user_id=getattr(log_entry, 'user_id', None),
                     affected_system=getattr(log_entry, 'source_type', None),
+                    # Add MITRE information
+                    mitre_tactic=mitre_tactic,
+                    mitre_technique=mitre_technique_id,
                     analysis_data={
                         'threat_details': threat_details,
                         'total_score': total_score,
                         'log_id': log_entry.id,
-                        'detection_time': timezone.now().isoformat()
+                        'detection_time': timezone.now().isoformat(),
+                        'mitre_technique_name': mitre_technique_name
                     }
                 )
                 detected_threats.append(threat)
                 
-                # Set MITRE ATT&CK information if available
-                if primary_rule and primary_rule.mitre_technique_id:
-                    threat.mitre_technique = primary_rule.mitre_technique_id
-                    threat.mitre_tactic = primary_rule.mitre_tactic
-                    threat.save(update_fields=['mitre_technique', 'mitre_tactic'])
-                
                 logger.warning(
-                    f"{severity.upper()} threat detected: {description[:100]} from IP {log_entry.source_ip}"
+                    f"{severity.upper()} threat detected: {description[:100]} from IP {log_entry.source_ip} " +
+                    f"[MITRE: {mitre_tactic}/{mitre_technique_id}]"
                 )
             except Exception as e:
                 logger.error(f"Error creating threat: {e}")

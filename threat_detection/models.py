@@ -38,6 +38,16 @@ class DetectionRule(models.Model):
     
     def __str__(self):
         return f"{self.name} ({self.rule_type})"
+    
+    def save(self, *args, **kwargs):
+        """Override save to add MITRE information if missing"""
+        if not self.mitre_technique_id and not self.mitre_tactic:
+            from .mitre_mapping import mitre_mapper
+            tactic, technique_id, _ = mitre_mapper.map_threat(self.rule_type or self.name, {'description': self.description})
+            self.mitre_tactic = tactic
+            self.mitre_technique_id = technique_id
+            
+        super().save(*args, **kwargs)
 
 
 class Threat(models.Model):
