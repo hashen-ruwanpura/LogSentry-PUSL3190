@@ -314,7 +314,7 @@ def save_log_settings(request):
         analysis_results = None
         if files_processed or request.POST.get('process_logs') == 'true':
             # Process and analyze the log files immediately for feedback
-            log_count, threat_count = process_logs_from_sources(sources_to_process)
+            log_count, threat_count = process_logs_from_sources(sources_to_process, request.user)
             
             # Provide specific feedback about the analysis
             if log_count > 0:
@@ -459,7 +459,7 @@ def update_filebeat_config(apache_path, mysql_path):
         logger.error(f"Failed to update Filebeat config: {str(e)}")
 
 
-def process_logs_from_sources(sources):
+def process_logs_from_sources(sources, current_user=None):
     """Process and analyze logs from specified sources without duplicate alerts"""
     if not sources:
         logger.warning("No sources provided to process_logs_from_sources")
@@ -584,7 +584,8 @@ def process_logs_from_sources(sources):
                 severity=severity,
                 threat_id=alert_id,  # Use our generated ID for deduplication
                 source_ip=",".join(list(ip_addresses)[:5]) if ip_addresses else None,
-                affected_system="Multiple systems" 
+                affected_system="Multiple systems",
+                user=current_user  # Pass the current user here
             )
         
         return log_count, threat_count
@@ -1210,7 +1211,8 @@ def analyze_logs_api(request):
                 ),
                 severity=severity,
                 threat_id=int(alert_digest[:8], 16) % 1000000,  # Generate pseudo ID from hash
-                affected_system="Multiple systems"
+                affected_system="Multiple systems",
+                user=request.user  # Add this line to pass the current user
             )
         
         logger.info(f"Analyzed {processed_raw} logs, found {threat_count} potential threats")

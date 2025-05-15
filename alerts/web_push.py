@@ -42,7 +42,7 @@ class UserDevice(models.Model):
     device_type = models.CharField(max_length=20)  # web, android, ios
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    last_used = models.DateTimeField(auto_now=True)
+    last_used_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         unique_together = ('user', 'device_token')
