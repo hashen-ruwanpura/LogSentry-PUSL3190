@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% load static %}
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -8,6 +9,7 @@
     <!-- CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="{% static 'js/notifications.js' %}"></script>
     
     <style>
         :root {
@@ -35,6 +37,19 @@
             margin: 0;
             padding: 0;
             color: var(--text-primary);
+        }
+        
+        body #notification-container {
+            position: fixed !important;
+            top: 20px !important;
+            right: 20px !important;
+            z-index: 999999 !important;
+            width: 350px !important;
+            max-width: 90% !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 10px !important;
+            pointer-events: auto !important;
         }
         
         .dashboard-container {
@@ -381,6 +396,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
 <body>
+    <div id="notification-container"></div>
     <div class="dashboard-container">
         <header class="main-header">
             <div class="logo-section">
@@ -1147,4 +1163,3 @@
     </script>
 </body>
 </html>
-`

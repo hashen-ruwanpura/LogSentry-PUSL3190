@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% load static %}
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -12,6 +13,7 @@
     <script src="https://unpkg.com/jsvectormap@1.5.3/dist/js/jsvectormap.min.js"></script>
     <script src="https://unpkg.com/jsvectormap@1.5.3/dist/maps/world.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/jsvectormap@1.5.3/dist/css/jsvectormap.min.css">
+    <script src="{% static 'js/notifications.js' %}"></script>
     <style>
         :root {
             --primary-color: #3f51b5;
@@ -35,6 +37,19 @@
             margin: 0;
             padding: 0;
             color: var(--text-primary);
+        }
+        
+        body #notification-container {
+            position: fixed !important;
+            top: 20px !important;
+            right: 20px !important;
+            z-index: 999999 !important;
+            width: 350px !important;
+            max-width: 90% !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 10px !important;
+            pointer-events: auto !important;
         }
         
         .dashboard-container {
@@ -503,6 +518,7 @@
     </style>
 </head>
 <body>
+    <div id="notification-container"></div>
     <div class="dashboard-container">
         <header class="main-header">
             <div class="logo-section">

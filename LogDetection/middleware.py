@@ -35,8 +35,8 @@ class NotificationMiddleware(MiddlewareMixin):
             
         content = response.content.decode('utf-8')
         
-        # Only inject if body tag exists and notification system isn't already included
-        if '</body>' in content and 'window.notificationSystem' not in content:
+        # Only inject if body tag exists, notification container doesn't exist, and notification handler isn't loaded
+        if '</body>' in content and 'id="notification-container"' not in content:
             notification_code = self._get_notification_code()
             modified_content = content.replace('</body>', f'{notification_code}</body>')
             response.content = modified_content.encode('utf-8')
@@ -51,19 +51,6 @@ class NotificationMiddleware(MiddlewareMixin):
         """Get the notification initialization code"""
         return """
         <div id="notification-container"></div>
-        <script>
-            document.addEventListener('DOMContentLoaded', function() {
-                console.log("Notification middleware initializing notification system");
-                if (typeof NotificationSystem !== 'undefined') {
-                    window.notificationSystem = new NotificationSystem();
-                } else {
-                    console.warn("NotificationSystem not found - trying again in 1 second");
-                    setTimeout(function() {
-                        if (typeof NotificationSystem !== 'undefined') {
-                            window.notificationSystem = new NotificationSystem();
-                        }
-                    }, 1000);
-                }
-            });
-        </script>
+        <script src="/static/js/notifications.js"></script>
+        <script src="/static/js/notification-handler.js"></script>
         """
