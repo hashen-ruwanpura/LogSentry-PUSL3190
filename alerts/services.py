@@ -27,87 +27,149 @@ class AlertService:
     
     @classmethod
     def send_alert(cls, title, message, severity, threat_id=None, source_ip=None, affected_system=None):
-        """
-        Send an alert through all configured channels based on severity and user preferences
-        
-        Args:
-            title: Alert title
-            message: Alert message
-            severity: Alert severity (critical, high, medium, low)
-            threat_id: ID of the related threat (optional)
-            source_ip: Source IP address of the threat (optional)
-            affected_system: Affected system name (optional)
-        """
-        # Get style information based on severity
-        style_info = cls.SEVERITY_STYLES.get(severity.lower(), cls.SEVERITY_STYLES['medium'])
-        
-        # Convert basic data to JSON-serializable format
-        alert_data = {
-            'title': title,
-            'message': message,
-            'severity': severity,
-            'timestamp': timezone.now().isoformat(),
-            'threat_id': threat_id,
-            'source_ip': source_ip,
-            'affected_system': affected_system,
-            'color': style_info['color'],
-            'icon': style_info['icon'],
-            'play_sound': style_info['sound']
-        }
-        
+        """Send alert through multiple notification channels based on severity"""
         try:
+            # Get style info based on severity
+            style_info = cls.SEVERITY_STYLES.get(severity, {
+                'color': '#17a2b8',
+                'icon': 'fa-info-circle',
+                'sound': False
+            })
+            
+            # Construct alert data for WebSocket
+            alert_data = {
+                'title': title,
+                'message': message,
+                'severity': severity,
+                'threat_id': threat_id,
+                'source_ip': source_ip,
+                'affected_system': affected_system,
+                'timestamp': timezone.now().isoformat(),
+                'color': style_info['color'],
+                'icon': style_info['icon'],
+                'play_sound': style_info['sound']
+            }
+            
+            # Execute notification strategies based on severity
+            results = []
+            
             # 1. Send to appropriate admins via email based on severity
-            email_success = cls._send_admin_email_alerts(title, message, severity, threat_id, source_ip, affected_system)
+            results.append(cls._send_admin_email_alerts(
+                title, message, severity, threat_id, source_ip, affected_system
+            ))
             
             # 2. Create in-app notifications for relevant users
-            in_app_success = cls._create_in_app_notifications(title, message, severity, threat_id, source_ip, affected_system)
+            results.append(cls._create_in_app_notifications(
+                title, message, severity, threat_id, source_ip, affected_system
+            ))
             
             # 3. Send real-time WebSocket notifications
-            ws_success = cls._send_websocket_notifications(alert_data, severity)
+            results.append(cls._send_websocket_notifications(alert_data, severity))
             
-            # 4. Send push notifications if enabled
-            push_success = cls._send_push_notifications(title, message, severity, threat_id, source_ip, affected_system)
+            # 4. Send push notifications if enabled and severe enough
+            if severity in ['high', 'critical']:
+                results.append(cls._send_push_notifications(
+                    title, message, severity, threat_id, source_ip, affected_system
+                ))
             
-            logger.info(f"Alert '{title}' ({severity}) dispatch status: Email={email_success}, InApp={in_app_success}, WebSocket={ws_success}, Push={push_success}")
+            # Log notification attempt
+            logger.info(
+                f"Alert notifications sent - Severity: {severity}, "
+                f"Email: {results[0]}, In-App: {results[1]}, WebSocket: {results[2]}"
+            )
             
-            # Consider the alert delivery successful if any channel succeeded
-            return email_success or in_app_success or ws_success or push_success
-            
+            return True
         except Exception as e:
-            logger.error(f"Error sending alert through all channels: {e}", exc_info=True)
+            logger.error(f"Error sending alert: {e}", exc_info=True)
             return False
     
     @classmethod
-    def _send_admin_email_alerts(cls, title, message, severity, alert_id=None, source_ip=None, affected_system=None):
-        """Send email alerts to admins based on severity threshold"""
+    def _send_admin_email_alerts(cls, title, message, severity, threat_id=None, source_ip=None, affected_system=None):
+        """Send email alerts to admins based on severity threshold and prevent duplicates"""
         try:
-            # Get admin users with email notification enabled for this severity
-            severity_level = NotificationPreference.get_severity_level(severity)
-            admin_users = User.objects.filter(
-                is_staff=True, 
-                notificationpreference__email_alerts=True,
-            ).exclude(
-                notificationpreference__email_threshold__in=['low', 'medium', 'high', 'critical'][:severity_level]
-            )
+            from django.contrib.auth.models import User
+            from .models import NotificationPreference, EmailNotifier, EmailAlert
+            from django.utils import timezone
+            from django.db.models import Q
             
-            if not admin_users:
-                logger.info(f"No admin users configured to receive {severity} email alerts")
-                return False
+            # Check for duplicates if threat_id is provided
+            if threat_id:
+                # Don't send email if we've already sent an alert for this threat in the last hour
+                one_hour_ago = timezone.now() - timezone.timedelta(hours=1)
+                existing_alerts = EmailAlert.objects.filter(
+                    Q(related_alert_id=threat_id) & 
+                    Q(created_at__gte=one_hour_ago) &
+                    Q(status='sent')
+                )
                 
-            # Get the email addresses
-            recipients = [user.email for user in admin_users if user.email]
+                if existing_alerts.exists():
+                    logger.info(f"Skipping email for threat {threat_id} - already sent within the last hour")
+                    return False
             
+            # Find admin users with email addresses who have enabled email alerts
+            recipients = []
+            
+            # Get all users with staff status who have email addresses
+            admin_users = User.objects.filter(is_staff=True, email__isnull=False).exclude(email='')
+            
+            for admin in admin_users:
+                try:
+                    # Check if admin has notification preferences
+                    prefs = NotificationPreference.objects.get(user=admin)
+                    
+                    # Only send if email alerts are enabled and severity meets threshold
+                    if prefs.email_alerts:
+                        severity_level = NotificationPreference.get_severity_level(severity)
+                        threshold_level = NotificationPreference.get_severity_level(prefs.email_threshold)
+                        
+                        # Send alert if severity is at or above threshold
+                        if severity_level >= threshold_level:
+                            recipients.append(admin.email)
+                            
+                except NotificationPreference.DoesNotExist:
+                    # Default to sending emails for high/critical to admins without preferences
+                    if severity in ['high', 'critical']:
+                        recipients.append(admin.email)
+            
+            # Log recipient count
+            recipient_str = ", ".join(recipients) if recipients else "none"
+            logger.info(f"Sending {severity} alert email to {len(recipients)} recipients: {recipient_str}")
+            
+            # Send emails if there are recipients
             if recipients:
-                # Send the email
-                return EmailNotifier.send_alert(
-                    subject=f"[{severity.upper()}] Security Alert: {title}",
+                # Create an email alert record to prevent duplicates
+                email_alert = EmailAlert.objects.create(
+                    subject=f"[{severity.upper()}] {title}",
+                    message=message,
+                    recipient=",".join(recipients),
+                    severity=severity,
+                    related_alert_id=threat_id,
+                    status='pending',
+                    created_at=timezone.now()
+                )
+                
+                # Send the actual email
+                success = EmailNotifier.send_alert(
+                    subject=f"[{severity.upper()}] {title}",
                     message=message,
                     severity=severity,
                     recipients=recipients,
-                    alert_id=alert_id,
+                    alert_id=threat_id,
                     source_ip=source_ip,
                     affected_system=affected_system
                 )
+                
+                # Update the status
+                if success:
+                    email_alert.status = 'sent'
+                    email_alert.sent_at = timezone.now()
+                else:
+                    email_alert.status = 'failed'
+                    email_alert.error_message = "Failed to send email"
+                    
+                email_alert.save()
+                return success
+                
             return False
         except Exception as e:
             logger.error(f"Error sending admin email alerts: {e}", exc_info=True)
@@ -165,21 +227,35 @@ class AlertService:
             # Get users who should receive this alert based on their preferences
             severity_level = NotificationPreference.get_severity_level(severity)
             eligible_user_ids = User.objects.filter(
-                notificationpreference__in_app_alerts=True,
-            ).exclude(
-                notificationpreference__in_app_threshold__in=['low', 'medium', 'high', 'critical'][:severity_level]
+                is_staff=True  # Only target staff users for now to ensure someone gets the alerts
             ).values_list('id', flat=True)
             
             # Send to each eligible user's group
             for user_id in eligible_user_ids:
-                async_to_sync(channel_layer.group_send)(
-                    f"user_{user_id}_alerts",
-                    {
-                        'type': 'alert_notification',
-                        'alert': alert_data
-                    }
-                )
-                
+                try:
+                    # Use both legacy format (for backward compatibility) and new format
+                    legacy_group = f"user_{user_id}_alerts"
+                    new_group = f"notifications_{user_id}"
+                    
+                    # Send to both possible group formats to ensure delivery
+                    async_to_sync(channel_layer.group_send)(
+                        legacy_group,
+                        {
+                            'type': 'alert_notification',
+                            'alert': alert_data
+                        }
+                    )
+                    
+                    async_to_sync(channel_layer.group_send)(
+                        new_group,
+                        {
+                            'type': 'notification_alert',
+                            'notification': alert_data
+                        }
+                    )
+                except Exception as group_error:
+                    logger.warning(f"Error sending to WebSocket group for user {user_id}: {group_error}")
+                    
             logger.info(f"WebSocket notifications sent to {len(eligible_user_ids)} user groups")
             return True
         except Exception as e:

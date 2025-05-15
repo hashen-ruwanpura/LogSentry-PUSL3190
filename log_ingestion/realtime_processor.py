@@ -186,39 +186,48 @@ class RealtimeLogProcessor:
         """Continuous log processing loop"""
         while self.running:
             try:
-                # Find new unprocessed logs
-                new_logs = RawLog.objects.filter(
+                # Find new unprocessed logs - Fixed the query issue
+                new_logs_query = RawLog.objects.filter(
                     is_parsed=False,
                     timestamp__gt=self.last_processed_time
-                ).order_by('timestamp')[:100]  # Process in batches
+                ).order_by('timestamp')
                 
-                if new_logs.exists():
-                    self.last_processed_time = new_logs.last().timestamp
+                # Get the count first to avoid the "Cannot reverse" error
+                new_logs_count = new_logs_query.count()
+                
+                if new_logs_count > 0:
+                    # Now get up to 100 logs using a fresh query
+                    new_logs = new_logs_query[:100]
                     
-                    # Process each log
-                    for raw_log in new_logs:
-                        try:
-                            # Get parser for this log type
-                            from .parsers import LogParserFactory
-                            parser = LogParserFactory.get_parser(raw_log.source.source_type)
-                            
-                            if parser:
-                                # Parse the log
-                                parsed_log = parser.parse(raw_log)
+                    if new_logs.exists():
+                        # Get the timestamp of the last processed log safely
+                        last_log = list(new_logs)[-1]
+                        self.last_processed_time = last_log.timestamp
+                        
+                        # Process each log
+                        for raw_log in new_logs:
+                            try:
+                                # Get parser for this log type
+                                from .parsers import LogParserFactory
+                                parser = LogParserFactory.get_parser(raw_log.source.source_type)
                                 
-                                # Analyze for threats (will be handled by signal handlers)
-                                # The signal handlers in threat_detection/signals.py will take care of analysis
-                                
-                                logger.debug(f"Processed log ID {raw_log.id} successfully")
-                            else:
-                                logger.warning(f"No parser found for log type: {raw_log.source.source_type}")
+                                if parser:
+                                    # Parse the log
+                                    parsed_log = parser.parse(raw_log)
+                                    
+                                    # Analyze for threats (will be handled by signal handlers)
+                                    # The signal handlers in threat_detection/signals.py will take care of analysis
+                                    
+                                    logger.debug(f"Processed log ID {raw_log.id} successfully")
+                                else:
+                                    logger.warning(f"No parser found for log type: {raw_log.source.source_type}")
+                                    raw_log.is_parsed = True
+                                    raw_log.save()
+                            except Exception as e:
+                                logger.error(f"Error processing log {raw_log.id}: {str(e)}")
+                                # Mark as processed to avoid retry
                                 raw_log.is_parsed = True
                                 raw_log.save()
-                        except Exception as e:
-                            logger.error(f"Error processing log {raw_log.id}: {str(e)}")
-                            # Mark as processed to avoid retry
-                            raw_log.is_parsed = True
-                            raw_log.save()
                 
                 # Sleep to avoid excessive CPU usage
                 time.sleep(1)
