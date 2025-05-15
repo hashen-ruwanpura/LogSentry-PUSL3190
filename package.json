@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "generate-sw": "node gen-firebase-sw.js"
   },
   "repository": {
     "type": "git",
@@ -18,6 +19,7 @@
   },
   "homepage": "https://github.com/hashen-ruwanpura/Threat-Detection-and-Notification-Platform-by-Analyzing-Logs-of-Apache-and-MySQL-servers-#readme",
   "dependencies": {
+    "dotenv": "^16.5.0",
     "web-vitals": "^4.2.4"
   }
 }

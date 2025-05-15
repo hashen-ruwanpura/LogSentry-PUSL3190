@@ -23,39 +23,47 @@ class NotificationMiddleware(MiddlewareMixin):
     
     def process_response(self, request, response):
         """Inject notification code into HTML responses"""
-        # Only process HTML responses that don't already have the notification system
-        if response.get('Content-Type', '').startswith('text/html'):
-            html_content = response.content.decode('utf-8')
+        if not hasattr(response, 'content'):
+            return response
             
-            # Check if notification container already exists
-            if '<div id="notification-container">' not in html_content and '</body>' in html_content:
-                notification_code = self._get_notification_code()
-                # Insert notification code before closing body tag
-                html_content = html_content.replace('</body>', f'{notification_code}</body>')
-                response.content = html_content.encode('utf-8')
+        if not response.get('Content-Type', '').startswith('text/html'):
+            return response
+            
+        # Skip injection if it's an AJAX request
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return response
+            
+        content = response.content.decode('utf-8')
         
+        # Only inject if body tag exists and notification system isn't already included
+        if '</body>' in content and 'window.notificationSystem' not in content:
+            notification_code = self._get_notification_code()
+            modified_content = content.replace('</body>', f'{notification_code}</body>')
+            response.content = modified_content.encode('utf-8')
+            
+            # Update content length
+            if response.has_header('Content-Length'):
+                response['Content-Length'] = len(response.content)
+                
         return response
     
     def _get_notification_code(self):
-        """Return the HTML/JS code for the notification system"""
-        return '''
-        <!-- Notification Container -->
+        """Get the notification initialization code"""
+        return """
         <div id="notification-container"></div>
-        
-        <!-- Notification Script -->
-        <script src="/static/js/notifications.js"></script>
         <script>
             document.addEventListener('DOMContentLoaded', function() {
-                try {
-                    console.log("Initializing notification system");
-                    window.notificationSystem = new NotificationSystem({
-                        redirectUrl: '/notifications/',
-                        autoGroupSimilar: true,
-                        desktopNotifications: false
-                    });
-                } catch (e) {
-                    console.error("Error initializing notification system:", e);
+                console.log("Notification middleware initializing notification system");
+                if (typeof NotificationSystem !== 'undefined') {
+                    window.notificationSystem = new NotificationSystem();
+                } else {
+                    console.warn("NotificationSystem not found - trying again in 1 second");
+                    setTimeout(function() {
+                        if (typeof NotificationSystem !== 'undefined') {
+                            window.notificationSystem = new NotificationSystem();
+                        }
+                    }, 1000);
                 }
             });
         </script>
-        '''
+        """
