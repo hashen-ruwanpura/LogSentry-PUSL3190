@@ -3,50 +3,80 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>User Management | Threat Detection Platform</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <title>User Management | LogSentry</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <style>
         :root {
-            --primary-color: #3a6ea5;
-            --secondary-color: #004e8a;
-            --accent-color: #ff6b6b;
+            --primary-color: #3f51b5;
+            --primary-dark: #303f9f;
+            --primary-light: #c5cae9;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --warning-color: #ffc107;
+            --info-color: #17a2b8;
             --light-bg: #f8f9fa;
-            --dark-bg: #343a40;
+            --dark-bg: #2c3e50;
+            --white: #ffffff;
+            --card-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+            --transition: all 0.3s ease;
         }
         
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f5f5f5;
+            background-color: #f5f7fa;
+            margin: 0;
+            color: #333;
         }
         
         .sidebar {
-            background-color: var(--dark-bg);
+            background: linear-gradient(180deg, var(--primary-dark) 0%, var(--dark-bg) 100%);
             min-height: 100vh;
             color: white;
             position: fixed;
             width: 250px;
             z-index: 100;
+            box-shadow: 3px 0 10px rgba(0, 0, 0, 0.1);
         }
         
         .logo {
-            padding: 20px 15px;
+            padding: 25px 20px;
             font-size: 1.5rem;
             font-weight: bold;
             border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.1);
+        }
+        
+        .logo i {
+            margin-right: 10px;
+            background: var(--primary-light);
+            color: var(--primary-dark);
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         
         .nav-link {
             color: rgba(255,255,255,0.8);
             padding: 12px 20px;
-            margin: 4px 0;
-            border-radius: 4px;
-            transition: all 0.3s;
+            margin: 5px 10px;
+            border-radius: 8px;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
         }
         
         .nav-link:hover, .nav-link.active {
             background-color: var(--primary-color);
             color: white;
+            transform: translateX(5px);
         }
         
         .nav-link i {
@@ -57,21 +87,48 @@
         
         .main-content {
             margin-left: 250px;
-            padding: 20px;
+            padding: 25px;
         }
         
         .top-bar {
             background-color: white;
-            padding: 15px 20px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-            border-radius: 8px;
+            padding: 18px 25px;
+            border-radius: 12px;
+            box-shadow: var(--card-shadow);
+            margin-bottom: 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         
         .card {
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
+            border: none;
+            border-radius: 12px;
+            box-shadow: var(--card-shadow);
+            transition: var(--transition);
+            margin-bottom: 25px;
+            overflow: hidden;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.12);
+        }
+        
+        .card-stat {
+            position: relative;
+            z-index: 1;
+        }
+        
+        .card-stat::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background-color: var(--primary-color);
+            z-index: -1;
         }
         
         .status-indicator {
@@ -82,47 +139,258 @@
         }
         
         .status-active {
-            background-color: #2ecc71;
+            background-color: var(--success-color);
         }
         
         .status-inactive {
-            background-color: #e74c3c;
+            background-color: var(--danger-color);
         }
         
-        .btn-sm {
-            padding: 0.25rem 0.5rem;
-            font-size: 0.8rem;
+        .user-table th {
+            background-color: var(--light-bg);
+            color: var(--secondary-color);
+            font-weight: 600;
+            padding: 12px 15px;
+            border: none;
+        }
+        
+        .user-table td {
+            padding: 12px 15px;
+            vertical-align: middle;
+            border-top: 1px solid rgba(0,0,0,0.05);
+        }
+        
+        .user-table tr {
+            transition: var(--transition);
+        }
+        
+        .user-table tr:hover {
+            background-color: rgba(0,0,0,0.02);
+        }
+        
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 1rem;
+            margin-right: 10px;
         }
         
         .role-badge {
             font-size: 0.75rem;
             padding: 3px 8px;
+            border-radius: 20px;
+        }
+        
+        .role-admin {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .role-regular {
+            background-color: var(--secondary-color);
+            color: white;
+        }
+        
+        .status-badge {
+            font-size: 0.75rem;
+            padding: 3px 8px;
+            border-radius: 20px;
+        }
+        
+        .status-active {
+            background-color: var(--success-color);
+            color: white;
+        }
+        
+        .status-inactive {
+            background-color: var(--secondary-color);
+            color: white;
+        }
+        
+        .user-action {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+            margin-right: 5px;
+            cursor: pointer;
+            color: var(--secondary-color);
+            background-color: transparent;
+            border: none;
+        }
+        
+        .user-action:hover {
+            background-color: var(--light-bg);
+            transform: translateY(-2px);
+        }
+        
+        .user-action.edit-action:hover {
+            color: var(--primary-color);
+        }
+        
+        .user-action.delete-action:hover {
+            color: var(--danger-color);
         }
         
         .filter-section {
-            padding: 15px;
             background-color: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: var(--card-shadow);
+            margin-bottom: 25px;
+        }
+        
+        .action-btn {
             border-radius: 8px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 10px 15px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+            border: none;
         }
         
-        .user-table th {
-            font-weight: 600;
-            font-size: 0.9rem;
+        .action-btn i {
+            margin-right: 8px;
         }
         
-        .user-table td {
-            vertical-align: middle;
+        .action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .action-btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .action-btn-primary:hover {
+            background-color: var(--primary-dark);
+        }
+        
+        .action-btn-outline {
+            background-color: transparent;
+            color: var(--primary-color);
+            border: 1px solid var(--primary-color);
+        }
+        
+        .action-btn-outline:hover {
+            background-color: rgba(63, 81, 181, 0.05);
+        }
+        
+        .pagination .page-item.active .page-link {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
         }
         
         .pagination .page-link {
             color: var(--primary-color);
         }
         
-        .pagination .active .page-link {
-            background-color: var(--primary-color);
-            border-color: var(--primary-color);
+        .form-floating > label {
+            color: var(--secondary-color);
+        }
+        
+        .user-metrics {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .metric-card {
+            flex: 1;
+            padding: 20px;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: white;
+            box-shadow: var(--card-shadow);
+            transition: var(--transition);
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.12);
+        }
+        
+        .metric-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 10px;
+            color: white;
+            font-size: 1.3rem;
+        }
+        
+        .metric-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .metric-label {
+            font-size: 0.9rem;
+            color: var(--secondary-color);
+            text-align: center;
+        }
+        
+        /* Animation for new user row */
+        @keyframes highlightRow {
+            0% { background-color: rgba(63, 81, 181, 0.2); }
+            100% { background-color: transparent; }
+        }
+        
+        .highlight-row {
+            animation: highlightRow 2s ease;
+        }
+        
+        /* Toast container */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 992px) {
+            .main-content {
+                margin-left: 0;
+                padding: 15px;
+            }
+            
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+            }
+            
+            .sidebar.show {
+                transform: translateX(0);
+            }
+            
+            .mobile-toggle {
+                display: block;
+            }
+            
+            .user-metrics {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
@@ -130,7 +398,7 @@
     <!-- Sidebar -->
     <div class="sidebar">
         <div class="logo">
-            <i class="fas fa-shield-alt"></i> ThreatGuard
+            <i class="fas fa-shield-alt"></i> LogSentry
         </div>
         <div class="mt-4">
             <a href="/admin-home/" class="nav-link">
@@ -142,11 +410,17 @@
             <a href="/admin-panel/alerts/" class="nav-link">
                 <i class="fas fa-exclamation-triangle"></i> Alerts
             </a>
-            <a href="/admin-panel/reports/" class="nav-link">
+            <a href="/admin-panel/adminreports/" class="nav-link">
                 <i class="fas fa-chart-bar"></i> Reports
             </a>
             <a href="/admin-panel/users/" class="nav-link active">
                 <i class="fas fa-users"></i> User Management
+            </a>
+            <a href="/admin-panel/auditlogs/" class="nav-link">
+                <i class="fas fa-history"></i> Audit Logs
+            </a>
+            <a href="/admin-panel/user-support/" class="nav-link">
+                <i class="fas fa-headset"></i> User Support
             </a>
             <a href="/admin-panel/settings/" class="nav-link">
                 <i class="fas fa-cog"></i> Settings
@@ -159,62 +433,121 @@
 
     <!-- Main Content -->
     <div class="main-content">
-        <div class="top-bar d-flex justify-content-between align-items-center">
-            <h4 class="mb-0">User Management</h4>
-            <div>
-                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
-                    <i class="fas fa-plus"></i> Add New User
+        <div class="top-bar">
+            <h4 class="mb-0 d-flex align-items-center">
+                <i class="fas fa-users text-primary me-2"></i> User Management
+            </h4>
+            <div class="d-flex align-items-center">
+                <small class="text-muted me-3">Last updated: {% now "Y-m-d H:i:s" %}</small>
+                <button id="refreshUsersBtn" class="action-btn action-btn-outline me-3">
+                    <i class="fas fa-sync-alt"></i> Refresh
                 </button>
+                <button class="action-btn action-btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                    <i class="fas fa-user-plus"></i> Add User
+                </button>
+            </div>
+        </div>
+
+        <!-- User Metrics -->
+        <div class="user-metrics">
+            <div class="metric-card">
+                <div class="metric-icon" style="background-color: var(--primary-color);">
+                    <i class="fas fa-users"></i>
+                </div>
+                <div class="metric-value" id="totalUsersMetric">-</div>
+                <div class="metric-label">Total Users</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-icon" style="background-color: var(--success-color);">
+                    <i class="fas fa-user-check"></i>
+                </div>
+                <div class="metric-value" id="activeUsersMetric">-</div>
+                <div class="metric-label">Active Users</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-icon" style="background-color: var(--danger-color);">
+                    <i class="fas fa-user-slash"></i>
+                </div>
+                <div class="metric-value" id="inactiveUsersMetric">-</div>
+                <div class="metric-label">Inactive Users</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-icon" style="background-color: var(--primary-color);">
+                    <i class="fas fa-user-shield"></i>
+                </div>
+                <div class="metric-value" id="adminUsersMetric">-</div>
+                <div class="metric-label">Administrators</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-icon" style="background-color: var(--secondary-color);">
+                    <i class="fas fa-user"></i>
+                </div>
+                <div class="metric-value" id="regularUsersMetric">-</div>
+                <div class="metric-label">Regular Users</div>
             </div>
         </div>
 
         <!-- Filter Section -->
         <div class="filter-section mb-4">
             <div class="row align-items-center">
-                <div class="col-md-4">
+                <div class="col-md-4 mb-3 mb-md-0">
                     <div class="input-group">
-                        <input type="text" id="searchInput" class="form-control" placeholder="Search users...">
-                        <button class="btn btn-outline-secondary" type="button">
-                            <i class="fas fa-search"></i>
-                        </button>
+                        <span class="input-group-text bg-light border-0">
+                            <i class="fas fa-search text-muted"></i>
+                        </span>
+                        <input type="text" id="searchInput" class="form-control border-0 shadow-none" placeholder="Search users..." style="background-color: #f8f9fa;">
                     </div>
                 </div>
-                <div class="col-md-3">
-                    <select class="form-select" id="roleFilter">
+                <div class="col-md-2 mb-3 mb-md-0">
+                    <select class="form-select border-0" id="roleFilter" style="background-color: #f8f9fa;">
                         <option value="">All Roles</option>
                         <option value="admin">Admin</option>
                         <option value="regular">Regular User</option>
                     </select>
                 </div>
-                <div class="col-md-3">
-                    <select class="form-select" id="statusFilter">
+                <div class="col-md-2 mb-3 mb-md-0">
+                    <select class="form-select border-0" id="statusFilter" style="background-color: #f8f9fa;">
                         <option value="">All Status</option>
                         <option value="active">Active</option>
                         <option value="inactive">Inactive</option>
                     </select>
                 </div>
-                <div class="col-md-2">
-                    <button class="btn btn-outline-primary w-100" id="resetFilters">
-                        <i class="fas fa-undo"></i> Reset
-                    </button>
+                <div class="col-md-4 text-md-end">
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-outline-primary" id="resetFilters">
+                            <i class="fas fa-undo me-1"></i> Reset
+                        </button>
+                        <button class="btn btn-outline-primary dropdown-toggle" type="button" id="exportDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-file-export me-1"></i> Export
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0" aria-labelledby="exportDropdown">
+                            <li><a class="dropdown-item" href="#" id="exportCSV"><i class="fas fa-file-csv text-primary me-2"></i> CSV</a></li>
+                            <li><a class="dropdown-item" href="#" id="exportExcel"><i class="fas fa-file-excel text-success me-2"></i> Excel</a></li>
+                            <li><a class="dropdown-item" href="#" id="exportPDF"><i class="fas fa-file-pdf text-danger me-2"></i> PDF</a></li>
+                        </ul>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Users Table -->
+        <!-- Users Table Card -->
         <div class="card">
             <div class="card-body">
                 <div class="table-responsive">
-                    <table class="table table-hover user-table" id="usersTable">
+                    <table class="table user-table" id="usersTable">
                         <thead>
                             <tr>
-                                <th>User ID</th>
-                                <th>Username</th>
+                                <th style="width: 30px;">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="selectAllUsers">
+                                    </div>
+                                </th>
+                                <th>User</th>
                                 <th>Email</th>
                                 <th>Role</th>
                                 <th>Last Login</th>
                                 <th>Status</th>
-                                <th>Actions</th>
+                                <th style="width: 100px;">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="userTableBody">
@@ -223,7 +556,7 @@
                     </table>
                 </div>
                 <!-- Pagination -->
-                <nav aria-label="Users pagination">
+                <nav aria-label="Users pagination" class="mt-4">
                     <ul class="pagination justify-content-center" id="pagination">
                         <!-- Pagination will be populated by JavaScript -->
                     </ul>
@@ -234,47 +567,71 @@
 
     <!-- Add User Modal -->
     <div class="modal fade" id="addUserModal" tabindex="-1" aria-labelledby="addUserModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="addUserModalLabel">Add New User</h5>
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title" id="addUserModalLabel">
+                        <i class="fas fa-user-plus text-primary me-2"></i> Add New User
+                    </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <form id="addUserForm">
-                        <div class="mb-3">
-                            <label for="username" class="form-label">Username</label>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <div class="form-floating">
+                                    <input type="text" class="form-control" id="firstName" name="firstName" placeholder="First Name">
+                                    <label for="firstName">First Name</label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-floating">
+                                    <input type="text" class="form-control" id="lastName" name="lastName" placeholder="Last Name">
+                                    <label for="lastName">Last Name</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-floating mb-3">
                             <input type="text" class="form-control" id="username" name="username" required>
+                            <label for="username">Username*</label>
                         </div>
-                        <div class="mb-3">
-                            <label for="email" class="form-label">Email</label>
+                        <div class="form-floating mb-3">
                             <input type="email" class="form-control" id="email" name="email" required>
+                            <label for="email">Email*</label>
                         </div>
-                        <div class="mb-3">
-                            <label for="password" class="form-label">Password</label>
+                        <div class="form-floating mb-3">
                             <input type="password" class="form-control" id="password" name="password" required>
+                            <label for="password">Password*</label>
                         </div>
-                        <div class="mb-3">
-                            <label for="confirmPassword" class="form-label">Confirm Password</label>
+                        <div class="form-floating mb-3">
                             <input type="password" class="form-control" id="confirmPassword" name="confirmPassword" required>
+                            <label for="confirmPassword">Confirm Password*</label>
                             <div class="invalid-feedback" id="passwordMismatch">Passwords do not match!</div>
                         </div>
-                        <div class="mb-3">
-                            <label for="role" class="form-label">Role</label>
+                        <div class="form-floating mb-3">
                             <select class="form-select" id="role" name="role">
                                 <option value="regular">Regular User</option>
                                 <option value="admin">Admin</option>
                             </select>
+                            <label for="role">Role</label>
                         </div>
-                        <div class="form-check mb-3">
+                        <div class="form-check form-switch mb-3">
                             <input class="form-check-input" type="checkbox" id="isActive" name="isActive" checked>
                             <label class="form-check-label" for="isActive">Active Account</label>
                         </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="sendWelcomeEmail" name="sendWelcomeEmail" checked>
+                            <label class="form-check-label" for="sendWelcomeEmail">
+                                Send welcome email with login details
+                            </label>
+                        </div>
                     </form>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" id="saveUserBtn">Save User</button>
+                    <button type="button" class="btn btn-primary" id="saveUserBtn">
+                        <i class="fas fa-save me-1"></i> Create User
+                    </button>
                 </div>
             </div>
         </div>
@@ -282,54 +639,74 @@
 
     <!-- Edit User Modal -->
     <div class="modal fade" id="editUserModal" tabindex="-1" aria-labelledby="editUserModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="editUserModalLabel">Edit User</h5>
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title" id="editUserModalLabel">
+                        <i class="fas fa-user-edit text-primary me-2"></i> Edit User
+                    </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <form id="editUserForm">
                         <input type="hidden" id="editUserId" name="userId">
-                        <div class="mb-3">
-                            <label for="editUsername" class="form-label">Username</label>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <div class="form-floating">
+                                    <input type="text" class="form-control" id="editFirstName" name="firstName">
+                                    <label for="editFirstName">First Name</label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-floating">
+                                    <input type="text" class="form-control" id="editLastName" name="lastName">
+                                    <label for="editLastName">Last Name</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-floating mb-3">
                             <input type="text" class="form-control" id="editUsername" name="username" readonly>
+                            <label for="editUsername">Username</label>
                         </div>
-                        <div class="mb-3">
-                            <label for="editEmail" class="form-label">Email</label>
-                            <input type="email" class="form-control" id="editEmail" name="email" readonly>
+                        <div class="form-floating mb-3">
+                            <input type="email" class="form-control" id="editEmail" name="email">
+                            <label for="editEmail">Email</label>
                         </div>
-                        <div class="mb-3">
-                            <label for="editRole" class="form-label">Role</label>
+                        <div class="form-floating mb-3">
                             <select class="form-select" id="editRole" name="role">
                                 <option value="regular">Regular User</option>
                                 <option value="admin">Admin</option>
                             </select>
+                            <label for="editRole">Role</label>
                         </div>
-                        <div class="form-check mb-3">
+                        <div class="form-check form-switch mb-3">
                             <input class="form-check-input" type="checkbox" id="editIsActive" name="isActive">
                             <label class="form-check-label" for="editIsActive">Active Account</label>
                         </div>
-                        <div class="mb-3">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="resetPassword">
-                                <label class="form-check-label" for="resetPassword">Reset Password</label>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="resetPassword">
+                            <label class="form-check-label" for="resetPassword">
+                                <i class="fas fa-key me-1"></i> Reset Password
+                            </label>
+                        </div>
+                        <div class="reset-password-fields d-none">
+                            <div class="form-floating mb-3">
+                                <input type="password" class="form-control" id="editPassword" name="password">
+                                <label for="editPassword">New Password</label>
                             </div>
-                        </div>
-                        <div class="mb-3 reset-password-fields d-none">
-                            <label for="editPassword" class="form-label">New Password</label>
-                            <input type="password" class="form-control" id="editPassword" name="password">
-                        </div>
-                        <div class="mb-3 reset-password-fields d-none">
-                            <label for="editConfirmPassword" class="form-label">Confirm New Password</label>
-                            <input type="password" class="form-control" id="editConfirmPassword" name="confirmPassword">
-                            <div class="invalid-feedback" id="editPasswordMismatch">Passwords do not match!</div>
+                            <div class="form-floating mb-3">
+                                <input type="password" class="form-control" id="editConfirmPassword" name="confirmPassword">
+                                <label for="editConfirmPassword">Confirm New Password</label>
+                                <div class="invalid-feedback" id="editPasswordMismatch">Passwords do not match!</div>
+                            </div>
                         </div>
                     </form>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" id="updateUserBtn">Update User</button>
+                    <button type="button" class="btn btn-primary" id="updateUserBtn">
+                        <i class="fas fa-save me-1"></i> Update User
+                    </button>
                 </div>
             </div>
         </div>
@@ -337,24 +714,34 @@
 
     <!-- Delete User Confirmation Modal -->
     <div class="modal fade" id="deleteUserModal" tabindex="-1" aria-labelledby="deleteUserModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="deleteUserModalLabel">Confirm Delete</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="deleteUserModalLabel">
+                        <i class="fas fa-exclamation-triangle me-2"></i> Confirm Delete
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <input type="hidden" id="deleteUserId">
-                    <p>Are you sure you want to delete user <strong id="deleteUserName"></strong>?</p>
-                    <p class="text-danger">This action cannot be undone!</p>
+                    <div class="text-center mb-4">
+                        <i class="fas fa-user-times text-danger" style="font-size: 3rem;"></i>
+                    </div>
+                    <p class="mb-1">Are you sure you want to delete user <strong id="deleteUserName"></strong>?</p>
+                    <p class="text-danger mb-0"><i class="fas fa-exclamation-circle me-1"></i> This action cannot be undone!</p>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-danger" id="confirmDeleteBtn">Delete User</button>
+                    <button type="button" class="btn btn-danger" id="confirmDeleteBtn">
+                        <i class="fas fa-trash-alt me-1"></i> Delete User
+                    </button>
                 </div>
             </div>
         </div>
     </div>
+
+    <!-- Toast notifications container -->
+    <div class="toast-container"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
@@ -364,13 +751,31 @@
             
             // Add event listeners
             document.getElementById('resetFilters').addEventListener('click', resetFilters);
-            document.getElementById('searchInput').addEventListener('input', filterUsers);
+            document.getElementById('searchInput').addEventListener('input', debounce(filterUsers, 300));
             document.getElementById('roleFilter').addEventListener('change', filterUsers);
             document.getElementById('statusFilter').addEventListener('change', filterUsers);
+            document.getElementById('refreshUsersBtn').addEventListener('click', () => loadUsers(1));
             document.getElementById('saveUserBtn').addEventListener('click', saveUser);
             document.getElementById('updateUserBtn').addEventListener('click', updateUser);
             document.getElementById('confirmDeleteBtn').addEventListener('click', deleteUser);
             document.getElementById('resetPassword').addEventListener('change', togglePasswordFields);
+            document.getElementById('selectAllUsers').addEventListener('change', toggleAllUsers);
+            
+            // Export buttons
+            document.getElementById('exportCSV')?.addEventListener('click', () => exportUsers('csv'));
+            document.getElementById('exportExcel')?.addEventListener('click', () => exportUsers('xlsx'));
+            document.getElementById('exportPDF')?.addEventListener('click', () => exportUsers('pdf'));
+            
+            // Bulk actions
+            const bulkActionsBtn = document.createElement('button');
+            bulkActionsBtn.className = 'btn btn-outline-primary';
+            bulkActionsBtn.innerHTML = '<i class="fas fa-tasks me-1"></i> Bulk Actions';
+            bulkActionsBtn.id = 'bulkActionsBtn';
+            bulkActionsBtn.style.display = 'none';
+            
+            document.querySelector('.col-md-4.text-md-end .btn-group').prepend(bulkActionsBtn);
+            
+            bulkActionsBtn.addEventListener('click', openBulkActionsModal);
 
             // Initialize password fields visibility toggle
             function togglePasswordFields() {
@@ -381,9 +786,35 @@
                     resetPasswordFields.forEach(field => field.classList.add('d-none'));
                 }
             }
+            
+            // Toggle select all users
+            function toggleAllUsers() {
+                const checkboxes = document.querySelectorAll('.user-select');
+                checkboxes.forEach(checkbox => {
+                    checkbox.checked = this.checked;
+                });
+                updateBulkActionsVisibility();
+            }
+            
+            // Update bulk actions button visibility based on selections
+            function updateBulkActionsVisibility() {
+                const selectedCount = document.querySelectorAll('.user-select:checked').length;
+                document.getElementById('bulkActionsBtn').style.display = selectedCount > 0 ? 'inline-block' : 'none';
+            }
+            
+            // Open bulk actions modal
+            function openBulkActionsModal() {
+                // Implementation would go here
+                alert('Bulk actions feature would open here');
+            }
 
             // Fetch users from server and display them
             function loadUsers(page = 1) {
+                // Update refresh button to show loading
+                const refreshBtn = document.getElementById('refreshUsersBtn');
+                refreshBtn.disabled = true;
+                refreshBtn.innerHTML = '<i class="fas fa-sync-alt fa-spin me-1"></i> Loading...';
+                
                 const searchTerm = document.getElementById('searchInput').value;
                 const roleFilter = document.getElementById('roleFilter').value;
                 const statusFilter = document.getElementById('statusFilter').value;
@@ -406,11 +837,36 @@
                     .then(data => {
                         displayUsers(data.users);
                         setupPagination(data.total_pages, data.current_page);
+                        updateUserMetrics(data.users);
                     })
                     .catch(error => {
                         console.error('Error loading users:', error);
-                        alert('Failed to load users. Please try again later.');
+                        showToast('Error', 'Failed to load users. Please try again.', 'error');
+                    })
+                    .finally(() => {
+                        // Reset refresh button
+                        refreshBtn.disabled = false;
+                        refreshBtn.innerHTML = '<i class="fas fa-sync-alt me-1"></i> Refresh';
                     });
+            }
+
+            // Update user metrics display
+            function updateUserMetrics(users) {
+                if (!users) return;
+                
+                // Calculate metrics
+                const total = users.length;
+                const active = users.filter(user => user.is_active).length;
+                const inactive = total - active;
+                const admin = users.filter(user => user.role === 'admin').length;
+                const regular = total - admin;
+                
+                // Update display
+                document.getElementById('totalUsersMetric').textContent = total;
+                document.getElementById('activeUsersMetric').textContent = active;
+                document.getElementById('inactiveUsersMetric').textContent = inactive;
+                document.getElementById('adminUsersMetric').textContent = admin;
+                document.getElementById('regularUsersMetric').textContent = regular;
             }
 
             // Display users in the table
@@ -418,43 +874,81 @@
                 const tbody = document.getElementById('userTableBody');
                 tbody.innerHTML = '';
                 
-                users.forEach(user => {
+                if (!users || users.length === 0) {
                     const row = document.createElement('tr');
                     row.innerHTML = `
-                        <td>${user.id}</td>
-                        <td>${user.username}</td>
+                        <td colspan="7" class="text-center py-4">
+                            <i class="fas fa-search text-muted mb-3" style="font-size: 2rem;"></i>
+                            <p class="mb-0">No users found matching your criteria</p>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                    return;
+                }
+                
+                users.forEach(user => {
+                    // Create random color for avatar
+                    const colors = ['#3f51b5', '#e91e63', '#009688', '#ff5722', '#607d8b'];
+                    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+                    
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>
+                            <div class="form-check">
+                                <input class="form-check-input user-select" type="checkbox" value="${user.id}">
+                            </div>
+                        </td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <div class="avatar" style="background-color: ${randomColor};">
+                                    ${user.username.charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                    ${user.username}
+                                    ${user.first_name || user.last_name ? `<div class="text-muted small">${user.first_name || ''} ${user.last_name || ''}</div>` : ''}
+                                </div>
+                            </div>
+                        </td>
                         <td>${user.email}</td>
                         <td>
-                            <span class="badge ${user.role === 'admin' ? 'bg-danger' : 'bg-primary'} role-badge">
+                            <span class="badge ${user.role === 'admin' ? 'role-admin' : 'role-regular'} role-badge">
                                 ${user.role === 'admin' ? 'Admin' : 'Regular User'}
                             </span>
                         </td>
-                        <td>${user.last_login}</td>
+                        <td>${formatDate(user.last_login) || 'Never'}</td>
                         <td>
-                            <span class="status-indicator ${user.is_active ? 'status-active' : 'status-inactive'} me-1"></span>
-                            ${user.is_active ? 'Active' : 'Inactive'}
+                            <span class="badge ${user.is_active ? 'status-active' : 'status-inactive'} status-badge">
+                                ${user.is_active ? 'Active' : 'Inactive'}
+                            </span>
                         </td>
                         <td>
-                            <button class="btn btn-sm btn-outline-primary me-1 edit-btn" data-user-id="${user.id}">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <button class="btn btn-sm btn-outline-danger delete-btn" data-user-id="${user.id}" data-username="${user.username}">
-                                <i class="fas fa-trash-alt"></i>
-                            </button>
+                            <div class="d-flex">
+                                <button class="user-action edit-action" data-user-id="${user.id}" title="Edit User">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="user-action delete-action" data-user-id="${user.id}" data-username="${user.username}" title="Delete User">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </div>
                         </td>
                     `;
                     tbody.appendChild(row);
                 });
                 
+                // Add event listeners to checkboxes
+                document.querySelectorAll('.user-select').forEach(checkbox => {
+                    checkbox.addEventListener('change', updateBulkActionsVisibility);
+                });
+                
                 // Add event listeners to edit and delete buttons
-                document.querySelectorAll('.edit-btn').forEach(btn => {
+                document.querySelectorAll('.edit-action').forEach(btn => {
                     btn.addEventListener('click', function() {
                         const userId = this.getAttribute('data-user-id');
                         openEditModal(userId);
                     });
                 });
                 
-                document.querySelectorAll('.delete-btn').forEach(btn => {
+                document.querySelectorAll('.delete-action').forEach(btn => {
                     btn.addEventListener('click', function() {
                         const userId = this.getAttribute('data-user-id');
                         const username = this.getAttribute('data-username');
@@ -468,6 +962,8 @@
                 const pagination = document.getElementById('pagination');
                 pagination.innerHTML = '';
                 
+                if (totalPages <= 1) return;
+                
                 // Previous button
                 const prevLi = document.createElement('li');
                 prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
@@ -476,10 +972,18 @@
                 
                 // Page numbers
                 for (let i = 1; i <= totalPages; i++) {
-                    const li = document.createElement('li');
-                    li.className = `page-item ${i === currentPage ? 'active' : ''}`;
-                    li.innerHTML = `<a class="page-link" href="#" data-page="${i}">${i}</a>`;
-                    pagination.appendChild(li);
+                    // Show limited page numbers with ellipsis
+                    if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
+                        const li = document.createElement('li');
+                        li.className = `page-item ${i === currentPage ? 'active' : ''}`;
+                        li.innerHTML = `<a class="page-link" href="#" data-page="${i}">${i}</a>`;
+                        pagination.appendChild(li);
+                    } else if (i === currentPage - 2 || i === currentPage + 2) {
+                        const li = document.createElement('li');
+                        li.className = 'page-item disabled';
+                        li.innerHTML = '<a class="page-link" href="#">...</a>';
+                        pagination.appendChild(li);
+                    }
                 }
                 
                 // Next button
@@ -502,14 +1006,18 @@
 
             // Filter users based on search and filter inputs
             function filterUsers() {
-                const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-                const roleFilter = document.getElementById('roleFilter').value;
-                const statusFilter = document.getElementById('statusFilter').value;
-                
-                // In a real application, you would send these filters to the server
-                // For this example, we'll just reload page 1 with the filters
-                console.log('Filtering with:', { searchTerm, roleFilter, statusFilter });
                 loadUsers(1);
+            }
+
+            // Debounce function to prevent excessive API calls
+            function debounce(func, wait) {
+                let timeout;
+                return function() {
+                    const context = this;
+                    const args = arguments;
+                    clearTimeout(timeout);
+                    timeout = setTimeout(() => func.apply(context, args), wait);
+                };
             }
 
             // Reset all filters
@@ -522,7 +1030,7 @@
 
             // Open the edit user modal with pre-filled data
             function openEditModal(userId) {
-                // Fetch the actual user data from the server
+                // Fetch the user data from the server
                 fetch(`/api/users/${userId}/`)
                     .then(response => {
                         if (!response.ok) {
@@ -532,6 +1040,8 @@
                     })
                     .then(user => {
                         document.getElementById('editUserId').value = user.id;
+                        document.getElementById('editFirstName').value = user.first_name || '';
+                        document.getElementById('editLastName').value = user.last_name || '';
                         document.getElementById('editUsername').value = user.username;
                         document.getElementById('editEmail').value = user.email;
                         document.getElementById('editRole').value = user.role;
@@ -544,7 +1054,7 @@
                     })
                     .catch(error => {
                         console.error('Error fetching user details:', error);
-                        alert('Failed to load user details. Please try again.');
+                        showToast('Error', 'Failed to load user details. Please try again.', 'error');
                     });
             }
 
@@ -565,6 +1075,14 @@
                 const confirmPassword = document.getElementById('confirmPassword').value;
                 const role = document.getElementById('role').value;
                 const isActive = document.getElementById('isActive').checked;
+                const firstName = document.getElementById('firstName').value;
+                const lastName = document.getElementById('lastName').value;
+                
+                // Validate required fields
+                if (!username || !email || !password) {
+                    showToast('Error', 'Please fill all required fields', 'error');
+                    return;
+                }
                 
                 // Check if passwords match
                 if (password !== confirmPassword) {
@@ -572,13 +1090,23 @@
                     return;
                 }
                 
+                // Reset password mismatch message
+                document.getElementById('passwordMismatch').style.display = 'none';
+                
+                // Show loading state
+                const saveBtn = document.getElementById('saveUserBtn');
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Creating...';
+                
                 // Prepare user data
                 const userData = {
                     username: username,
                     email: email,
                     password: password,
                     role: role,
-                    is_active: isActive
+                    is_active: isActive,
+                    first_name: firstName,
+                    last_name: lastName
                 };
                 
                 // Send POST request to create user
@@ -598,30 +1126,44 @@
                     
                     // Reset the form and close the modal
                     document.getElementById('addUserForm').reset();
-                    document.getElementById('passwordMismatch').style.display = 'none';
-                    const modal = bootstrap.Modal.getInstance(document.getElementById('addUserModal'));
-                    modal.hide();
+                    bootstrap.Modal.getInstance(document.getElementById('addUserModal')).hide();
                     
                     // Reload users and show success message
                     loadUsers(1);
-                    alert('User created successfully!');
+                    showToast('Success', 'User created successfully!', 'success');
                 })
                 .catch(error => {
-                    alert('Error creating user: ' + error.message);
+                    showToast('Error', error.message || 'Error creating user', 'error');
+                })
+                .finally(() => {
+                    // Reset button
+                    saveBtn.disabled = false;
+                    saveBtn.innerHTML = '<i class="fas fa-save me-1"></i> Create User';
                 });
             }
 
             // Update an existing user
             function updateUser() {
                 const userId = document.getElementById('editUserId').value;
+                const firstName = document.getElementById('editFirstName').value;
+                const lastName = document.getElementById('editLastName').value;
+                const email = document.getElementById('editEmail').value;
                 const role = document.getElementById('editRole').value;
                 const isActive = document.getElementById('editIsActive').checked;
                 const resetPassword = document.getElementById('resetPassword').checked;
                 
+                // Validate required fields
+                if (!email) {
+                    showToast('Error', 'Email is required', 'error');
+                    return;
+                }
+                
                 let userData = {
-                    // Remove email from here since we're not changing it
+                    email: email,
                     role: role,
-                    is_active: isActive
+                    is_active: isActive,
+                    first_name: firstName,
+                    last_name: lastName
                 };
                 
                 // Add password if resetting
@@ -629,13 +1171,24 @@
                     const password = document.getElementById('editPassword').value;
                     const confirmPassword = document.getElementById('editConfirmPassword').value;
                     
+                    if (!password) {
+                        showToast('Error', 'Password is required when resetting password', 'error');
+                        return;
+                    }
+                    
                     if (password !== confirmPassword) {
                         document.getElementById('editPasswordMismatch').style.display = 'block';
                         return;
                     }
                     
+                    document.getElementById('editPasswordMismatch').style.display = 'none';
                     userData.password = password;
                 }
+                
+                // Show loading state
+                const updateBtn = document.getElementById('updateUserBtn');
+                updateBtn.disabled = true;
+                updateBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Updating...';
                 
                 // Send POST request to update user
                 fetch(`/api/users/${userId}/update/`, {
@@ -653,22 +1206,30 @@
                     }
                     
                     // Close the modal
-                    document.getElementById('editPasswordMismatch').style.display = 'none';
-                    const modal = bootstrap.Modal.getInstance(document.getElementById('editUserModal'));
-                    modal.hide();
+                    bootstrap.Modal.getInstance(document.getElementById('editUserModal')).hide();
                     
                     // Reload users and show success message
                     loadUsers(1);
-                    alert('User updated successfully!');
+                    showToast('Success', 'User updated successfully!', 'success');
                 })
                 .catch(error => {
-                    alert('Error updating user: ' + error.message);
+                    showToast('Error', error.message || 'Error updating user', 'error');
+                })
+                .finally(() => {
+                    // Reset button
+                    updateBtn.disabled = false;
+                    updateBtn.innerHTML = '<i class="fas fa-save me-1"></i> Update User';
                 });
             }
 
             // Delete a user
             function deleteUser() {
                 const userId = document.getElementById('deleteUserId').value;
+                
+                // Show loading state
+                const deleteBtn = document.getElementById('confirmDeleteBtn');
+                deleteBtn.disabled = true;
+                deleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Deleting...';
                 
                 // Send POST request to delete user
                 fetch(`/api/users/${userId}/delete/`, {
@@ -690,11 +1251,21 @@
                     
                     // Reload users and show success message
                     loadUsers(1);
-                    alert(data.message || 'User deleted successfully!');
+                    showToast('Success', data.message || 'User deleted successfully!', 'success');
                 })
                 .catch(error => {
-                    alert('Error deleting user: ' + error.message);
+                    showToast('Error', error.message || 'Error deleting user', 'error');
+                })
+                .finally(() => {
+                    // Reset button
+                    deleteBtn.disabled = false;
+                    deleteBtn.innerHTML = '<i class="fas fa-trash-alt me-1"></i> Delete User';
                 });
+            }
+            
+            // Export users (placeholder)
+            function exportUsers(format) {
+                showToast('Export', `Exporting users in ${format.toUpperCase()} format`, 'success');
             }
 
             // Helper function to get CSRF token from cookies
@@ -711,7 +1282,68 @@
                         }
                     }
                 }
+                
+                // If not found in cookie, try to get from meta tag
+                if (!cookieValue) {
+                    const meta = document.querySelector('meta[name="csrf-token"]');
+                    if (meta) {
+                        cookieValue = meta.getAttribute('content');
+                    }
+                }
+                
                 return cookieValue;
+            }
+            
+            // Format date nicely
+            function formatDate(dateString) {
+                if (!dateString) return null;
+                
+                const date = new Date(dateString);
+                const options = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+                
+                return date.toLocaleDateString(undefined, options);
+            }
+            
+            // Show toast notification
+            function showToast(title, message, type) {
+                // Create toast container if it doesn't exist
+                let toastContainer = document.querySelector('.toast-container');
+                if (!toastContainer) {
+                    toastContainer = document.createElement('div');
+                    toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+                    document.body.appendChild(toastContainer);
+                }
+                
+                // Create toast element
+                const toastElement = document.createElement('div');
+                toastElement.className = `toast align-items-center text-white bg-${type === 'error' ? 'danger' : 'success'} border-0 shadow`;
+                toastElement.setAttribute('role', 'alert');
+                toastElement.setAttribute('aria-live', 'assertive');
+                toastElement.setAttribute('aria-atomic', 'true');
+                
+                // Create toast content
+                toastElement.innerHTML = `
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            <strong>${title}</strong>: ${message}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                `;
+                
+                // Add to container
+                toastContainer.appendChild(toastElement);
+                
+                // Initialize and show toast
+                const toast = new bootstrap.Toast(toastElement, {
+                    delay: 5000
+                });
+                toast.show();
+                
+                // Remove after it's hidden
+                toastElement.addEventListener('hidden.bs.toast', function () {
+                    toastElement.remove();
+                });
             }
         });
     </script>

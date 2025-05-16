@@ -39,6 +39,7 @@ from django.views.generic import TemplateView
 from authentication.views_apache_logs import apache_logs_view  # Add this import
 from authentication.views_mysql_logs import mysql_logs_view  # Add this new import
 from authentication import views_explore_agent  # Add this import
+from authentication import views_admin_auditlogs  # Add this import
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -165,6 +166,13 @@ urlpatterns = [
 
     # Update this pattern to use alert_id instead of threat_id to match the function parameter
     path('alert-detail/<int:alert_id>/', views.alert_detail, name='alert_detail'),
+
+    # Add to the existing urlpatterns list
+    path('admin-panel/auditlogs/', views_admin_auditlogs.audit_logs_view, name='admin_audit_logs'),
+
+    # Add these to URL patterns
+    path('api/admin/audit-logs/<int:log_id>/revert/', views_admin_auditlogs.revert_config_change, name='api_revert_config'),
+    path('api/admin/audit-logs/export/', views_admin_auditlogs.export_audit_logs, name='api_export_audit_logs'),
 ]
 
 # AI ANALYTICS

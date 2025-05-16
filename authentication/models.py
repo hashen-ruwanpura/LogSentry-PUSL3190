@@ -139,3 +139,35 @@ class UserDeviceToken(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.device_type} ({self.device_token[:10]}...)"
+    
+class ConfigAuditLog(models.Model):
+    """Model to track configuration changes for audit purposes"""
+    CHANGE_TYPES = (
+        ('apache_path', 'Apache Log Path'),
+        ('mysql_path', 'MySQL Log Path'),
+        ('system_path', 'System Log Path'),
+        ('custom_path', 'Custom Log Path'),
+        ('setting', 'System Setting'),
+    )
+    
+    STATUS_CHOICES = (
+        ('active', 'Active'),
+        ('reverted', 'Reverted'),
+    )
+    
+    timestamp = models.DateTimeField(auto_now_add=True)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    change_type = models.CharField(max_length=30, choices=CHANGE_TYPES)
+    previous_value = models.TextField(null=True, blank=True) 
+    new_value = models.TextField()
+    description = models.TextField()
+    source_ip = models.GenericIPAddressField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+    reverted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='reverted_changes')
+    reverted_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-timestamp']
+        
+    def __str__(self):
+        return f"{self.change_type} changed by {self.user} on {self.timestamp.strftime('%Y-%m-%d %H:%M')}"

@@ -171,7 +171,24 @@ def save_log_settings(request):
         custom_log_paths = request.POST.getlist('custom_log_paths[]')
         custom_log_paths_list = [path.strip() for path in custom_log_paths if path.strip()]
         
-        # Save system and custom log paths to settings
+        # Get client IP for audit logging
+        client_ip = request.META.get('REMOTE_ADDR', None)
+        
+        # Check for existing Apache source to record change
+        try:
+            existing_apache = LogSource.objects.get(name='Apache Web Server')
+            old_apache_path = existing_apache.file_path
+        except LogSource.DoesNotExist:
+            old_apache_path = None
+            
+        # Check for existing MySQL source to record change
+        try:
+            existing_mysql = LogSource.objects.get(name='MySQL Database Server')
+            old_mysql_path = existing_mysql.file_path
+        except LogSource.DoesNotExist:
+            old_mysql_path = None
+        
+        # Save system and custom log paths (existing code)
         from authentication.models import SystemSettings
         
         # Save system log paths
@@ -331,6 +348,30 @@ def save_log_settings(request):
         
         # Add confirmation message
         messages.success(request, "Log settings saved successfully")
+        
+        # Audit Apache log path change if path changed
+        if apache_log_path and apache_log_path != old_apache_path and old_apache_path is not None:
+            from authentication.models import ConfigAuditLog
+            ConfigAuditLog.objects.create(
+                user=request.user,
+                change_type='apache_path',
+                previous_value=old_apache_path,
+                new_value=apache_log_path,
+                description=f"Changed Apache log path from {old_apache_path} to {apache_log_path}",
+                source_ip=client_ip
+            )
+            
+        # Audit MySQL log path change if path changed
+        if mysql_log_path and mysql_log_path != old_mysql_path and old_mysql_path is not None:
+            from authentication.models import ConfigAuditLog
+            ConfigAuditLog.objects.create(
+                user=request.user,
+                change_type='mysql_path',
+                previous_value=old_mysql_path,
+                new_value=mysql_log_path,
+                description=f"Changed MySQL log path from {old_mysql_path} to {mysql_log_path}",
+                source_ip=client_ip
+            )
         
     except Exception as e:
         logger.error(f"Error saving log settings: {str(e)}", exc_info=True)
