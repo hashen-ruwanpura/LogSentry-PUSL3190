@@ -465,6 +465,134 @@ class EmailNotifier:
     </html>
     """
 
+    WELCOME_EMAIL_TEMPLATE = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Welcome to LogSentry</title>
+        <style>
+            body {
+                font-family: 'Segoe UI', Arial, sans-serif;
+                line-height: 1.6;
+                color: #333;
+                margin: 0;
+                padding: 0;
+                background-color: #f5f5f5;
+            }
+            .container {
+                max-width: 600px;
+                margin: 20px auto;
+                border-radius: 8px;
+                overflow: hidden;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                background-color: #fff;
+            }
+            .header {
+                background-color: #3f51b5;
+                color: white;
+                padding: 20px 25px;
+                border-radius: 5px 5px 0 0;
+            }
+            .header h1 {
+                margin: 0;
+                font-size: 24px;
+                font-weight: 600;
+            }
+            .content {
+                background-color: #ffffff;
+                padding: 25px;
+                border: 1px solid #ddd;
+                border-top: none;
+            }
+            .welcome-message {
+                font-size: 16px;
+                line-height: 1.5;
+                margin-bottom: 20px;
+            }
+            .credentials-box {
+                background-color: #f8f9fa;
+                border-left: 4px solid #3f51b5;
+                padding: 15px;
+                margin: 15px 0;
+                border-radius: 0 4px 4px 0;
+            }
+            .credentials-box p {
+                margin: 8px 0;
+            }
+            .credentials-label {
+                font-weight: bold;
+                color: #333;
+            }
+            .action-btn {
+                display: inline-block;
+                background-color: #3f51b5;
+                color: #FFFFFF !important;
+                text-decoration: none;
+                padding: 12px 24px;
+                border-radius: 4px;
+                margin-top: 20px;
+                font-weight: 600;
+                text-align: center;
+            }
+            .action-btn:hover {
+                background-color: #303f9f;
+            }
+            .footer {
+                margin-top: 25px;
+                padding-top: 15px;
+                font-size: 13px;
+                color: #777;
+                text-align: center;
+                border-top: 1px solid #eee;
+            }
+            .security-note {
+                background-color: #fff8e1;
+                border-left: 4px solid #ffc107;
+                padding: 10px 15px;
+                margin: 15px 0;
+                font-size: 13px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>Welcome to LogSentry</h1>
+            </div>
+            <div class="content">
+                <div class="welcome-message">
+                    <p>Hello {{ first_name }} {{ last_name }},</p>
+                    <p>Your account has been successfully created on the LogSentry platform. We're excited to have you on board!</p>
+                </div>
+                
+                <p>You can now log in using the following credentials:</p>
+                
+                <div class="credentials-box">
+                    <p><span class="credentials-label">Username:</span> {{ username }}</p>
+                    <p><span class="credentials-label">Password:</span> {{ password }}</p>
+                    <p><span class="credentials-label">Role:</span> {{ role }}</p>
+                </div>
+                
+                <div class="security-note">
+                    <strong>Security Note:</strong> We recommend changing your password after your first login.
+                </div>
+                
+                <a href="{{ base_url }}/login/" class="action-btn">
+                    Login to Your Account
+                </a>
+                
+                <p style="margin-top: 20px;">If you have any questions or need assistance, please contact your administrator.</p>
+            </div>
+            <div class="footer">
+                <p>This is an automated message from LogSentry. Please do not reply to this email.</p>
+                <p>© {% now "Y" %} LogSentry. All rights reserved.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
     @classmethod
     def send_alert(cls, subject, message, severity, recipients, alert_id=None, source_ip=None, affected_system=None, mitre_tactics=None, detection_time=None):
         """Send an email alert using Django's email system"""
@@ -542,6 +670,77 @@ This is an automated security alert.
             
         except Exception as e:
             logger.error(f"Failed to send email alert: {e}")
+            return False
+
+    @classmethod
+    def send_welcome_email(cls, recipient, username, password, first_name='', last_name='', role='Regular User'):
+        """Send a welcome email with login credentials to a new user"""
+        from django.template import Template, Context
+        from django.utils import timezone
+        from django.conf import settings
+        from django.core.mail import EmailMultiAlternatives
+        import logging
+        
+        logger = logging.getLogger(__name__)
+        
+        try:
+            # Prepare context for HTML template
+            context = {
+                'first_name': first_name,
+                'last_name': last_name,
+                'username': username,
+                'password': password,
+                'role': role,
+                'base_url': settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://localhost:8000',
+                'timestamp': timezone.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+            
+            # Render HTML content using template
+            template = Template(cls.WELCOME_EMAIL_TEMPLATE)
+            html_content = template.render(Context(context))
+            
+            # Create plain text version
+            text_content = f"""
+Welcome to LogSentry!
+
+Hello {first_name} {last_name},
+
+Your account has been successfully created on the LogSentry platform. We're excited to have you on board!
+
+You can now log in using the following credentials:
+- Username: {username}
+- Password: {password}
+- Role: {role}
+
+Security Note: We recommend changing your password after your first login.
+
+Login to your account at: {settings.SITE_URL if hasattr(settings, 'SITE_URL') else 'http://localhost:8000'}/login/
+
+If you have any questions or need assistance, please contact your administrator.
+
+This is an automated message from LogSentry. Please do not reply to this email.
+            """
+            
+            # Create email
+            subject = "Welcome to LogSentry - Your Account Details"
+            email = EmailMultiAlternatives(
+                subject=subject,
+                body=text_content,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=[recipient]
+            )
+            
+            # Attach HTML alternative
+            email.attach_alternative(html_content, "text/html")
+            
+            # Send email
+            email.send()
+            
+            logger.info(f"Welcome email sent to {recipient}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to send welcome email: {e}")
             return False
 
 class PushNotificationService:

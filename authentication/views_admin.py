@@ -137,6 +137,9 @@ def api_user_create(request):
         password = data.get('password')
         role = data.get('role')
         is_active = data.get('is_active', True)
+        first_name = data.get('first_name', '')
+        last_name = data.get('last_name', '')
+        send_welcome_email = data.get('sendWelcomeEmail', False)
         
         # Validate required fields
         if not all([username, email, password]):
@@ -153,15 +156,42 @@ def api_user_create(request):
             password=password
         )
         
-        # Set role and active status
+        # Set additional fields
         user.is_superuser = (role == 'admin')
         user.is_staff = (role == 'admin')
         user.is_active = is_active
+        user.first_name = first_name
+        user.last_name = last_name
         user.save()
+        
+        # Send welcome email if requested
+        if send_welcome_email and email:
+            try:
+                from alerts.models import EmailNotifier
+                role_display = 'Administrator' if role == 'admin' else 'Regular User'
+                
+                email_sent = EmailNotifier.send_welcome_email(
+                    recipient=email,
+                    username=username,
+                    password=password,
+                    first_name=first_name,
+                    last_name=last_name,
+                    role=role_display
+                )
+                
+                if email_sent:
+                    logger.info(f"Welcome email sent to new user: {username} <{email}>")
+                else:
+                    logger.warning(f"Failed to send welcome email to: {username} <{email}>")
+                
+            except Exception as e:
+                logger.error(f"Error sending welcome email to {username}: {str(e)}", exc_info=True)
+                # Continue with user creation even if email fails
         
         return JsonResponse({'success': True, 'message': 'User created successfully'})
     
     except Exception as e:
+        logger.error(f"Error creating user: {str(e)}", exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)
 
 @login_required
@@ -212,35 +242,35 @@ def api_user_delete(request, user_id):
         return JsonResponse({'error': 'Method not allowed'}, status=405)
     
     try:
-        # Get user or return 404
-        user = get_object_or_404(User, id=user_id)
+        # Parse JSON data from request body
+        data = json.loads(request.body)
+        force_delete = data.get('force', False)
         
-        # Prevent deleting yourself
+        # Get the user to delete
+        user = get_object_or_404(User, pk=user_id)
+        
+        # Prevent self-deletion
         if user == request.user:
-            return JsonResponse({'error': 'Cannot delete your own account'}, status=400)
+            return JsonResponse({'error': 'You cannot delete your own account'}, status=400)
         
-        # Store username before deletion
-        username = user.username
-        
-        # Use raw SQL to delete the user directly, bypassing Django's cascade deletion
-        from django.db import connection
-        with connection.cursor() as cursor:
-            # Delete any auth_user_groups entries
-            cursor.execute("DELETE FROM auth_user_groups WHERE user_id = %s", [user_id])
+        if force_delete:
+            # First delete related records in alerts_notificationpreference
+            from alerts.models import NotificationPreference
+            NotificationPreference.objects.filter(user=user).delete()
             
-            # Delete any auth_user_user_permissions entries
-            cursor.execute("DELETE FROM auth_user_user_permissions WHERE user_id = %s", [user_id])
+            # Delete any other related records here
+            # e.g., user_preferences = UserPreference.objects.filter(user=user).delete()
             
-            # Finally delete the user
-            cursor.execute("DELETE FROM auth_user WHERE id = %s", [user_id])
-        
-        return JsonResponse({
-            'success': True, 
-            'message': f'User {username} deleted successfully'
-        })
+            # Then delete the user
+            user.delete()
+        else:
+            # Try standard delete (will fail if FK constraints exist)
+            user.delete()
+            
+        return JsonResponse({'success': True, 'message': 'User deleted successfully'})
     
     except Exception as e:
-        logger.error(f"Error in user deletion: {str(e)}")
+        logger.error(f"Error deleting user: {str(e)}", exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)
 
 #ADMIN DASHBOARD

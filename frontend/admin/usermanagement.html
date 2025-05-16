@@ -1077,6 +1077,7 @@
                 const isActive = document.getElementById('isActive').checked;
                 const firstName = document.getElementById('firstName').value;
                 const lastName = document.getElementById('lastName').value;
+                const sendWelcomeEmail = document.getElementById('sendWelcomeEmail').checked;
                 
                 // Validate required fields
                 if (!username || !email || !password) {
@@ -1106,7 +1107,8 @@
                     role: role,
                     is_active: isActive,
                     first_name: firstName,
-                    last_name: lastName
+                    last_name: lastName,
+                    sendWelcomeEmail: sendWelcomeEmail
                 };
                 
                 // Send POST request to create user
@@ -1225,6 +1227,7 @@
             // Delete a user
             function deleteUser() {
                 const userId = document.getElementById('deleteUserId').value;
+                const username = document.getElementById('deleteUserName').textContent;
                 
                 // Show loading state
                 const deleteBtn = document.getElementById('confirmDeleteBtn');
@@ -1237,11 +1240,20 @@
                     headers: {
                         'Content-Type': 'application/json',
                         'X-CSRFToken': getCsrfToken()
-                    }
+                    },
+                    body: JSON.stringify({ force: false }) // Normal delete first (not forced)
                 })
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {
+                        // Check for foreign key constraint error
+                        if (data.error.includes('foreign key constraint fails') || 
+                            data.error.includes('1451')) {
+                            
+                            // Show the enhanced error modal instead
+                            showForeignKeyErrorModal(userId, username);
+                            return;
+                        }
                         throw new Error(data.error);
                     }
                     
@@ -1261,6 +1273,171 @@
                     deleteBtn.disabled = false;
                     deleteBtn.innerHTML = '<i class="fas fa-trash-alt me-1"></i> Delete User';
                 });
+            }
+            
+            function forceDeleteUser(userId, username) {
+                // Show loading state
+                const forceDeleteBtn = document.getElementById('forceDeleteBtn');
+                forceDeleteBtn.disabled = true;
+                forceDeleteBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Deleting...';
+                
+                // Send POST request with force option
+                fetch(`/api/users/${userId}/delete/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    },
+                    body: JSON.stringify({ force: true }) // Force delete (cascade)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+                    
+                    // Close the modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('foreignKeyErrorModal'));
+                    modal.hide();
+                    
+                    // Reload users and show success message
+                    loadUsers(1);
+                    showToast('Success', `User ${username} and all related data deleted successfully!`, 'success');
+                })
+                .catch(error => {
+                    showToast('Error', error.message || 'Error deleting user', 'error');
+                })
+                .finally(() => {
+                    // Reset button
+                    forceDeleteBtn.disabled = false;
+                    forceDeleteBtn.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i> Force Delete';
+                });
+            }
+
+            function showForeignKeyErrorModal(userId, username) {
+                // Hide the standard delete modal first
+                bootstrap.Modal.getInstance(document.getElementById('deleteUserModal')).hide();
+                
+                // Make sure we have the foreign key error modal
+                let errorModal = document.getElementById('foreignKeyErrorModal');
+                
+                // Create it if it doesn't exist
+                if (!errorModal) {
+                    const modalDiv = document.createElement('div');
+                    modalDiv.className = 'modal fade';
+                    modalDiv.id = 'foreignKeyErrorModal';
+                    modalDiv.setAttribute('tabindex', '-1');
+                    modalDiv.setAttribute('aria-hidden', 'true');
+                    
+                    modalDiv.innerHTML = `
+                        <div class="modal-dialog modal-dialog-centered">
+                            <div class="modal-content border-0 shadow">
+                                <div class="modal-header bg-warning text-white">
+                                    <h5 class="modal-title">
+                                        <i class="fas fa-exclamation-triangle me-2"></i> Cannot Delete User
+                                    </h5>
+                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <input type="hidden" id="forceDeleteUserId">
+                                    <div class="text-center mb-4">
+                                        <i class="fas fa-database text-warning" style="font-size: 3rem;"></i>
+                                    </div>
+                                    <p class="mb-1">User <strong id="forceDeleteUserName"></strong> has related data in the system and cannot be deleted.</p>
+                                    <p class="mb-3">The user has notification preferences or other related records that reference their account.</p>
+                                    
+                                    <div class="alert alert-danger">
+                                        <i class="fas fa-exclamation-circle me-2"></i>
+                                        <strong>Warning:</strong> Force deleting will remove all data related to this user including:
+                                        <ul class="mb-0 mt-2">
+                                            <li>Notification preferences</li>
+                                            <li>Audit logs</li>
+                                            <li>Custom settings</li>
+                                            <li>Any other related data</li>
+                                        </ul>
+                                    </div>
+                                    
+                                    <p class="text-muted small">Consider deactivating the user instead if you want to preserve their data.</p>
+                                </div>
+                                <div class="modal-footer bg-light">
+                                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="button" class="btn btn-warning" id="deactivateBtn">
+                                        <i class="fas fa-user-slash me-1"></i> Deactivate Instead
+                                    </button>
+                                    <button type="button" class="btn btn-danger" id="forceDeleteBtn">
+                                        <i class="fas fa-exclamation-triangle me-1"></i> Force Delete
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    document.body.appendChild(modalDiv);
+                    errorModal = modalDiv;
+                    
+                    // Add event listeners for the new buttons
+                    document.getElementById('forceDeleteBtn').addEventListener('click', function() {
+                        const userId = document.getElementById('forceDeleteUserId').value;
+                        const username = document.getElementById('forceDeleteUserName').textContent;
+                        forceDeleteUser(userId, username);
+                    });
+                    
+                    document.getElementById('deactivateBtn').addEventListener('click', function() {
+                        const userId = document.getElementById('forceDeleteUserId').value;
+                        deactivateInsteadOfDelete(userId);
+                    });
+                }
+                
+                // Set the user details in the modal
+                document.getElementById('forceDeleteUserId').value = userId;
+                document.getElementById('forceDeleteUserName').textContent = username;
+                
+                // Show the modal
+                const errorModalInstance = new bootstrap.Modal(errorModal);
+                errorModalInstance.show();
+            }
+
+            function deactivateInsteadOfDelete(userId) {
+                // Get user data first to preserve fields
+                fetch(`/api/users/${userId}/`)
+                    .then(response => response.json())
+                    .then(user => {
+                        // Prepare data to update (just setting is_active to false)
+                        const userData = {
+                            email: user.email,
+                            role: user.role,
+                            is_active: false, // Deactivate
+                            first_name: user.first_name || '',
+                            last_name: user.last_name || ''
+                        };
+                        
+                        // Update the user
+                        return fetch(`/api/users/${userId}/update/`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': getCsrfToken()
+                            },
+                            body: JSON.stringify(userData)
+                        });
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            throw new Error(data.error);
+                        }
+                        
+                        // Close the modal
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('foreignKeyErrorModal'));
+                        modal.hide();
+                        
+                        // Reload users and show success message
+                        loadUsers(1);
+                        showToast('Success', 'User deactivated successfully!', 'success');
+                    })
+                    .catch(error => {
+                        showToast('Error', error.message || 'Error deactivating user', 'error');
+                    });
             }
             
             // Export users (placeholder)
