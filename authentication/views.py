@@ -80,9 +80,13 @@ def safe_render(request, template_name, context):
 class CustomLoginView(LoginView):
     """
     Custom login view that redirects superusers to the admin panel
-    and regular users to the dashboard
+    and regular users to the dashboard. Supports login with either username or email.
     """
     template_name = 'registration/login.html'
+    
+    def form_valid(self, form):
+        """Authentication is handled by EmailOrUsernameModelBackend"""
+        return super().form_valid(form)
     
     def get_success_url(self):
         """Determine where to redirect after successful login"""
@@ -90,7 +94,7 @@ class CustomLoginView(LoginView):
         if self.request.user.is_authenticated and self.request.user.is_superuser:
             return reverse_lazy('admin_home')
         else:
-            return reverse_lazy('/')
+            return reverse_lazy('dashboard')
 
 # Helper function to check if a user is a superuser
 def is_superuser(user):
@@ -121,19 +125,10 @@ def admin_home(request):
 
 def signup_view(request):
     """
-    Handle user registration/signup
+    Redirect to login since signup is disabled - only admins can create accounts
     """
-    if request.method == 'POST':
-        form = UserCreationForm(request.POST)
-        if form.is_valid():
-            form.save()
-            username = form.cleaned_data.get('username')
-            messages.success(request, f'Account created for {username}! You can now log in.')
-            return redirect('login')
-    else:
-        form = UserCreationForm()
-    
-    return render(request, 'authentication/signup.html', {'form': form})
+    messages.info(request, 'Account creation is restricted. Please contact an administrator for access.')
+    return redirect('login')
 
 @login_required
 def admin_home(request):
@@ -1741,7 +1736,7 @@ def alert_detail_api(request, alert_id):
             related_log = {
                 'id': threat.parsed_log.id,
                 'timestamp': threat.parsed_log.raw_log.timestamp.strftime('%Y-%m-%d %H:%M:%S') if hasattr(threat.parsed_log, 'raw_log') else None,
-                                'source_type': threat.parsed_log.raw_log.source.source_type if hasattr(threat.parsed_log, 'raw_log') and hasattr(threat.parsed_log.raw_log, 'source') else None,
+                'source_type': threat.parsed_log.raw_log.source.source_type if hasattr(threat.parsed_log, 'raw_log') and hasattr(threat.parsed_log.raw_log, 'source') else None,
             }
         
         # Check if IP is blacklisted
@@ -2300,3 +2295,32 @@ class AdminReplyAdmin(admin.ModelAdmin):
     list_display = ('contact_message', 'admin_user', 'created_at')
     list_filter = ('created_at',)
     search_fields = ('reply_text',)
+
+from django.contrib.auth import get_user_model
+from django.contrib.auth.backends import ModelBackend
+from django.db.models import Q
+
+User = get_user_model()
+
+class EmailOrUsernameModelBackend(ModelBackend):
+    """
+    Authentication backend that allows login with either username or email
+    """
+    def authenticate(self, request, username=None, password=None, **kwargs):
+        try:
+            # Try to find the user by either username or email
+            user = User.objects.get(Q(username__iexact=username) | Q(email__iexact=username))
+            if user.check_password(password):
+                return user
+        except User.DoesNotExist:
+            # Run the default password hasher to mitigate timing attacks
+            User().set_password(password)
+            return None
+        except User.MultipleObjectsReturned:
+            # If multiple users have the same email (which shouldn't happen with proper validation)
+            # Get the first one that matches the provided password
+            users = User.objects.filter(Q(username=username) | Q(email=username))
+            for user in users:
+                if user.check_password(password):
+                    return user
+            return None

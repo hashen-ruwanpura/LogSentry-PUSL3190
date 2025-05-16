@@ -409,7 +409,7 @@
                         <i class="fas fa-exclamation-circle"></i>
                     </div>
                     <div class="message-content">
-                        <div>Your username and password didn't match. Please try again.</div>
+                        <div>Your username/email and password didn't match. Please try again.</div>
                         <div style="font-size: 12px; margin-top: 5px;">
                             Note: If you just reset your password, make sure you're using the new password.
                         </div>
@@ -422,10 +422,10 @@
                     {% csrf_token %}
                     
                     <div class="form-group">
-                        <label for="username">Username</label>
+                        <label for="username">Username or Email</label>
                         <div class="input-with-icon">
                             <i class="fas fa-user input-icon"></i>
-                            <input type="text" id="username" name="username" class="form-control" required autocomplete="username">
+                            <input type="text" id="username" name="username" class="form-control" placeholder="Enter your username or email" required autocomplete="username">
                         </div>
                     </div>
                     

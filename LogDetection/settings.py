@@ -258,3 +258,8 @@ SITE_URL = config('SITE_URL', default='http://localhost:8000')
 # Add to LogDetection/settings.py for development only
 CELERY_TASK_ALWAYS_EAGER = True  # Run tasks synchronously
 
+AUTHENTICATION_BACKENDS = [
+    'authentication.views.EmailOrUsernameModelBackend',  # Our custom backend
+    'django.contrib.auth.backends.ModelBackend',  # Default Django backend
+]
+

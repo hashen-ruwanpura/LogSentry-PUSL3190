@@ -894,10 +894,7 @@
                     </li>
                     {% else %}
                     <li class="nav-item ms-lg-3">
-                        <a class="btn btn-outline-primary" style="min-width: 100px; text-align: center; padding-left: 0.75rem; padding-right: 0.75rem;" href="{% url 'login' %}">Sign In</a>
-                    </li>
-                    <li class="nav-item ms-lg-2">
-                        <a class="btn btn-primary" style="min-width: 100px; text-align: center; padding-left: 0.75rem; padding-right: 0.75rem;" href="{% url 'signup' %}">Sign Up</a>
+                        <a class="btn btn-primary" style="min-width: 100px; text-align: center; padding-left: 0.75rem; padding-right: 0.75rem;" href="{% url 'login' %}">Log In</a>
                     </li>
                     {% endif %}
                 </ul>
@@ -914,7 +911,7 @@
                         <h1 class="hero-title">Detect & Respond to Server Threats in Real-time</h1>
                         <p class="hero-subtitle">Comprehensive log analysis platform that monitors your Apache and MySQL servers for security threats and provides instant alerts.</p>
                         <div class="d-flex align-items-center">
-                            <a href="{% if user.is_authenticated %}{% url 'dashboard' %}{% else %}{% url 'signup' %}{% endif %}" class="btn btn-primary btn-lg me-3">Get Started</a>
+                            <a href="{% if user.is_authenticated %}{% url 'dashboard' %}{% else %}{% url 'login' %}{% endif %}" class="btn btn-primary btn-lg me-3">Get Started</a>
                             <a href="#how-it-works" class="btn btn-outline-primary btn-lg">How It Works</a>
                         </div>
                     </div>
@@ -1035,7 +1032,7 @@
                     </div>
                     
                     <div class="mt-4">
-                        <a href="{% if user.is_authenticated %}{% url 'dashboard' %}{% else %}{% url 'signup' %}{% endif %}" class="btn btn-primary">Explore Dashboard</a>
+                        <a href="{% if user.is_authenticated %}{% url 'dashboard' %}{% else %}{% url 'login' %}{% endif %}" class="btn btn-primary">Explore Dashboard</a>
                     </div>
                 </div>
                 <div class="col-lg-6 animate delay-1">
@@ -1285,7 +1282,7 @@
             <div class="cta-box">
                 <h2>Ready to Secure Your Servers?</h2>
                 <p>Start protecting your Apache and MySQL servers from threats today with our advanced log detection platform.</p>
-                <a href="{% if user.is_authenticated %}{% url 'dashboard' %}{% else %}{% url 'signup' %}{% endif %}" class="btn btn-primary btn-lg">Get Started Now</a>
+                <a href="{% if user.is_authenticated %}{% url 'dashboard' %}{% else %}{% url 'login' %}{% endif %}" class="btn btn-primary btn-lg">Get Started Now</a>
                 <div class="cta-shape"></div>
             </div>
         </div>
@@ -1358,11 +1355,10 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <p>You need to be logged in to access this feature. Please login or create an account to continue.</p>
+                    <p>You need to be logged in to access this feature. Please login to continue.</p>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <a href="{% url 'signup' %}" class="btn btn-outline-primary">Sign Up</a>
                     <a href="{% url 'login' %}" class="btn btn-primary">Login</a>
                 </div>
             </div>
