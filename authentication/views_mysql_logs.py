@@ -82,8 +82,8 @@ def mysql_logs_view(request):
     
     # Apply query type filter
     if query_type != 'all':
-        # Extract first word from query to determine type (SELECT, INSERT, etc.)
-        logs = logs.filter(query__istartswith=query_type)
+        # Use regex to find query type regardless of leading whitespace/comments
+        logs = logs.filter(query__iregex=r'^\s*' + query_type)
     
     # Apply execution time filter
     if execution_time == 'fast':
@@ -107,7 +107,8 @@ def mysql_logs_view(request):
     # Get query type distribution
     query_types = []
     for qt in ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'ALTER', 'DROP']:
-        count = logs.filter(query__istartswith=qt).count()
+        # Use regex to match query types regardless of whitespace
+        count = logs.filter(query__iregex=r'^\s*' + qt).count()
         if count > 0:
             query_types.append({
                 'type': qt,
@@ -208,8 +209,8 @@ def mysql_logs_api(request):
         
         # Apply query type filter
         if query_type != 'all':
-            # Extract first word from query to determine type (SELECT, INSERT, etc.)
-            logs = logs.filter(query__istartswith=query_type)
+            # Use regex to find query type regardless of leading whitespace/comments
+            logs = logs.filter(query__iregex=r'^\s*' + query_type)
         
         # Apply execution time filter
         if execution_time == 'fast':
@@ -233,7 +234,8 @@ def mysql_logs_api(request):
         # Get query type distribution
         query_types = []
         for qt in ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'ALTER', 'DROP']:
-            count = logs.filter(query__istartswith=qt).count()
+            # Use regex to match query types regardless of whitespace
+            count = logs.filter(query__iregex=r'^\s*' + qt).count()
             if count > 0:
                 query_types.append({
                     'type': qt,

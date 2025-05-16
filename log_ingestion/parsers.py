@@ -256,40 +256,24 @@ class MySQLLogParser(BaseLogParser):
     def _parse_general_log(self, raw_log):
         content = raw_log.content
         
-        # Try to extract timestamp, connection id, and query
-        lines = content.strip().split('\n')
-        if not lines:
-            return self.save_parsed_log(raw_log, {
-                'timestamp': raw_log.timestamp,
-                'raw_content': content,
-                'log_type': 'mysql_general',
-                'parse_success': False
-            })
-        
-        # First line usually contains timestamp and connection info
-        first_line = lines[0]
-        timestamp_match = re.match(self.TIMESTAMP_REGEX, first_line)
-        timestamp_str = timestamp_match.group(1) if timestamp_match else None
-        
-        # Extract query (could be multi-line)
-        query = '\n'.join(lines[1:]) if len(lines) > 1 else ""
-        
-        # Look for user information
-        user_match = re.search(r'Connect\s+(\w+)@([\w\.-]+) on (\w+)', first_line)
-        if user_match:
-            user, host, db = user_match.groups()
+        # Check for common MySQL log formats
+        query_pattern = re.search(r'(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP).*?;', content, re.IGNORECASE | re.DOTALL)
+        if query_pattern:
+            query = query_pattern.group(0)
         else:
-            user, host, db = '', '', ''
+            # Try to extract queries after timestamp information
+            query_parts = content.split(']')
+            if len(query_parts) > 1:
+                query = ']'.join(query_parts[1:]).strip()
+            else:
+                query = content  # Use entire content if no better extraction possible
         
         normalized_data = {
-            'timestamp': raw_log.timestamp,  # Use the stored timestamp
-            'user_id': user,
-            'host': host,
-            'database': db,
+            'timestamp': raw_log.timestamp,
+            'user_id': self._extract_user_id(content),
             'query': query,
             'log_type': 'mysql_general',
-            'parse_success': True,
-            'raw_content': content  # Store original content for reference
+            'parse_success': True
         }
         
         return self.save_parsed_log(raw_log, normalized_data)
@@ -338,6 +322,19 @@ class MySQLLogParser(BaseLogParser):
             return True
         except ValueError:
             return False
+
+    def _extract_user_id(self, content):
+        """Extract user ID from MySQL log content"""
+        user_match = re.search(r'User@Host:\s+(\w+)', content)
+        if user_match:
+            return user_match.group(1)
+        
+        # Try alternative format
+        user_match = re.search(r'(\w+)\[[^\]]+\] @', content)
+        if user_match:
+            return user_match.group(1)
+        
+        return None
 
 # Factory to get the correct parser based on log source type
 class LogParserFactory:
