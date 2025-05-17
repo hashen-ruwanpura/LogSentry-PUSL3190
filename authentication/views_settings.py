@@ -17,7 +17,9 @@ from django.contrib.auth import update_session_auth_hash
 from django.conf import settings
 from django.utils import timezone
 from django.db import transaction
+from django.db.models import Q
 from django.core.files.storage import FileSystemStorage
+from django.db.utils import OperationalError
 
 from log_ingestion.models import LogSource, RawLog, ParsedLog, LogFilePosition
 from threat_detection.models import Threat, DetectionRule
@@ -28,6 +30,153 @@ from log_ingestion.realtime_processor import RealtimeLogProcessor
 
 # Configure logger
 logger = logging.getLogger(__name__)
+
+# MySQL error whitelist patterns - common non-security MySQL messages
+mysql_error_whitelist = [
+    # Table definition errors
+    r"Incorrect definition of table mysql\.column_stats",
+    r"Incorrect definition of table mysql\.event",
+    r"Incorrect definition of table mysql\.proc",
+    r"Incorrect definition of table mysql\.\w+: expected column .* at position \d+ to have type",
+    r"expected column .* to have type .* found type",
+    
+    # Database initialization messages
+    r"InnoDB: Initializing buffer pool",
+    r"InnoDB: Completed initialization of buffer pool",
+    r"Server socket created on IP",
+    
+    # Standard startup/shutdown sequences
+    r"Starting MariaDB \[version",
+    r"ready for connections",
+    r"InnoDB: Starting shutdown",
+    r"InnoDB: .* started; log sequence number",
+    
+    # Add these new patterns to catch more common benign errors
+    r"InnoDB: Creating shared tablespace",
+    r"InnoDB: New log files created",
+    r"Plugin '.*' registration as a STORAGE ENGINE failed",
+    r"InnoDB: Waiting for purge to start",
+    r"InnoDB: .*pages read, .* created, .* merged",
+    r"InnoDB: page_cleaner: .* loop",
+    r"Aborted connection",  # Very common and usually benign
+    r"Access denied for user",  # Handled at application level
+    r"as user 'root' with no password", # Common during development
+    r"Can't open shared memory", # Common configuration warning
+    r"InnoDB: Buffer pool\(s\) load completed",
+    r"native AIO",
+    r"Mutexes and rw_locks",
+    r"\[\w+\] Shutdown complete"
+]
+
+# MITRE ATT&CK Mappings - provides robust mapping from attack types to MITRE tactics and techniques
+MITRE_ATTACK_MAPPINGS = {
+    'sql_injection': {
+        'tactic': 'Defense Evasion',
+        'tactic_id': 'TA0005',
+        'technique': 'Exploit Public-Facing Application',
+        'technique_id': 'T1190',
+        'description': 'Adversary attempts to exploit vulnerable parameters to inject and execute SQL commands'
+    },
+    'command_injection': {
+        'tactic': 'Execution',
+        'tactic_id': 'TA0002',
+        'technique': 'Command and Scripting Interpreter',
+        'technique_id': 'T1059',
+        'description': 'Adversary attempts to execute arbitrary commands on the host system'
+    },
+    'xss': {
+        'tactic': 'Initial Access',
+        'tactic_id': 'TA0001',
+        'technique': 'Drive-by Compromise',
+        'technique_id': 'T1189',
+        'description': 'Adversary attempts to inject scripts processed by web browsers'
+    },
+    'path_traversal': {
+        'tactic': 'Discovery',
+        'tactic_id': 'TA0007',
+        'technique': 'File and Directory Discovery',
+        'technique_id': 'T1083',
+        'description': 'Adversary attempts to navigate directory structure beyond intended boundaries'
+    },
+    'session_hijacking': {
+        'tactic': 'Credential Access',
+        'tactic_id': 'TA0006',
+        'technique': 'Steal Web Session Cookie',
+        'technique_id': 'T1539',
+        'description': 'Adversary attempts to steal or manipulate web session identifiers'
+    },
+    'csrf': {
+        'tactic': 'Privilege Escalation',
+        'tactic_id': 'TA0004',
+        'technique': 'Abuse Elevation Control Mechanism',
+        'technique_id': 'T1548',
+        'description': 'Adversary exploits authentication mechanisms to perform unauthorized actions'
+    },
+    'data_exfiltration': {
+        'tactic': 'Exfiltration',
+        'tactic_id': 'TA0010',
+        'technique': 'Exfiltration Over Web Service',
+        'technique_id': 'T1567',
+        'description': 'Adversary attempts to steal data through web requests'
+    }
+}
+
+# Add secondary mappings for more specific detections
+ATTACK_PATTERN_MITRE_MAPPINGS = {
+    # Command injection specific patterns
+    'cat[\s\n]+\/etc\/passwd': {
+        'tactic': 'Discovery',
+        'tactic_id': 'TA0007',
+        'technique': 'System Information Discovery',
+        'technique_id': 'T1082'
+    },
+    'nc[\s\n]+\-e': {
+        'tactic': 'Command and Control',
+        'tactic_id': 'TA0011',
+        'technique': 'Remote Access Software',
+        'technique_id': 'T1219'
+    },
+    'bash[\s\n]+\-i': {
+        'tactic': 'Command and Control',
+        'tactic_id': 'TA0011', 
+        'technique': 'Remote Access Software',
+        'technique_id': 'T1219'
+    },
+    'wget[\s\n]+http': {
+        'tactic': 'Command and Control',
+        'tactic_id': 'TA0011',
+        'technique': 'Ingress Tool Transfer',
+        'technique_id': 'T1105'
+    },
+    'curl[\s\n]+http': {
+        'tactic': 'Command and Control',
+        'tactic_id': 'TA0011',
+        'technique': 'Ingress Tool Transfer',
+        'technique_id': 'T1105'
+    },
+    
+    # SQL injection specific patterns
+    'UNION[\s\n]+SELECT': {
+        'tactic': 'Collection',
+        'tactic_id': 'TA0009',
+        'technique': 'Data from Information Repositories',
+        'technique_id': 'T1213'
+    },
+    'information_schema': {
+        'tactic': 'Discovery',
+        'tactic_id': 'TA0007',
+        'technique': 'Database Schema Discovery', 
+        'technique_id': 'T1046'
+    },
+    
+    # Path traversal specific patterns
+    '\/etc\/passwd': {
+        'tactic': 'Credential Access',
+        'tactic_id': 'TA0006',
+        'technique': 'OS Credential Dumping',
+        'technique_id': 'T1003'
+    }
+}
 
 
 @login_required
@@ -265,15 +414,43 @@ def save_log_settings(request):
             elif not os.access(apache_log_path, os.R_OK):
                 messages.warning(request, f"Apache log path exists but is not readable: {apache_log_path}")
             else:
-                apache_source, created = LogSource.objects.update_or_create(
-                    name='Apache Web Server',
-                    defaults={
-                        'source_type': 'apache_access',
-                        'file_path': apache_log_path,
-                        'enabled': True
-                    }
-                )
-                sources_to_process.append(apache_source)
+                # Use retry logic to handle potential lock timeouts
+                retry_count = 0
+                max_retries = 3
+                success = False
+                
+                while retry_count < max_retries and not success:
+                    try:
+                        # Use a shorter, explicit transaction
+                        with transaction.atomic(using='default'):
+                            apache_source, created = LogSource.objects.get_or_create(
+                                name='Apache Web Server',
+                                defaults={
+                                    'source_type': 'apache_access',
+                                    'file_path': apache_log_path,
+                                    'enabled': True
+                                }
+                            )
+                            
+                            # If created=False, update the file path separately
+                            if not created and apache_source.file_path != apache_log_path:
+                                apache_source.file_path = apache_log_path
+                                apache_source.save(update_fields=['file_path'])
+                                
+                            sources_to_process.append(apache_source)
+                            success = True
+                    except OperationalError as oe:
+                        # Only retry on lock timeout errors
+                        if "Lock wait timeout exceeded" in str(oe):
+                            retry_count += 1
+                            time.sleep(1)  # Wait before retrying
+                            logger.warning(f"Database lock timeout, retrying ({retry_count}/{max_retries})...")
+                        else:
+                            # Re-raise other operational errors
+                            raise
+                
+                if not success:
+                    messages.warning(request, "Could not update Apache log source due to database contention. Please try again.")
         
         # For MySQL
         if mysql_log_path:
@@ -644,6 +821,9 @@ def create_parsed_log_from_raw(raw_log):
         # Get content
         log_content = raw_log.content
         
+        # Extract timestamp from raw_log or use current time
+        log_timestamp = raw_log.timestamp if hasattr(raw_log, 'timestamp') else timezone.now()
+        
         # Create decoded_content by URL-decoding log_content - APPLY MULTIPLE ROUNDS OF DECODING
         try:
             # First-level decoding
@@ -651,42 +831,83 @@ def create_parsed_log_from_raw(raw_log):
             
             # Check for double-encoding (common in attacks)
             if '%' in decoded_content:
-                second_level = unquote(decoded_content)
-                # If second level decoding changed something, use it
-                if second_level != decoded_content:
-                    decoded_content = second_level
-        except:
-            # Fallback if unquote fails
-            decoded_content = log_content
+                # Apply second round of decoding
+                decoded_content = unquote(decoded_content)
+        except Exception as e:
+            logger.warning(f"Error decoding log content: {str(e)}")
+            decoded_content = log_content  # Fallback to original content
             
-        # Try to extract timestamp from log content for more accuracy
-        log_timestamp = raw_log.timestamp  # Default fallback
-        
-        # For Apache logs
-        if source_type.lower() in ('apache', 'apache_access'):
-            timestamp_match = re.search(r'\[(\d{2}/\w{3}/\d{4}:\d{2}:\d{2}:\d{2} [+\-]\d{4})\]', log_content)
-            if timestamp_match:
-                try:
-                    time_str = timestamp_match.group(1)
-                    parsed_time = datetime.strptime(time_str, '%d/%b/%Y:%H:%M:%S %z')
-                    # Update the timestamp if parsing succeeded
-                    log_timestamp = parsed_time
-                except Exception as e:
-                    logger.debug(f"Failed to parse Apache timestamp: {e}")
-        # For MySQL logs
-        elif source_type.lower() in ('mysql', 'mysql_error'):
-            timestamp_match = re.search(r'(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})', log_content)
-            if timestamp_match:
-                try:
-                    time_str = timestamp_match.group(1)
-                    parsed_time = datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S')
-                    # Make timezone-aware
-                    if timezone.is_naive(parsed_time):
-                        parsed_time = timezone.make_aware(parsed_time)
-                    # Update the timestamp if parsing succeeded
-                    log_timestamp = parsed_time
-                except Exception as e:
-                    logger.debug(f"Failed to parse MySQL timestamp: {e}")
+        # MYSQL ERROR WHITELIST - Skip non-security relevant MySQL messages
+        if source_type and source_type.lower() in ('mysql', 'mysql_error'):
+            # Using the global mysql_error_whitelist defined at module level
+            
+            # Whitelist patterns for common non-security MySQL messages
+            mysql_error_whitelist = [
+                # Table definition errors
+                r"Incorrect definition of table mysql\.column_stats",
+                r"Incorrect definition of table mysql\.event",
+                r"Incorrect definition of table mysql\.proc",
+                r"Incorrect definition of table mysql\.\w+: expected column .* at position \d+ to have type",
+                r"expected column .* to have type .* found type",
+                
+                # Database initialization messages
+                r"InnoDB: Initializing buffer pool",
+                r"InnoDB: Completed initialization of buffer pool",
+                r"Server socket created on IP",
+                
+                # Standard startup/shutdown sequences
+                r"Starting MariaDB \[version",
+                r"ready for connections",
+                r"InnoDB: Starting shutdown",
+                r"InnoDB: .* started; log sequence number",
+                
+                # Add these new patterns to catch more common benign errors
+                r"InnoDB: Creating shared tablespace",
+                r"InnoDB: New log files created",
+                r"Plugin '.*' registration as a STORAGE ENGINE failed",
+                r"InnoDB: Waiting for purge to start",
+                r"InnoDB: .*pages read, .* created, .* merged",
+                r"InnoDB: page_cleaner: .* loop",
+                r"Aborted connection",  # Very common and usually benign
+                r"Access denied for user",  # Handled at application level
+                r"as user 'root' with no password", # Common during development
+                r"Can't open shared memory", # Common configuration warning
+                r"InnoDB: Buffer pool\(s\) load completed",
+                r"native AIO",
+                r"Mutexes and rw_locks",
+                r"\[\w+\] Shutdown complete"
+            ]
+            
+            # Check if log matches any whitelisted pattern
+            for pattern in mysql_error_whitelist:
+                if re.search(pattern, log_content, re.IGNORECASE):
+                    # Create a benign parsed log entry
+                    parsed_log = ParsedLog.objects.create(
+                        raw_log=raw_log,
+                        timestamp=log_timestamp,  # Assuming log_timestamp is already extracted
+                        source_ip=None,
+                        source_type=source_type,
+                        request_method=None,
+                        request_path=None,
+                        status='normal',  # Mark as normal, not suspicious
+                        normalized_data={
+                            'content': log_content,
+                            'message': log_content[:1000],
+                            'source_type': source_type,
+                            'source_ip': None,
+                            'is_whitelisted': True,
+                            'whitelisted_reason': 'Non-security MySQL message'
+                        },
+                        analyzed=True,
+                        analysis_time=timezone.now()
+                    )
+                    
+                    # Mark raw log as parsed
+                    raw_log.is_parsed = True
+                    raw_log.save(update_fields=['is_parsed'])
+                    
+                    logger.debug(f"Whitelisted MySQL message: {log_content[:100]}...")
+                    return parsed_log
         
         # Extract IP address
         ip_match = re.search(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', log_content)
@@ -1295,6 +1516,19 @@ def create_parsed_log_from_raw(raw_log):
             }
         }
         
+        # ENHANCED: Determine MITRE ATT&CK classification
+        mitre_tactic, mitre_tactic_id, mitre_technique, mitre_technique_id = determine_mitre_classification(
+            log_content, 
+            attack_type,
+            threat_details
+        )
+        
+        # Add MITRE information to normalized data
+        normalized_data['analysis']['mitre_tactic'] = mitre_tactic
+        normalized_data['analysis']['mitre_tactic_id'] = mitre_tactic_id
+        normalized_data['analysis']['mitre_technique'] = mitre_technique
+        normalized_data['analysis']['mitre_technique_id'] = mitre_technique_id
+        
         # Create a ParsedLog entry with enhanced security information
         parsed_log = ParsedLog.objects.create(
             raw_log=raw_log,
@@ -1563,7 +1797,7 @@ def test_log_paths(request):
         # Determine overall success
         results['success'] = (
             (not apache_path or (results['apache']['exists'] and results['apache']['readable'])) and
-            (not mysql_path or (results['mysql']['exists'] and results['mysql']['readable']))
+            (not mysql_path or ( results['mysql']['exists'] and results['mysql']['readable']))
         )
         
         return JsonResponse(results)
@@ -1585,7 +1819,7 @@ def test_log_paths(request):
 @login_required
 @require_POST
 def analyze_logs_api(request):
-    """API endpoint to trigger log analysis with threat detection."""
+    """API endpoint to trigger log analysis with priority for Apache logs."""
     try:
         # Extract logs_count parameter
         logs_count = 50  # Default value
@@ -1603,77 +1837,318 @@ def analyze_logs_api(request):
             except ValueError:
                 pass
         
-        # Process logs with enhanced timestamp validation
-        processed_raw = process_raw_logs_with_timestamp_validation(logs_count)
+        # Get the realtime processor instance to use its utilities
+        processor = RealtimeLogProcessor.get_instance()
         
-        # Count threats found in recently analyzed logs
-        from django.utils import timezone
-        from django.db.models import Q
+        # CRITICAL: Reset all file positions to the end to ensure we only analyze new logs
+        try:
+            processor._reset_file_positions_to_end()
+        except Exception as e:
+            logger.warning(f"Error resetting file positions: {str(e)}. Will attempt manual reset.")
+            # Manual reset as fallback
+            for source in LogSource.objects.filter(enabled=True):
+                if os.path.exists(source.file_path):
+                    try:
+                        current_size = os.path.getsize(source.file_path)
+                        LogFilePosition.objects.update_or_create(
+                            source=source,
+                            defaults={
+                                'position': current_size,
+                                'last_updated': timezone.now(),
+                            }
+                        )
+                    except Exception as inner_e:
+                        logger.error(f"Failed to reset position for {source.name}: {str(inner_e)}")
         
-        # Find logs analyzed in the last minute with suspicious or attack status
+        # Track statistics
+        sources_processed = 0
+        new_raw_logs = {
+            'apache': 0,
+            'mysql': 0,
+            'other': 0
+        }
+        
+        # STEP 1: PRIORITIZE APACHE LOGS - Process Apache sources FIRST
+        apache_sources = LogSource.objects.filter(
+            enabled=True, 
+            source_type__startswith='apache'
+        )
+        
+        if not apache_sources.exists():
+            logger.warning("No Apache log sources configured - security monitoring is incomplete")
+        
+        # Process Apache sources first to guarantee their analysis
+        for source in apache_sources:
+            if not source.file_path or not os.path.exists(source.file_path):
+                logger.warning(f"Skipping Apache source {source.name}: File path doesn't exist")
+                continue
+                
+            try:
+                # Get the current file size
+                current_size = os.path.getsize(source.file_path)
+                
+                # Get the last known position
+                try:
+                    # First clean up any duplicate positions
+                    processor._clean_duplicate_positions(source)
+                    
+                    # Get the current position
+                    position = LogFilePosition.objects.get(source=source)
+                    last_position = position.position
+                except LogFilePosition.DoesNotExist:
+                    # If no position exists, create one at the END of the file
+                    position = LogFilePosition.objects.create(
+                        source=source,
+                        position=current_size,
+                        last_updated=timezone.now()
+                    )
+                    last_position = current_size
+                    logger.info(f"Created new position at end for {source.name}: {current_size}")
+                
+                # If the file has new content
+                if current_size > last_position:
+                    logger.info(f"Reading {current_size - last_position} bytes of new content from Apache log: {source.file_path}")
+                    
+                    # Read new content since last position
+                    with open(source.file_path, 'r', encoding='utf-8', errors='replace') as file:
+                        file.seek(last_position)
+                        new_content = file.read()
+                        
+                        if new_content.strip():
+                            # Process new content line by line
+                            lines = new_content.splitlines()
+                            
+                            # Create raw logs in transaction
+                            with transaction.atomic():
+                                for line in lines:
+                                    if line.strip():
+                                        RawLog.objects.create(
+                                            source=source,
+                                            content=line.strip(),
+                                            timestamp=timezone.now(),
+                                            is_parsed=False
+                                        )
+                                        new_raw_logs['apache'] += 1
+                            
+                            logger.info(f"Created {len(lines)} new raw logs from Apache source {source.name}")
+                    
+                    # Update the position to the current size
+                    position.position = current_size
+                    position.last_updated = timezone.now()
+                    position.save()
+                else:
+                    # GUARANTEE MINIMUM APACHE LOGS: If no new content, read last 10 lines anyway
+                    if new_raw_logs['apache'] == 0:
+                        logger.info(f"No new content in Apache log {source.name}, reading last 10 lines for security")
+                        try:
+                            # Use deque to efficiently get the last 10 lines
+                            from collections import deque
+                            with open(source.file_path, 'r', encoding='utf-8', errors='replace') as file:
+                                last_lines = list(deque(file, 10))
+                                
+                                with transaction.atomic():
+                                    for line in last_lines:
+                                        if line.strip():
+                                            RawLog.objects.create(
+                                                source=source,
+                                                content=line.strip(),
+                                                timestamp=timezone.now(),
+                                                is_parsed=False
+                                            )
+                                            new_raw_logs['apache'] += 1
+                                
+                                logger.info(f"Created {len(last_lines)} new raw logs from last lines of Apache source {source.name}")
+                        except Exception as read_error:
+                            logger.error(f"Error reading last lines from Apache file: {str(read_error)}")
+                
+                sources_processed += 1
+                
+            except Exception as e:
+                logger.error(f"Error processing Apache source {source.name}: {str(e)}")
+        
+        # STEP 2: Process non-Apache sources if capacity remains
+        other_sources = LogSource.objects.filter(enabled=True).exclude(source_type__startswith='apache')
+        
+        for source in other_sources:
+            if not source.file_path or not os.path.exists(source.file_path):
+                logger.warning(f"Skipping source {source.name}: File path doesn't exist")
+                continue
+                
+            try:
+                # Get the current file size
+                current_size = os.path.getsize(source.file_path)
+                
+                # Get the last known position
+                try:
+                    position = LogFilePosition.objects.get(source=source)
+                    last_position = position.position
+                except LogFilePosition.DoesNotExist:
+                    position = LogFilePosition.objects.create(
+                        source=source,
+                        position=current_size,
+                        last_updated=timezone.now()
+                    )
+                    last_position = current_size
+                
+                # If the file has new content
+                if current_size > last_position:
+                    logger.info(f"Reading {current_size - last_position} bytes of new content from {source.file_path}")
+                    
+                    # Read new content since last position
+                    with open(source.file_path, 'r', encoding='utf-8', errors='replace') as file:
+                        file.seek(last_position)
+                        new_content = file.read()
+                        
+                        if new_content.strip():
+                            # Process new content line by line
+                            lines = new_content.splitlines()
+                            
+                            # MySQL logs: Skip common error patterns
+                            if source.source_type.lower().startswith('mysql'):
+                                # Filter out common benign MySQL errors
+                                filtered_lines = []
+                                for line in lines:
+                                    # Skip known benign MySQL errors
+                                    if any(re.search(pattern, line, re.IGNORECASE) for pattern in mysql_error_whitelist):
+                                        continue
+                                    filtered_lines.append(line)
+                                
+                                logger.info(f"Filtered MySQL logs: {len(lines)} -> {len(filtered_lines)}")
+                                lines = filtered_lines
+                            
+                            # Create raw logs in transaction
+                            with transaction.atomic():
+                                for line in lines:
+                                    if line.strip():
+                                        RawLog.objects.create(
+                                            source=source,
+                                            content=line.strip(),
+                                            timestamp=timezone.now(),
+                                            is_parsed=False
+                                        )
+                                        # Track source type
+                                        if source.source_type.lower().startswith('mysql'):
+                                            new_raw_logs['mysql'] += 1
+                                        else:
+                                            new_raw_logs['other'] += 1
+                            
+                            logger.info(f"Created {len(lines)} new raw logs from {source.name}")
+                    
+                    # Update the position to the current size
+                    position.position = current_size
+                    position.last_updated = timezone.now()
+                    position.save()
+                else:
+                    logger.info(f"No new content in {source.name} since last check")
+                
+                sources_processed += 1
+                
+            except Exception as e:
+                logger.error(f"Error processing source {source.name}: {str(e)}")
+        
+        # Total new logs
+        total_new_logs = sum(new_raw_logs.values())
+        
+        # STEP 3: Now process the raw logs with priority for Apache logs
+        # First process Apache logs (at least half of the quota)
+        apache_quota = max(10, logs_count // 2)  # At least 10 Apache logs or half the quota
+        apache_logs = RawLog.objects.filter(
+            is_parsed=False,
+            source__source_type__startswith='apache'
+        ).order_by('-id')[:apache_quota]
+        
+        for log in apache_logs:
+            create_parsed_log_from_raw(log)
+        
+        # Process remaining logs
+        remaining_quota = logs_count - apache_logs.count()
+        if remaining_quota > 0:
+            other_logs = RawLog.objects.filter(
+                is_parsed=False
+            ).exclude(
+                id__in=apache_logs.values_list('id', flat=True)
+            ).order_by('-id')[:remaining_quota]
+            
+            for log in other_logs:
+                create_parsed_log_from_raw(log)
+        
+        # Get total processed count
+        processed_raw = apache_logs.count() + (other_logs.count() if remaining_quota > 0 else 0)
+        
+        # Count threats found in recently analyzed logs (last minute)
         one_minute_ago = timezone.now() - timedelta(minutes=1)
         suspicious_logs = ParsedLog.objects.filter(
             Q(analysis_time__gte=one_minute_ago) & 
             (Q(status='suspicious') | Q(status='attack'))
-        ).order_by('-id')  # Use ID instead of timestamp to avoid the slice error
+        ).order_by('-id')
         
         threat_count = suspicious_logs.count()
         
         # If threats were found, create an alert
         if threat_count > 0:
-            # Determine the highest severity
-            severity_stats = {
-                'attack': 0,
-                'suspicious': 0
-            }
-            
-            # Get details about first few threats for the alert
+            # Get details about threats for the alert
             threat_examples = []
             ip_addresses = set()
+            severity_stats = {'attack': 0, 'suspicious': 0}
+            threat_by_source = {'apache': 0, 'mysql': 0, 'other': 0}
             
-            for i, log in enumerate(suspicious_logs[:10]):  # Limit to first 10 for the message
+            for log in suspicious_logs[:10]:
                 severity_stats[log.status] += 1
-                if hasattr(log, 'source_ip') and log.source_ip:
+                if log.source_ip:
                     ip_addresses.add(log.source_ip)
                 
-                if i < 3 and hasattr(log, 'request_path') and log.request_path:
+                # Track threats by source type
+                if log.source_type and log.source_type.lower().startswith('apache'):
+                    threat_by_source['apache'] += 1
+                elif log.source_type and log.source_type.lower().startswith('mysql'):
+                    threat_by_source['mysql'] += 1
+                else:
+                    threat_by_source['other'] += 1
+                
+                if len(threat_examples) < 3 and hasattr(log, 'request_path') and log.request_path:
                     threat_examples.append(f"{log.status.upper()} on path: {log.request_path[:50]}...")
             
-            # Assign severity based on findings
-            if severity_stats['attack'] > 0:
-                severity = 'high'  # Attacks found - high severity
-            else:
-                severity = 'medium'  # Only suspicious - medium severity
+            # Determine severity
+            severity = 'high' if severity_stats['attack'] > 0 else 'medium'
             
-            # Create a unique identifier for this batch of threats to avoid duplicates
-            import hashlib
-            alert_digest = hashlib.md5(f"{','.join(sorted(ip_addresses))}-{one_minute_ago.isoformat()}".encode()).hexdigest()
+            # Create unique ID for this alert
+            alert_id = int(hashlib.md5(f"manual-{timezone.now().isoformat()}".encode()).hexdigest()[:8], 16) % 1000000
             
-            # Send consolidated alert about found threats
-            from alerts.services import AlertService
-            
+            # Send alert
             AlertService.send_alert(
-                title=f"Real-time Analysis: {threat_count} security concerns detected",
+                title=f"Manual Analysis: {threat_count} security concerns detected",
                 message=(
-                    f"Real-time analysis detected {severity_stats['attack']} attacks and "
+                    f"Manual analysis detected {severity_stats['attack']} attacks and "
                     f"{severity_stats['suspicious']} suspicious activities.\n\n"
-                    f"IP Addresses involved: {', '.join(ip_addresses)}\n\n"
+                    f"Apache threats: {threat_by_source['apache']}\n"
+                    f"MySQL threats: {threat_by_source['mysql']}\n"
+                    f"Other threats: {threat_by_source['other']}\n\n"
+                    f"IP Addresses involved: {', '.join(ip_addresses) if ip_addresses else 'None'}\n\n"
                     f"Examples:\n- " + "\n- ".join(threat_examples) + "\n\n"
-                    f"These events occurred within the last minute and require investigation."
+                    f"These events were detected in the latest log entries."
                 ),
                 severity=severity,
-                threat_id=int(alert_digest[:8], 16) % 1000000,  # Generate pseudo ID from hash
+                threat_id=alert_id,
+                source_ip=",".join(list(ip_addresses)[:5]) if ip_addresses else None,
                 affected_system="Multiple systems",
-                user=request.user  # Add this line to pass the current user
+                user=request.user
             )
         
-        logger.info(f"Analyzed {processed_raw} logs, found {threat_count} potential threats")
+        # Statistics message
+        msg = f"Manual analysis: Processed {sources_processed} log sources "
+        msg += f"(Apache: {new_raw_logs['apache']}, MySQL: {new_raw_logs['mysql']}, Other: {new_raw_logs['other']}), "
+        msg += f"analyzed {processed_raw} logs, found {threat_count} potential threats"
+        logger.info(msg)
         
         return JsonResponse({
             'success': True, 
+            'sources_processed': sources_processed,
+            'new_logs_created': total_new_logs,
             'logs_analyzed': processed_raw,
             'threats_found': threat_count,
-            'message': f"Analyzed {processed_raw} logs. Found {threat_count} potential security threats."
+            'apache_logs': new_raw_logs['apache'],
+            'mysql_logs': new_raw_logs['mysql'],
+            'message': f"Analyzed {processed_raw} logs with priority on Apache. Found {threat_count} potential security threats."
         })
         
     except Exception as e:
@@ -1977,43 +2452,73 @@ def upload_log_file(request):
         }, status=500)
 
 
-def _initialize_file_positions(self):
-    """Initialize file positions for all active log sources"""
-    self.file_positions = {}
+def determine_mitre_classification(content, attack_type, attack_patterns=None):
+    """
+    Determines the MITRE ATT&CK tactic and technique based on attack type and content
     
-    for source in self.log_sources:
-        try:
-            # Skip invalid paths
-            if not source.file_path or not os.path.exists(source.file_path):
-                continue
-            
-            # Get file size - we'll start from the END of the file by default
-            file_size = os.path.getsize(source.file_path)
-            
-            # Get position from database or use file size if there's no record (START FROM END)
-            position, created = LogFilePosition.objects.get_or_create(
-                source=source,
-                defaults={
-                    'position': file_size,  # Start from the end for new files
-                    'last_read': timezone.now()
-                }
+    Args:
+        content (str): The log content to analyze
+        attack_type (str): The detected attack type
+        attack_patterns (list): List of attack patterns found in the log
+        
+    Returns:
+        tuple: (tactic, tactic_id, technique, technique_id)
+    """
+    # Default values if no mapping is found
+    default_tactic = "Unclassified"
+    default_technique = ""
+    default_tactic_id = ""
+    default_technique_id = ""
+    
+    # First check for specific attack patterns (more accurate)
+    if attack_patterns:
+        for pattern in attack_patterns:
+            # Extract the regex pattern without the regex syntax
+            pattern_text = pattern
+            if pattern.startswith('(?:'):
+                pattern_text = pattern[3:-1]  # Remove the non-capturing group syntax
+            elif pattern.startswith('r"') and pattern.endswith('"'):
+                pattern_text = pattern[2:-1]  # Remove r" and "
+                
+            # Try to find a match in our ATTACK_PATTERN_MITRE_MAPPINGS
+            for key, mapping in ATTACK_PATTERN_MITRE_MAPPINGS.items():
+                if key in pattern_text:
+                    return (
+                        mapping['tactic'],
+                        mapping['tactic_id'],
+                        mapping['technique'],
+                        mapping['technique_id']
+                    )
+    
+    # If specific pattern matching failed, use the general attack type
+    if attack_type and attack_type in MITRE_ATTACK_MAPPINGS:
+        mapping = MITRE_ATTACK_MAPPINGS[attack_type]
+        return (
+            mapping['tactic'],
+            mapping['tactic_id'],
+            mapping['technique'],
+            mapping['technique_id']
+        )
+    
+    # Use specific content-based detection for common cases
+    if "phpMyAdmin" in content and any(cmd in content.lower() for cmd in [";", "|", "&&"]):
+        # phpMyAdmin command injection is very specific - Execution via web shell
+        return (
+            "Execution",
+            "TA0002",
+            "Command and Scripting Interpreter: PHP",
+            "T1059.001"
+        )
+    
+    # Check for common web vulnerabilities targeting admin interfaces
+    if any(x in content for x in ["/wp-admin", "/admin", "/administrator", "/phpmyadmin"]):
+        if "login" in content.lower() and any(x in content.lower() for x in ["=", "post", "auth"]):
+            return (
+                "Initial Access", 
+                "TA0001",
+                "Valid Accounts: Default Accounts",
+                "T1078.001"
             )
-            
-            # Make sure we never start from the beginning for existing files
-            # This ensures we only process the newest logs
-            if created or position.position == 0:
-                position.position = file_size
-                position.save()
-            
-            # Store in memory
-            self.file_positions[source.id] = {
-                'path': source.file_path,
-                'position': position.position,
-                'last_read': position.last_read,
-                'size': file_size,
-                'source': source
-            }
-            
-            logger.info(f"Initialized position for {source.name}: {position.position}/{file_size}")
-        except Exception as e:
-            logger.error(f"Error initializing position for {source.name}: {str(e)}")
+    
+    return (default_tactic, default_tactic_id, default_technique, default_technique_id)
+

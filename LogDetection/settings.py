@@ -200,9 +200,19 @@ LOGGING = {
             'style': '{',
         },
     },
+    'filters': {
+        'ignore_ws_alerts_404': {
+            '()': 'django.utils.log.CallbackFilter',
+            'callback': lambda record: not (
+                record.getMessage().startswith('Not Found: /ws/alerts/') or
+                record.getMessage().startswith('"GET /ws/alerts/ HTTP/1.1" 404')
+            )
+        },
+    },
     'handlers': {
         'console': {
-            'level': 'DEBUG',
+            'level': 'INFO',
+            'filters': ['ignore_ws_alerts_404'],  # Apply our custom filter
             'class': 'logging.StreamHandler',
             'formatter': 'simple',
         },
@@ -237,6 +247,11 @@ LOGGING = {
         'authentication': {
             'handlers': ['console', 'file'],
             'level': 'DEBUG',
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'WARNING',
             'propagate': False,
         },
     },

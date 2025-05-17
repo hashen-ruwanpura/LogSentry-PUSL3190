@@ -8,6 +8,7 @@ from datetime import datetime
 from django.utils import timezone
 from django.conf import settings
 from django.db import transaction
+from django.db.utils import OperationalError
 from .models import LogSource, RawLog, ParsedLog, LogFilePosition
 from .collectors import EnhancedLogCollectionManager
 from threat_detection.rules import RuleEngine
@@ -255,34 +256,45 @@ class RealtimeLogProcessor:
                 if not source.file_path or not os.path.exists(source.file_path):
                     continue
                 
-                # Get file size
-                file_size = os.path.getsize(source.file_path)
+                # CRITICAL: ALWAYS get the CURRENT file size to start from the END
+                current_file_size = os.path.getsize(source.file_path)
                 
-                # Get position from database or use file size if there's no record
-                position, created = LogFilePosition.objects.get_or_create(
-                    source=source,
-                    defaults={
-                        'position': file_size,  # Start from the END for new files
-                        'last_read': timezone.now()
-                    }
-                )
+                # Clean up any duplicate positions before initializing
+                self._clean_duplicate_positions(source)
                 
-                # CRITICAL FIX: Always ensure we start from the end, never the beginning
-                # This prevents re-processing old entries that might be ignored due to whitelisting
-                if created or position.position == 0:
-                    position.position = file_size  
-                    position.save()
-                    logger.info(f"New file position set to END for {source.file_path}: {file_size} bytes")
-            
-                # Store in memory
+                # Update or create position record in memory
                 self.file_positions[source.id] = {
+                    'source': source,
                     'path': source.file_path,
-                    'position': position.position,
-                    'last_read': position.last_read,
-                    'size': file_size,
-                    'source': source
+                    'position': current_file_size,  # Always start from the current end
+                    'last_updated': timezone.now()  # Changed from 'last_read' to 'last_updated'
                 }
                 
+                # Get existing position record (there should be only one after cleanup)
+                try:
+                    position = LogFilePosition.objects.get(source=source)
+                    
+                    # IMPORTANT: Always update to current file size to ensure we only process new content
+                    old_position = position.position
+                    position.position = current_file_size
+                    position.last_updated = timezone.now()
+                    position.save()
+                    
+                    if old_position != current_file_size:
+                        logger.info(f"Updated file position for {source.name}: {old_position} -> {current_file_size}")
+                except LogFilePosition.DoesNotExist:
+                    # Create new position record starting at the END of file
+                    position = LogFilePosition.objects.create(
+                        source=source,
+                        position=current_file_size,
+                        last_updated=timezone.now()
+                    )
+                    logger.info(f"Created new file position for {source.name} at end: {current_file_size}")
+                except LogFilePosition.MultipleObjectsReturned:
+                    # This shouldn't happen after cleanup, but just in case
+                    logger.warning(f"Multiple positions still exist for {source.name}. Cleaning up again...")
+                    self._clean_duplicate_positions(source)
+        
             except Exception as e:
                 logger.error(f"Error initializing position for {source.name}: {str(e)}")
                 
@@ -376,7 +388,7 @@ class RealtimeLogProcessor:
                                         source=source,
                                         defaults={
                                             'position': current_size,
-                                            'last_read': timezone.now()
+                                            'last_updated': timezone.now()  # Changed from 'last_read' to 'last_updated'
                                         }
                                     )
                         except Exception as e:
@@ -390,7 +402,7 @@ class RealtimeLogProcessor:
                             source=source,
                             defaults={
                                 'position': 0,
-                                'last_read': timezone.now()
+                                'last_updated': timezone.now()  # Changed from 'last_read' to 'last_updated'
                             }
                         )
                 
@@ -402,10 +414,11 @@ class RealtimeLogProcessor:
                 time.sleep(5)  # Longer sleep on error
     
     def _continuous_processing(self):
-        """Continuous log processing loop that properly analyzes logs from all pages"""
-        logger.info("Starting enhanced continuous log processing loop")
+        """Continuous log processing loop that properly analyzes logs from all sources with priority"""
+        logger.info("Starting enhanced continuous log processing with Apache prioritization")
         
         next_run_time = timezone.now()
+        last_processed_id = 0  # Track the last processed log ID
         
         while self.running and self.enabled:
             try:
@@ -413,58 +426,135 @@ class RealtimeLogProcessor:
                 
                 # Check if it's time to run the analysis and we're enabled
                 if current_time >= next_run_time and self.enabled:
-                    # Find unprocessed logs - USING USER-DEFINED BATCH SIZE
-                    from django.db.models import Q
+                    # Always reset file positions to the current end before starting a new cycle
+                    self._reset_file_positions_to_end()
                     
-                    # Find unprocessed logs
-                    raw_logs = RawLog.objects.filter(is_parsed=False).order_by('id')[:self.logs_per_batch]
+                    # PRIORITIZATION: First fetch and process a minimum number of Apache logs
+                    apache_logs = RawLog.objects.filter(
+                        is_parsed=False,
+                        source__source_type__startswith='apache',  # Match both apache_access and apache_error
+                        id__gt=last_processed_id
+                    ).order_by('id')[:max(10, self.logs_per_batch // 3)]  # Guarantee at least 10 Apache logs
+                    
+                    # Then fetch remaining logs up to the batch limit, prioritizing newer logs
+                    remaining_quota = max(0, self.logs_per_batch - apache_logs.count())
+                    if remaining_quota > 0:
+                        other_logs = RawLog.objects.filter(
+                            is_parsed=False,
+                            id__gt=last_processed_id
+                        ).exclude(
+                            id__in=apache_logs.values_list('id', flat=True)
+                        ).order_by('id')[:remaining_quota]
+                    else:
+                        other_logs = RawLog.objects.none()
+                    
+                    # Combine the logs, with Apache first
+                    raw_logs = list(apache_logs) + list(other_logs)
                     
                     log_count = 0
                     threat_count = 0
                     new_threats = [] # Track new threats for this run
+                    max_processed_id = last_processed_id  # Track highest ID processed this cycle
+                    apache_count = 0  # Count Apache logs processed
+                    mysql_count = 0   # Count MySQL logs processed
                     
                     # Process each log with the detailed analysis
                     for raw_log in raw_logs:
                         try:
+                            # Update max ID seen
+                            if raw_log.id > max_processed_id:
+                                max_processed_id = raw_log.id
+                        
+                            # Track log source types
+                            if raw_log.source and raw_log.source.source_type.startswith('apache'):
+                                apache_count += 1
+                            elif raw_log.source and 'mysql' in raw_log.source.source_type:
+                                mysql_count += 1
+                                
                             # Use the full threat analysis - NOT the simple version
                             from authentication.views_settings import create_parsed_log_from_raw
-                            
+                        
                             # Process the log with detailed threat analysis
                             parsed_log = create_parsed_log_from_raw(raw_log)
-                            
+                        
                             if parsed_log:
                                 log_count += 1
                                 # Count threats
                                 if parsed_log.status in ['suspicious', 'attack']:
-                                    # Generate a signature for deduplication
-                                    threat_signature = self._get_threat_signature(parsed_log)
+                                    # ENHANCED: Extract MITRE data from normalized_data
+                                    mitre_tactic = None
+                                    mitre_technique = None
                                     
-                                    # Only count as new if we haven't alerted on this signature
-                                    if threat_signature not in self.alerted_threats:
-                                        threat_count += 1
-                                        new_threats.append(parsed_log)
-                                        self.alerted_threats.add(threat_signature)
-                                
-                                # Log the processing
-                                logger.info(f"Processing parsed log ID {parsed_log.id} for reporting")
-                                
+                                    if hasattr(parsed_log, 'normalized_data') and parsed_log.normalized_data:
+                                        analysis_data = parsed_log.normalized_data.get('analysis', {})
+                                        mitre_tactic = analysis_data.get('mitre_tactic')
+                                        mitre_technique = analysis_data.get('mitre_technique')
+                                        mitre_tactic_id = analysis_data.get('mitre_tactic_id')
+                                        mitre_technique_id = analysis_data.get('mitre_technique_id')
+                                        
+                                        # If we have MITRE data, create or update the Threat record
+                                        if parsed_log.status == 'attack' or parsed_log.status == 'suspicious':
+                                            try:
+                                                from threat_detection.models import Threat
+                                                
+                                                # Create threat with enhanced MITRE information
+                                                threat = Threat.objects.create(
+                                                    severity="high" if parsed_log.status == 'attack' else "medium",
+                                                    status="new",
+                                                    description=f"Detected {analysis_data.get('attack_type', 'unknown attack')} in {parsed_log.request_path or 'log entry'}",
+                                                    source_ip=parsed_log.source_ip,
+                                                    affected_system=parsed_log.source_type,
+                                                    mitre_tactic=mitre_tactic,
+                                                    mitre_technique=f"{mitre_technique} ({mitre_technique_id})" if mitre_technique and mitre_technique_id else mitre_technique,
+                                                    created_at=timezone.now(),
+                                                    updated_at=timezone.now(),
+                                                    parsed_log=parsed_log,
+                                                    analysis_data={
+                                                        "attack_type": analysis_data.get('attack_type'),
+                                                        "attack_score": analysis_data.get('attack_score'),
+                                                        "mitre_tactic": mitre_tactic,
+                                                        "mitre_tactic_id": mitre_tactic_id,
+                                                        "mitre_technique": mitre_technique,
+                                                        "mitre_technique_id": mitre_technique_id,
+                                                        "details": analysis_data.get('threat_details', [])
+                                                    }
+                                                )
+                                                
+                                                # Generate a signature for deduplication
+                                                threat_signature = self._get_threat_signature(parsed_log)
+                                                
+                                                # Only count as new if we haven't alerted on this signature
+                                                if threat_signature not in self.alerted_threats:
+                                                    threat_count += 1
+                                                    new_threats.append(threat)  # Note: Changed from parsed_log to threat
+                                                    self.alerted_threats.add(threat_signature)
+                                            except Exception as threat_error:
+                                                logger.error(f"Error creating threat: {str(threat_error)}")
+                            
+                            # Log the processing
+                            logger.info(f"Processing parsed log ID {parsed_log.id} for reporting")
+                            
                         except Exception as e:
                             logger.error(f"Error processing log {raw_log.id}: {str(e)}")
                             # Mark as processed to avoid retry
                             raw_log.is_parsed = True
                             raw_log.save()
-                    
+                
+                    # Update the last processed ID for next cycle
+                    if max_processed_id > last_processed_id:
+                        last_processed_id = max_processed_id
+                
                     # Update the dashboard counts
                     if log_count > 0:
-                        logger.info(f"Real-time analysis processed {log_count} logs, found {threat_count} potential threats")
+                        logger.info(f"Real-time analysis processed {log_count} logs ({apache_count} Apache, {mysql_count} MySQL), found {threat_count} potential threats")
                         self.force_refresh_dashboard()
                         
                         # Create report for NEW significant findings only
                         if threat_count > 0:
                             self._create_threat_report(threat_count, new_threats)
-                    
-                    # Schedule the next run based on user settings
-                    next_run_time = timezone.now() + timezone.timedelta(seconds=self.processing_interval)
+                
+                # Schedule the next run based on user settings
+                next_run_time = timezone.now() + timezone.timedelta(seconds=self.processing_interval)
                 
                 # Sleep for a short time to be responsive
                 time.sleep(0.5)
@@ -476,8 +566,18 @@ class RealtimeLogProcessor:
                 time.sleep(5)  # Longer sleep on error
 
     def _get_threat_signature(self, parsed_log):
-        """Generate a unique signature for a threat to avoid duplicate alerts"""
+        """Generate a more robust signature for a threat to avoid duplicate alerts"""
         components = []
+        
+        # Include log ID and timestamp for uniqueness
+        if hasattr(parsed_log, 'id'):
+            components.append(f"id:{parsed_log.id}")
+        
+        # Include normalized timestamp (rounded to 5-minute intervals to group similar events)
+        if hasattr(parsed_log, 'timestamp') and parsed_log.timestamp:
+            # Round timestamp to 5-minute intervals to group similar events
+            ts = int(parsed_log.timestamp.timestamp() // 300) * 300
+            components.append(f"time:{ts}")
         
         # Include key identifying information
         if parsed_log.source_ip:
@@ -487,7 +587,9 @@ class RealtimeLogProcessor:
             components.append(f"status:{parsed_log.status}")
             
         if hasattr(parsed_log, 'request_path') and parsed_log.request_path:
-            components.append(f"path:{parsed_log.request_path}")
+            # Include just the path pattern by removing variable parts
+            path = re.sub(r'=[^&/]+', '=***', parsed_log.request_path)
+            components.append(f"path:{path}")
             
         # Add data from normalized_data if available
         if hasattr(parsed_log, 'normalized_data') and parsed_log.normalized_data:
@@ -496,12 +598,12 @@ class RealtimeLogProcessor:
             # Add attack type if available
             if 'analysis' in nd and 'attack_type' in nd['analysis']:
                 components.append(f"attack:{nd['analysis']['attack_type']}")
-                
-            # Add threat details as part of signature
-            if 'analysis' in nd and 'threat_details' in nd['analysis']:
-                details = nd['analysis']['threat_details']
-                if details and isinstance(details, list) and len(details) > 0:
-                    components.append(f"detail:{details[0]}")
+    
+        # Add raw log content hash for content-based deduplication
+        if hasattr(parsed_log, 'raw_log') and parsed_log.raw_log and hasattr(parsed_log.raw_log, 'content'):
+            import hashlib
+            content_hash = hashlib.md5(parsed_log.raw_log.content.encode('utf-8')).hexdigest()[:8]
+            components.append(f"content:{content_hash}")
         
         # Create a signature string and hash it
         signature_str = "|".join(components)
@@ -510,14 +612,28 @@ class RealtimeLogProcessor:
         return hashlib.md5(signature_str.encode('utf-8')).hexdigest()
 
     def _check_log_files_for_new_content(self):
-        """Actively check log files for new content and create raw logs"""
+        """Active monitoring of log files with improved filtering"""
         try:
-            # Check each source
             for source_id, info in list(self.file_positions.items()):
                 source = info['source']
                 file_path = info['path']
-                last_pos = info['position']
                 
+                # Skip processing if this is a MySQL log and it's being processed too often
+                if source.source_type.lower() in ('mysql', 'mysql_error'):
+                    # Check last processed time for this MySQL source
+                    last_mysql_check = getattr(self, '_last_mysql_check', {}).get(source_id, 0)
+                    current_time = time.time()
+                    
+                    # Only process MySQL logs every 5 seconds to avoid overwhelming the system
+                    if current_time - last_mysql_check < 5:  # 5-second throttle for MySQL logs
+                        continue
+                    
+                    # Update last check time
+                    if not hasattr(self, '_last_mysql_check'):
+                        self._last_mysql_check = {}
+                    self._last_mysql_check[source_id] = current_time
+                
+                # Rest of the method remains the same...
                 if not os.path.exists(file_path):
                     continue
                     
@@ -525,10 +641,10 @@ class RealtimeLogProcessor:
                     current_size = os.path.getsize(file_path)
                     
                     # New content available?
-                    if current_size > last_pos:
+                    if current_size > info['position']:
                         with open(file_path, 'r', encoding='utf-8', errors='replace') as file:
                             # Seek to the last position
-                            file.seek(last_pos)
+                            file.seek(info['position'])
                             
                             # Read new content
                             new_content = file.read()
@@ -570,13 +686,36 @@ class RealtimeLogProcessor:
                                                     except Exception as e:
                                                         logger.debug(f"Failed to parse MySQL timestamp: {e}")
                                             
-                                            # Create RawLog entry with extracted timestamp
-                                            RawLog.objects.create(
-                                                source=source,
-                                                content=line.strip(),
-                                                timestamp=log_timestamp,  # Use extracted timestamp
-                                                is_parsed=False
-                                            )
+                                            # For MySQL error logs, check whitelist patterns first
+                                            should_skip = False
+                                            if source.source_type.lower() in ('mysql', 'mysql_error'):
+                                                # MySQL error patterns to whitelist
+                                                mysql_whitelist_patterns = [
+                                                    "Incorrect definition of table mysql",
+                                                    "expected column .* at position",
+                                                    "InnoDB: Initializing buffer pool",
+                                                    "InnoDB: Completed initialization",
+                                                    "Server socket created on IP",
+                                                    "Starting MariaDB",
+                                                    "ready for connections",
+                                                    "InnoDB: Starting shutdown"
+                                                ]
+                                                
+                                                for pattern in mysql_whitelist_patterns:
+                                                    if re.search(pattern, line, re.IGNORECASE):
+                                                        logger.debug(f"Skipping whitelisted MySQL message: {line[:50]}...")
+                                                        should_skip = True
+                                                        break
+
+                                            # Only process if not skipped
+                                            if not should_skip:
+                                                # Create RawLog entry with extracted timestamp
+                                                RawLog.objects.create(
+                                                    source=source,
+                                                    content=line.strip(),
+                                                    timestamp=log_timestamp,  # Use extracted timestamp
+                                                    is_parsed=False
+                                                )
                         
                         # Update file position
                         info['position'] = current_size
@@ -587,7 +726,7 @@ class RealtimeLogProcessor:
                             source=source,
                             defaults={
                                 'position': current_size,
-                                'last_read': timezone.now()
+                                'last_updated': timezone.now()  # Changed from 'last_read' to 'last_updated'
                             }
                         )
                 except Exception as e:
@@ -597,14 +736,68 @@ class RealtimeLogProcessor:
             logger.error(f"Error checking log files: {str(e)}")
 
     def _create_threat_report(self, threat_count, new_threats):
-        """Create a threat report for newly detected threats"""
+        """Create a threat report with improved deduplication"""
         try:
             if not new_threats:
                 return
                 
-            # Group threats by their source (which is tied to a specific user)
-            threats_by_source = {}
+            # Verify the AlertService is available
+            try:
+                from alerts.services import AlertService
+            except ImportError:
+                logger.error("Failed to import AlertService - alerts will not be sent!")
+                return
+                
+            # Load current deduplication cache from database for persistence
+            from authentication.models import SystemSettings
+            import json
+            
+            dedup_setting, created = SystemSettings.objects.get_or_create(
+                section='alert_deduplication',
+                settings_key='alert_signatures',
+                defaults={'settings_value': '{}'}
+            )
+            
+            try:
+                dedup_cache = json.loads(dedup_setting.settings_value)
+            except (json.JSONDecodeError, TypeError):
+                dedup_cache = {}
+                
+            # Current time for expiring old entries
+            current_time = timezone.now().timestamp()
+            
+            # Clean up old entries (older than 1 hour)
+            expired_keys = [k for k, v in dedup_cache.items() if current_time - v > 3600]
+            for key in expired_keys:
+                del dedup_cache[key]
+            
+            # Group threats that need alerts
+            alerts_to_send = []
             for threat in new_threats:
+                # Generate signature for this threat
+                signature = self._get_threat_signature(threat)
+                
+                # Skip if sent in the last hour
+                if signature in dedup_cache and (current_time - dedup_cache[signature]) < 3600:
+                    logger.info(f"Skipping duplicate alert for signature {signature[:8]}")
+                    continue
+                    
+                # Mark as alerted
+                dedup_cache[signature] = current_time
+                alerts_to_send.append(threat)
+            
+            # Save updated deduplication cache
+            dedup_setting.settings_value = json.dumps(dedup_cache)
+            dedup_setting.save()
+            
+            # Continue with sending alerts for new threats only
+            if not alerts_to_send:
+                logger.info("All new threats were duplicates of recent alerts - no new alerts sent")
+                return
+                
+            # Group remaining threats by source
+            threats_by_source = {}
+            for threat in alerts_to_send:
                 # Get the source ID from the raw log this threat was created from
                 source_id = None
                 if hasattr(threat, 'raw_log') and threat.raw_log:
@@ -870,3 +1063,111 @@ class RealtimeLogProcessor:
         except Exception as e:
             logger.error(f"Error creating default log sources: {str(e)}")
             return []
+    
+    def _clean_duplicate_positions(self, source):
+        """Clean up duplicate LogFilePosition records for a source"""
+        try:
+            # Count positions for this source
+            position_count = LogFilePosition.objects.filter(source=source).count()
+            
+            if position_count <= 1:
+                return  # No duplicates
+                
+            logger.warning(f"Found {position_count} position records for source {source.name}. Cleaning up...")
+            
+            # Get all positions for this source ordered by last_read (newest first)
+            positions = LogFilePosition.objects.filter(source=source).order_by('-last_updated', '-id')  # Changed from '-last_read'
+            
+            if positions.exists():
+                # Keep only the most recent one
+                most_recent = positions.first()
+                
+                # Delete all others
+                positions.exclude(id=most_recent.id).delete()
+                
+                # Get current file size
+                current_file_size = 0
+                if os.path.exists(source.file_path):
+                    current_file_size = os.path.getsize(source.file_path)
+                
+                # Always update the position to the end of the file
+                most_recent.position = current_file_size
+                most_recent.last_updated = timezone.now()
+                most_recent.save()
+                
+                # Update memory cache
+                if source.id in self.file_positions:
+                    self.file_positions[source.id]['position'] = current_file_size
+                    self.file_positions[source.id]['last_updated'] = timezone.now()  # Changed from 'last_read'
+                
+                logger.info(f"Cleaned up duplicate positions for {source.name}. Reset to end: {current_file_size}")
+            
+        except Exception as e:
+            logger.error(f"Error cleaning up positions for {source.name}: {str(e)}")
+            # As a last resort, delete all positions and create a new one at the end
+            try:
+                LogFilePosition.objects.filter(source=source).delete()
+                
+                if os.path.exists(source.file_path):
+                    current_size = os.path.getsize(source.file_path)
+                    LogFilePosition.objects.create(
+                        source=source,
+                        position=current_size,
+                        last_read=timezone.now()
+                    )
+                    logger.info(f"Emergency reset: Created new position at end ({current_size}) for {source.name}")
+            except Exception as inner_e:
+                logger.error(f"Failed emergency position reset for {source.name}: {str(inner_e)}")
+    
+    def _reset_file_positions_to_end(self):
+        """Reset all file positions to the current end to ensure we only process new logs"""
+        logger.info("Resetting all file positions to current end")
+        
+        for source in self.log_sources:
+            try:
+                # Skip invalid paths
+                if not source.file_path or not os.path.exists(source.file_path):
+                    continue
+                
+                # Get current file size
+                current_file_size = os.path.getsize(source.file_path)
+                
+                # Clean up any duplicate positions
+                self._clean_duplicate_positions(source)
+                
+                # Update memory cache
+                if source.id in self.file_positions:
+                    self.file_positions[source.id]['position'] = current_file_size
+                    self.file_positions[source.id]['last_updated'] = timezone.now()  # Consistent with field name
+            
+                # Update database position with error handling
+                try:
+                    # IMPORTANT: Use update_or_create with proper field names and retries
+                    with transaction.atomic():
+                        LogFilePosition.objects.update_or_create(
+                            source=source,
+                            defaults={
+                                'position': current_file_size,
+                                'last_updated': timezone.now()
+                            }
+                        )
+                    logger.info(f"Reset position for {source.name} to end of file: {current_file_size}")
+                except OperationalError as oe:
+                    # Handle lock timeouts specifically
+                    if "Lock wait timeout exceeded" in str(oe):
+                        logger.warning(f"Database lock timeout when resetting position for {source.name}. Retrying...")
+                        time.sleep(1)
+                        # Clean up and try again
+                        self._clean_duplicate_positions(source)
+                        LogFilePosition.objects.update_or_create(
+                            source=source,
+                            defaults={
+                                'position': current_file_size,
+                                'last_updated': timezone.now()
+                            }
+                        )
+                    else:
+                        raise
+            except Exception as e:
+                logger.error(f"Error resetting position for {source.name}: {str(e)}")
+
