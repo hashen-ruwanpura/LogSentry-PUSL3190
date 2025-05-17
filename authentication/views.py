@@ -1,6 +1,7 @@
 import json
 import os
 import re
+from collections import deque
 from datetime import datetime, timedelta
 from django.utils import timezone
 from django.shortcuts import render, redirect
@@ -820,102 +821,112 @@ def alert_detail(request, alert_id):
         # Get the specific threat by ID
         threat = Threat.objects.get(id=alert_id)
         
-        # Handle form submissions (existing code)
+        # Handle form submissions
         if request.method == 'POST':
             action = request.POST.get('action')
             
             if action == 'update_status':
-                # Update threat status
-                status = request.POST.get('status')
-                comment = request.POST.get('comment')
-                
-                threat.status = status
-                threat.save()
-                
-                # Record comment if provided
-                if comment and comment.strip():
-                    # If you have a comments model, you would create a comment here
-                    # For now, we'll just add a message
-                    messages.success(request, f"Status updated to '{status}' with comment: {comment}")
-                else:
-                    messages.success(request, f"Status updated to '{status}'")
-                    
-                return redirect('alert_detail', alert_id=alert_id)
-                
-            elif action == 'block_ip':
-                # Block the IP address
-                ip_address = request.POST.get('ip_address')
-                reason = request.POST.get('reason')
-                expiration = request.POST.get('expiration')
-                
-                # Check if already blacklisted
-                if BlacklistedIP.objects.filter(ip_address=ip_address).exists():
-                    messages.info(request, f"IP address {ip_address} is already blacklisted.")
-                else:
-                    # Calculate expiry date if not permanent
-                    expires_at = None
-                    if expiration == '24h':
-                        expires_at = timezone.now() + timedelta(hours=24)
-                    elif expiration == '7d':
-                        expires_at = timezone.now() + timedelta(days=7)
-                    elif expiration == '30d':
-                        expires_at = timezone.now() + timedelta(days=30)
-                    
-                    # Create blacklist entry - REMOVED added_by field which doesn't exist
-                    BlacklistedIP.objects.create(
-                        ip_address=ip_address,
-                        reason=reason,
-                        expires_at=expires_at
-                    )
-                    
-                    messages.success(request, f"IP address {ip_address} has been blacklisted successfully.")
-                
-                return redirect('alert_detail', alert_id=alert_id)
-                
-            elif action == 'add_comment':
-                # Add a comment to the threat
-                comment_text = request.POST.get('comment_text')
-                
-                if comment_text and comment_text.strip():
-                    # If you have a comments model, create a comment here
-                    # For this example, we'll just add a message
-                    messages.success(request, "Comment added successfully.")
-                else:
-                    messages.error(request, "Comment text cannot be empty.")
-                
-                return redirect('alert_detail', alert_id=alert_id)
+                new_status = request.POST.get('status')
+                if new_status in ['new', 'investigating', 'resolved', 'false_positive']:
+                    threat.status = new_status
+                    threat.updated_at = timezone.now()
+                    threat.save(update_fields=['status', 'updated_at'])
+                    messages.success(request, f"Alert status updated to {new_status}")
             
-            # Add this new elif block to the action handler section
-            elif action == 'unblock_ip':
-                # Unblock the IP address
-                ip_address = request.POST.get('ip_address')
-                unblock_reason = request.POST.get('unblock_reason')
-                
-                # Try to find and delete the blacklisted IP
-                try:
-                    blacklisted_ip = BlacklistedIP.objects.get(ip_address=ip_address)
-                    blacklisted_ip.delete()
-                    
-                    # If you want to log the unblocking, you could do it here
-                    # For example, add a log entry with the unblock_reason
-                    
-                    messages.success(request, f"IP address {ip_address} has been removed from the blacklist.")
-                except BlacklistedIP.DoesNotExist:
-                    messages.warning(request, f"IP address {ip_address} was not found in the blacklist.")
-                
-                return redirect('alert_detail', alert_id=alert_id)
+            elif action == 'blacklist':
+                if threat.source_ip:
+                    reason = request.POST.get('reason', f"Blacklisted from alert #{threat.id}")
+                    # Use get_or_create to avoid duplicates
+                    blacklist, created = BlacklistedIP.objects.get_or_create(
+                        ip_address=threat.source_ip,
+                        defaults={
+                            'reason': reason,
+                            'active': True,
+                            'created_at': timezone.now(),
+                            'threat': threat
+                        }
+                    )
+                    if created:
+                        messages.success(request, f"IP {threat.source_ip} has been blacklisted")
+                    else:
+                        messages.info(request, f"IP {threat.source_ip} was already blacklisted")
 
-        # Continue with the rest of the view...
         # Get related parsed log if available
         related_log = None
+        raw_log_content = None
+        
         if hasattr(threat, 'parsed_log') and threat.parsed_log:
             related_log = threat.parsed_log
             
-        # Get the raw log content if available
-        raw_log_content = None
-        if related_log and hasattr(related_log, 'raw_log'):
-            raw_log_content = related_log.raw_log.content
+            # Get the raw log content if available
+            if hasattr(related_log, 'raw_log') and related_log.raw_log:
+                raw_log = related_log.raw_log
+                if hasattr(raw_log, 'content') and raw_log.content:
+                    raw_log_content = raw_log.content
+                    logger.debug(f"Retrieved raw log content from database for alert {alert_id}")
         
+        # IMPROVED FALLBACK: If raw log content wasn't found or is empty, try to get it from source file
+        if not raw_log_content and related_log:
+            try:
+                # Try to find the source
+                source = None
+                if hasattr(related_log, 'raw_log') and related_log.raw_log and hasattr(related_log.raw_log, 'source'):
+                    source = related_log.raw_log.source
+                elif hasattr(related_log, 'source_type'):
+                    # Try to find matching source by type
+                    source_type = related_log.source_type
+                    source = LogSource.objects.filter(source_type__icontains=source_type).first()
+                
+                if source and source.file_path and os.path.exists(source.file_path):
+                    # Get identifying information to locate this log entry
+                    log_timestamp = related_log.timestamp
+                    source_ip = getattr(related_log, 'source_ip', None)
+                    request_path = getattr(related_log, 'request_path', None)
+                    
+                    # Format timestamp for searching in log files
+                    search_timestamp = log_timestamp.strftime('%d/%b/%Y:%H:%M')
+                    
+                    logger.info(f"Searching in log file for: {search_timestamp}, IP: {source_ip}, Path: {request_path}")
+                    
+                    # Read from the log file - FOCUS ON NEWEST ENTRIES FIRST
+                    with open(source.file_path, 'r', errors='ignore') as f:
+                        # Read the last 1000 lines (newest entries) instead of entire file
+                        log_lines = deque(f, 1000)
+                    
+                    # Search for matching log entries (with multiple criteria for accuracy)
+                    for line in reversed(list(log_lines)):  # Search newest first
+                        # Basic match by timestamp prefix
+                        if search_timestamp in line:
+                            # Additional validation if we have more data
+                            if (not source_ip or source_ip in line) and (not request_path or request_path in line):
+                                raw_log_content = line.strip()
+                                logger.info(f"Found matching log in file for alert {alert_id}")
+                                break
+            except Exception as e:
+                logger.error(f"Error retrieving log from source file for alert {alert_id}: {str(e)}")
+        
+        # If we still don't have raw log content, try to find the newest log with similar characteristics
+        if not raw_log_content and related_log:
+            try:
+                # Find newest raw logs by timestamp (last 24 hours)
+                recent_time = timezone.now() - timezone.timedelta(hours=24)
+                recent_logs = RawLog.objects.filter(timestamp__gte=recent_time).order_by('-timestamp')
+                
+                # Filter by relevant characteristics
+                if hasattr(related_log, 'source_ip') and related_log.source_ip:
+                    recent_logs = recent_logs.filter(content__icontains=related_log.source_ip)
+                
+                if hasattr(related_log, 'request_path') and related_log.request_path:
+                    recent_logs = recent_logs.filter(content__icontains=related_log.request_path)
+                
+                # Get the first matching log
+                newest_log = recent_logs.first()
+                if newest_log:
+                    raw_log_content = newest_log.content
+                    logger.info(f"Found newest similar log for alert {alert_id}")
+            except Exception as e:
+                logger.error(f"Error finding newest similar log for alert {alert_id}: {str(e)}")
+                
         # Get similar threats (same source IP or MITRE tactic)
         similar_threats = Threat.objects.filter(
             Q(source_ip=threat.source_ip) | Q(mitre_tactic=threat.mitre_tactic)
@@ -927,11 +938,15 @@ def alert_detail(request, alert_id):
         # Check if we already have an AI analysis for this threat
         ai_analysis = None
         try:
-            # If you want to store analyses, you can create a model for this
-            # For now, just set to None so the UI shows the default prompt
-            pass
+            threat_analysis = ThreatAnalysis.objects.filter(
+                threat=threat,
+                analysis_type='analyze'
+            ).order_by('-generated_at').first()
+            
+            if threat_analysis:
+                ai_analysis = threat_analysis.content
         except Exception as e:
-            logger.warning(f"Error retrieving AI analysis: {str(e)}")
+            logger.warning(f"Error retrieving AI analysis for threat {alert_id}: {str(e)}")
         
         context = {
             'threat': threat,
@@ -940,7 +955,7 @@ def alert_detail(request, alert_id):
             'similar_threats': similar_threats,
             'is_blacklisted': is_blacklisted,
             'page_title': f"Alert Details: {threat.id}",
-            'ai_analysis': ai_analysis,  # Add this to the context
+            'ai_analysis': ai_analysis,
         }
         
         return render(request, 'authentication/alert_detail.html', context)
@@ -1180,7 +1195,7 @@ def export_events(request):
         elements.append(title)
         
         # Add report metadata
-        date_range = f"Period: {start_date.strftime('%Y-%m-%d %H:%M:%S')} to {end_date.strftime('%Y-%m-%d %H:%M:%S')}"
+        date_range = f"Period: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}"
         filter_info = f"Filters: Event Type={event_type}, Severity={severity}"
         if search:
             filter_info += f", Search={search}"
@@ -1243,60 +1258,97 @@ def generate_alerts_chart_data(start_time, end_time):
     Generate data for the alerts chart based on time period.
     Returns labels (time periods) and data (alert counts).
     """
-    from django.db.models import Count
-    from django.db.models.functions import TruncHour, TruncDay
-    
     # Determine appropriate time grouping based on total time range
     time_diff = end_time - start_time
     
-    if time_diff.total_seconds() <= 60 * 60 * 24:  # Less than 24 hours - group by hour
-        truncate_func = TruncHour
-        date_format = '%H:%M'
-    else:  # More than 24 hours - group by day
-        truncate_func = TruncDay
-        date_format = '%b %d'
+    # Fetch all threats within the time range
+    threats = Threat.objects.filter(
+        created_at__gte=start_time,
+        created_at__lte=end_time
+    ).order_by('created_at')
     
-    # Get alert counts grouped by time period
-    alerts_by_time = (
-        Threat.objects
-        .filter(created_at__gte=start_time, created_at__lte=end_time)
-        .annotate(period=truncate_func('created_at'))
-        .values('period')
-        .annotate(count=Count('id'))
-        .order_by('period')
-    )
+    # Process data in Python instead of at database level
+    alerts_dict = {}
     
-    # Create complete time series (including periods with zero alerts)
-    all_periods = []
-    current = start_time
-    
-    # For days, increment by 1 day; for hours, increment by 1 hour
-    if truncate_func == TruncDay:
-        increment = timedelta(days=1)
-    else:
-        increment = timedelta(hours=1)
-    
-    # Generate all time periods in the range
-    while current <= end_time:
-        all_periods.append(current)
-        current += increment
-    
-    # Format for chart display
-    chart_labels = [period.strftime(date_format) for period in all_periods]
-    
-    # Map counts to periods
-    alerts_dict = {item['period']: item['count'] for item in alerts_by_time}
-    
-    # Build final data list with zeros for periods without alerts
-    alerts_data = []
-    for period in all_periods:
-        # For day truncation, we need to match on date part only
-        if truncate_func == TruncDay:
-            period_match = period.replace(hour=0, minute=0, second=0, microsecond=0)
-        else:
-            period_match = period.replace(minute=0, second=0, microsecond=0)
+    if time_diff.total_seconds() <= 60 * 60 * 24:  # 24 hours or less
+        # For 24h view, use hour format but ensure uniqueness with full datetime keys
+        date_format = '%H:%M'  # Display format (hour:minute)
+        internal_format = '%Y-%m-%d %H:%M'  # Internal format with date for uniqueness
         
-        alerts_data.append(alerts_dict.get(period_match, 0))
+        # Generate all hours in the time range
+        all_periods = []
+        period_keys = {}  # Map display keys to internal keys
+        
+        # Round to nearest hour
+        current = start_time.replace(minute=0, second=0, microsecond=0)
+        
+        while current <= end_time:
+            display_key = current.strftime(date_format)
+            internal_key = current.strftime(internal_format)
+            
+            # Store the mapping between display and internal keys
+            if display_key not in period_keys:
+                period_keys[display_key] = []
+            period_keys[display_key].append(internal_key)
+            
+            # Use the internal key for data storage
+            all_periods.append(display_key)
+            alerts_dict[internal_key] = 0
+            
+            # Move to next hour
+            current += timedelta(hours=1)
+        
+        # Count threats for each hour using the internal keys
+        for threat in threats:
+            # Format to internal key
+            threat_key = threat.created_at.strftime(internal_format)
+            # Find the closest hour
+            hour_key = threat.created_at.replace(minute=0, second=0, microsecond=0).strftime(internal_format)
+            
+            if hour_key in alerts_dict:
+                alerts_dict[hour_key] += 1
+        
+        # Consolidate data for display using display keys
+        display_data = {}
+        for display_key in all_periods:
+            # Sum counts from all internal keys that map to this display key
+            display_data[display_key] = sum(alerts_dict.get(internal_key, 0) 
+                                           for internal_key in period_keys.get(display_key, []))
+        
+        # Remove duplicates from all_periods while preserving order
+        unique_periods = []
+        seen = set()
+        for period in all_periods:
+            if period not in seen:
+                seen.add(period)
+                unique_periods.append(period)
+                
+        # Prepare final data
+        chart_labels = unique_periods
+        alerts_data = [display_data.get(period, 0) for period in unique_periods]
+        
+    else:  # More than 24 hours - group by day
+        date_format = '%b %d'  # Month Day format
+        
+        # Generate all days in the time range
+        all_periods = []
+        current = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        while current <= end_time:
+            period_key = current.strftime(date_format)
+            all_periods.append(period_key)
+            alerts_dict[period_key] = 0  # Initialize with zero
+            current += timedelta(days=1)
+        
+        # Count threats for each day
+        for threat in threats:
+            day_key = threat.created_at.strftime(date_format)
+            if day_key in alerts_dict:
+                alerts_dict[day_key] += 1
+        
+        # Prepare final data
+        chart_labels = all_periods
+        alerts_data = [alerts_dict.get(period, 0) for period in all_periods]
     
     return chart_labels, alerts_data
 

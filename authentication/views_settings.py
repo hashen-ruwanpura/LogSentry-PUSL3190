@@ -3,6 +3,7 @@ import os
 import logging
 import tempfile
 import re
+import hashlib
 from datetime import datetime, timedelta
 import threading
 import time
@@ -475,7 +476,7 @@ def process_logs_from_sources(sources, current_user=None):
     try:
         from threat_detection.rules import RuleEngine
         from django.utils import timezone
-        import hashlib
+        from collections import deque
         
         rule_engine = RuleEngine()
         threat_count = 0
@@ -496,38 +497,22 @@ def process_logs_from_sources(sources, current_user=None):
             if not os.path.exists(source.file_path):
                 logger.warning(f"Log file not found at: {source.file_path}")
                 continue
-                
-            # Open the file and read lines
+            
+            # Get current file size
+            file_size = os.path.getsize(source.file_path)
+            
+            # Open the file and read NEWEST lines using deque with maxlen
             try:
                 with open(source.file_path, 'r', encoding='utf-8', errors='replace') as file:
-                    # Read all lines (or limit to a reasonable number)
-                    lines = file.readlines()
-                    logger.info(f"Read {len(lines)} lines from {source.file_path}")
+                    # Use deque to efficiently get only the last 500 lines
+                    lines = list(deque(file, 500))
+                    logger.info(f"Read last {len(lines)} lines from {source.file_path}")
             except Exception as file_error:
                 logger.error(f"Error reading file {source.file_path}: {str(file_error)}")
                 continue
                 
-            # Get the last known position
-            try:
-                position, created = LogFilePosition.objects.get_or_create(
-                    source=source,
-                    defaults={'position': 0}
-                )
-                
-                # Only process new lines if we have a position
-                if position.position > 0 and position.position < len(lines):
-                    lines = lines[position.position:]
-                    
-                # Update position for next time
-                position.position = len(lines)
-                position.last_read = timezone.now()
-                position.save()
-                
-            except Exception as pos_error:
-                logger.warning(f"Error tracking file position: {str(pos_error)}")
-                
-            # Process each line
-            for line_num, line in enumerate(lines[:100]):  # Limit to 100 lines for performance
+            # Process the newest lines first - REVERSE the list
+            for line_num, line in enumerate(reversed(lines[:100])):  # Process last 100 lines in newest-first order
                 if line.strip():
                     try:
                         # Create raw log
@@ -542,16 +527,61 @@ def process_logs_from_sources(sources, current_user=None):
                         parsed_log = create_parsed_log_from_raw(raw_log)
                         
                         if parsed_log:
-                            # Analyze for threats using rule engine
-                            threats = rule_engine.analyze_log(parsed_log)
-                            if threats:
-                                all_threats.extend(threats)
-                                threat_count += len(threats)
-                                
                             log_count += 1
                             
+                            # Check if this log contains a threat
+                            if parsed_log.status in ['suspicious', 'attack']:
+                                # Create a threat object
+                                from threat_detection.models import Threat
+                                
+                                severity = 'high' if parsed_log.status == 'attack' else 'medium'
+                                
+                                mitre_tactic = None
+                                mitre_technique = None
+                                
+                                # Extract MITRE information from analysis if available
+                                if parsed_log.normalized_data and 'analysis' in parsed_log.normalized_data:
+                                    analysis = parsed_log.normalized_data['analysis']
+                                    if 'attack_type' in analysis and analysis['attack_type'] == 'sql_injection':
+                                        mitre_tactic = 'defense_evasion'
+                                        mitre_technique = 'T1527'  # SQL Injection technique
+                                    elif 'attack_type' in analysis and analysis['attack_type'] == 'xss':
+                                        mitre_tactic = 'defense_evasion'
+                                        mitre_technique = 'T1059.7'  # JavaScript execution
+                                
+                                threat = Threat.objects.create(
+                                    severity=severity,
+                                    status='new',
+                                    description=f"Detected {parsed_log.normalized_data.get('analysis', {}).get('attack_type', 'suspicious activity')} in request to {parsed_log.request_path}" if parsed_log.request_path else "Suspicious log entry detected",
+                                    source_ip=parsed_log.source_ip,
+                                    affected_system=parsed_log.source_type,
+                                    mitre_tactic=mitre_tactic,
+                                    mitre_technique=mitre_technique,
+                                    created_at=timezone.now(),
+                                    updated_at=timezone.now(),
+                                    parsed_log=parsed_log
+                                )
+                                
+                                threat_count += 1
+                                all_threats.append(threat)
+                                
+                                if parsed_log.source_ip:
+                                    ip_addresses.add(parsed_log.source_ip)
                     except Exception as inner_e:
                         logger.error(f"Error processing log line {line_num}: {str(inner_e)}")
+            
+            # Update position to mark the file as completely processed
+            try:
+                LogFilePosition.objects.update_or_create(
+                    source=source,
+                    defaults={
+                        'position': file_size,  # Set to current file size to mark as processed
+                        'last_read': timezone.now()
+                    }
+                )
+                logger.info(f"Updated file position for {source.name} to {file_size}")
+            except Exception as pos_error:
+                logger.warning(f"Error updating file position: {str(pos_error)}")
             
         # If threats were found, send a consolidated alert
         if all_threats:
@@ -576,7 +606,7 @@ def process_logs_from_sources(sources, current_user=None):
             # Extract some threat examples for the alert
             threat_examples = []
             for i, threat in enumerate(all_threats[:3]):  # Get first 3 threats for details
-                threat_examples.append(f"{threat.rule.name if threat.rule else 'Unknown'} ({threat.severity})")
+                threat_examples.append(f"{threat.rule.name if hasattr(threat, 'rule') and threat.rule else 'Unknown'} ({threat.severity})")
             
             # Send alert about batch analysis results
             from alerts.services import AlertService
@@ -603,9 +633,9 @@ def process_logs_from_sources(sources, current_user=None):
 
 
 def create_parsed_log_from_raw(raw_log):
-    """Create and return a ParsedLog from a RawLog with enhanced attack pattern detection"""
-    import re
     from urllib.parse import unquote
+    import re
+    from datetime import datetime
     
     try:
         # Get source type safely
@@ -614,18 +644,76 @@ def create_parsed_log_from_raw(raw_log):
         # Get content
         log_content = raw_log.content
         
-        # Decode URL-encoded content for better detection
-        decoded_content = unquote(log_content)
-        log_lower = decoded_content.lower()
+        # Create decoded_content by URL-decoding log_content - APPLY MULTIPLE ROUNDS OF DECODING
+        try:
+            # First-level decoding
+            decoded_content = unquote(log_content)
+            
+            # Check for double-encoding (common in attacks)
+            if '%' in decoded_content:
+                second_level = unquote(decoded_content)
+                # If second level decoding changed something, use it
+                if second_level != decoded_content:
+                    decoded_content = second_level
+        except:
+            # Fallback if unquote fails
+            decoded_content = log_content
+            
+        # Try to extract timestamp from log content for more accuracy
+        log_timestamp = raw_log.timestamp  # Default fallback
+        
+        # For Apache logs
+        if source_type.lower() in ('apache', 'apache_access'):
+            timestamp_match = re.search(r'\[(\d{2}/\w{3}/\d{4}:\d{2}:\d{2}:\d{2} [+\-]\d{4})\]', log_content)
+            if timestamp_match:
+                try:
+                    time_str = timestamp_match.group(1)
+                    parsed_time = datetime.strptime(time_str, '%d/%b/%Y:%H:%M:%S %z')
+                    # Update the timestamp if parsing succeeded
+                    log_timestamp = parsed_time
+                except Exception as e:
+                    logger.debug(f"Failed to parse Apache timestamp: {e}")
+        # For MySQL logs
+        elif source_type.lower() in ('mysql', 'mysql_error'):
+            timestamp_match = re.search(r'(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})', log_content)
+            if timestamp_match:
+                try:
+                    time_str = timestamp_match.group(1)
+                    parsed_time = datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S')
+                    # Make timezone-aware
+                    if timezone.is_naive(parsed_time):
+                        parsed_time = timezone.make_aware(parsed_time)
+                    # Update the timestamp if parsing succeeded
+                    log_timestamp = parsed_time
+                except Exception as e:
+                    logger.debug(f"Failed to parse MySQL timestamp: {e}")
         
         # Extract IP address
         ip_match = re.search(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', log_content)
         source_ip = ip_match.group(0) if ip_match else None
         
-        # Extract HTTP method and URL path if present
+        # Extract HTTP method, URL path and QUERY parameters separately (important change)
         method_match = re.search(r'(GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD)\s+(/[^\s]*)', log_content)
         request_method = method_match.group(1) if method_match else None
-        request_path = method_match.group(2) if method_match else None
+        full_request_path = method_match.group(2) if method_match else None
+        
+        # Split path and query for separate analysis
+        request_path = None
+        query_string = None
+        
+        if full_request_path:
+            parts = full_request_path.split('?', 1)
+            request_path = parts[0]
+            query_string = parts[1] if len(parts) > 1 else None
+
+        # Extract HTTP status code if present
+        status_code = None
+        status_match = re.search(r'\s(\d{3})\s+\d+', log_content)
+        if status_match:
+            try:
+                status_code = int(status_match.group(1))
+            except:
+                pass
         
         # Request parameters or POST data
         request_params = {}
@@ -643,6 +731,45 @@ def create_parsed_log_from_raw(raw_log):
         threat_details = []
         attack_type = None
         attack_score = 0
+
+        # NEW: Extract file extension from request path for context awareness
+        file_extension = None
+        if request_path:
+            extension_match = re.search(r'\.([a-zA-Z0-9]+)(?:\?|$)', request_path)
+            if extension_match:
+                file_extension = extension_match.group(1).lower()
+
+        # NEW: Check if request is for a common static resource
+        is_static_resource = False
+        if file_extension in ['js', 'css', 'jpg', 'jpeg', 'png', 'gif', 'svg', 'woff', 'woff2', 'ttf', 'eot', 'ico']:
+            is_static_resource = True
+        
+        # NEW: Common JavaScript libraries and frameworks (safe patterns)
+        js_library_patterns = [
+            r'jquery(?:\.min|\.slim|\.core|\.ui|ui)?\.js',
+            r'bootstrap(?:\.min|\.bundle|\.esm)?\.js',
+            r'angular(?:\.min)?\.js',
+            r'react(?:\.min|\.production|\.development)?\.js',
+            r'vue(?:\.min|\.runtime)?\.js',
+            r'lodash(?:\.min)?\.js',
+            r'moment(?:\.min)?\.js',
+            r'axios(?:\.min)?\.js',
+            r'popper(?:\.min)?\.js',
+            r'timepicker(?:\.min)?\.js',
+            r'datepicker(?:\.min)?\.js',
+            r'chart(?:\.min)?\.js',
+            r'select2(?:\.min)?\.js',
+            r'dataTables(?:\.min)?\.js'
+        ]
+        
+        # Check if request is for a known JavaScript library
+        is_js_library = False
+        if request_path:
+            lowercase_path = request_path.lower()
+            for pattern in js_library_patterns:
+                if re.search(pattern, lowercase_path):
+                    is_js_library = True
+                    break
         
         # =============================================
         # SQL INJECTION DETECTION - Enhanced patterns
@@ -755,211 +882,394 @@ def create_parsed_log_from_raw(raw_log):
         ]
         
         # =============================================
-        # DATA EXFILTRATION DETECTION
+        # DATA EXFILTRATION DETECTION - IMPROVED with context awareness
         # =============================================
         exfiltration_patterns = [
-            # Sensitive data in query strings
+            # Sensitive data in query strings - only non-static resources
             r"(?:password|passwd|pwd|pw|credentials|token|api[_-]?key)=",
-            # Unusual amount of data in query strings
-            r"\?.{100,}",
-            # Data encodings that might hide stolen data
-            r"base64[,:](?:[A-Za-z0-9+/]{30,}={0,2})",
+            
             # Cookie theft via parameters
             r"\?.*?cookie=",
-            # Unusual data formats being sent
-            r"\?.*?data=(?:[A-Za-z0-9+/]{20,}={0,2})"
+            
+            # Unusual data formats being sent - only for POST and sensitive endpoints
+            r"\?.*?data=(?:[A-Za-z0-9+/]{50,}={0,2})"
+        ]
+
+        # =============================================
+        # PATH TRAVERSAL DETECTION - NEW DEFINITION
+        # =============================================
+        path_traversal_patterns = [
+            # Basic directory traversal sequences
+            r"\.\.\/",  # ../
+            r"\.\./",    # ../
+            r"\.\.\\",   # ..\ 
+            r"\.\.%2f",  # ..%2f (URL encoded)
+            r"\.\.%5c",  # ..%5c (URL encoded)
+            r"%2e%2e%2f", # ../ (double URL encoded)
+            r"%2e%2e/",   # ../ (partial URL encoded)
+            r"%2e%2e%5c", # ..\ (URL encoded)
+            
+            # Absolute path access attempts
+            r"(?:\/etc\/passwd)",
+            r"(?:\/etc\/shadow)",
+            r"(?:\/proc\/self)",
+            r"(?:C:\\Windows)",
+            r"(?:boot\.ini)",
+            r"(?:win\.ini)",
+            
+            # Web config files
+            r"(?:\/\.env)",
+            r"(?:\/config\.php)",
+            r"(?:\/wp-config\.php)",
+            r"(?:\/web\.config)",
+            r"(?:\/\.htaccess)",
+            
+            # Double URL-encoded variants
+            r"%252e%252e%252f",  # ../ (double URL encoded)
+            
+            # Unicode/UTF-8 evasion techniques
+            r"(?:%c0%ae%c0%ae\/)",  # UTF-8 overlong encoding
+            r"(?:\\u002e\\u002e\/)" # Unicode escape sequences
         ]
         
         # =============================================
-        # SESSION HIJACKING DETECTION
+        # COMMAND INJECTION DETECTION - NEW DEFINITION
+        # =============================================
+        command_injection_patterns = [
+            # Command separators and shell metacharacters
+            r"(?:;[\s\n]*[\w\/]+)",  # ; followed by command
+            r"(?:\|[\s\n]*[\w\/]+)",  # | followed by command
+            r"(?:\|\|[\s\n]*[\w\/]+)", # || followed by command
+            r"(?:&[\s\n]*[\w\/]+)",    # & followed by command
+            r"(?:&&[\s\n]*[\w\/]+)",   # && followed by command
+            r"(?:`[\w\/]+`)",          # Backtick execution
+            r"(?:\$\([\w\/]+\))",      # $() execution
+            
+            # Specific commands often used in injection
+            r"(?:cat[\s\n]+\/etc\/passwd)",
+            r"(?:nc[\s\n]+\-e)",
+            r"(?:bash[\s\n]+\-i)",
+            r"(?:sh[\s\n]+\-i)",
+            r"(?:ping[\s\n]+\-c)",
+            r"(?:wget[\s\n]+http)",
+            r"(?:curl[\s\n]+http)",
+            r"(?:chmod[\s\n]+[0-7]{3})",
+            
+            # PowerShell-specific patterns for Windows hosts
+            r"(?:powershell[\s\n]+\-[ce][\s\n]+)",
+            r"(?:Start-Process)",
+            r"(?:Invoke-Expression)",
+            r"(?:IEX[\s\n]*\()",
+            
+            # Command obfuscation techniques
+            r"(?:\/[\s\n]*b[\s\n]*i[\s\n]*n[\s\n]*\/)",  # /b i n/
+            r"(?:c[\s\n]*h[\s\n]*m[\s\n]*o[\s\n]*d)",   # c h m o d
+            
+            # Common reverse shell patterns
+            r"(?:0\.0\.0\.0[\s\n]*:[\s\n]*[0-9]{1,5})",   # IP:Port format
+            r"(?:sh[\s\n]*\-i[\s\n]*>[\s\n]*\/dev\/tcp)", # bash reverse shell
+            
+            # Encoded command strings that might be used to evade filters
+            r"(?:%63%6d%64)",      # "cmd" URL-encoded
+            r"(?:%73%68%65%6c%6c)" # "shell" URL-encoded
+        ]
+        
+        # =============================================
+        # SESSION HIJACKING DETECTION - NEW DEFINITION
         # =============================================
         session_patterns = [
-            # Cookie theft patterns
+            # Cookie stealing or session manipulation
             r"document\.cookie",
-            r"fetch\(.*?\+document\.cookie\)",
-            r"fetch\(.*?cookie=",
-            r"new\s+Image\(.*?\+document\.cookie\)",
-            # Session manipulation
-            r"sessionStorage\.setItem\(",
-            r"localStorage\.setItem\(",
-            r"\?.*?(?:PHPSESSID|session_id|sid)=",
-            # Suspicious cookie operations
-            r"\.cookie\s*=\s*['\"][^'\"]+['\"]"
+            r"localStorage\[[\'\"](?:session|token|auth|jwt|user|login)[\'\"]\]",
+            r"sessionStorage\[[\'\"](?:session|token|auth|jwt|user|login)[\'\"]\]",
+            
+            # Session cookie in URL (indicates possible session fixation)
+            r"(?:JSESSIONID|PHPSESSID|ASPSESSIONID|session_id|sess_id)=[\w\d]{16,128}",
+            
+            # XSS patterns targeting session data
+            r"<script>.*(?:cookie|session|localStorage|sessionStorage).*<\/script>",
+            r"fetch\(.{1,30}cookie",
+            r"new[\s\n]*Image\(\)\.src[\s\n]*=[\s\n]*['\"](.*cookie|.*session|.*token)",
+            
+            # Cross-domain session data extraction
+            r"postMessage\([^)]*(?:cookie|session|token|auth|jwt)",
+            r"\.setRequestHeader\([\"'](?:X-Auth|Authorization|Auth-Token|X-Session)[\"']",
+            
+            # Common session-related DOM manipulation
+            r"(?:cookie|token|session)\.replace\(",
+            r"window\.location[\s\n]*=[\s\n]*['\"].*(?:token|session|auth)=",
+            
+            # CSRF-like patterns that might be used to hijack sessions
+            r"<img[\s\n]*src=[\s\n]*['\"][^'\"]*(?:logout|login|auth|session)[^'\"]*['\"]",
+            r"<iframe[\s\n]*src=[\s\n]*['\"][^'\"]*(?:logout|login|auth|session)[^'\"]*['\"]",
+            
+            # WebSocket-based session attacks
+            r"new[\s\n]*WebSocket\(['\"][^'\"]*['\"]\)\.send\([^)]*(?:cookie|token|session)"
         ]
-        
-        # Command injection patterns
-        command_injection_patterns = [
-            r";\s*(?:/bin/|cmd\.exe|powershell|bash|sh\s)",
-            r"\|\s*(?:cat|ls|dir|whoami|net\s+user|id|pwd)",
-            r"`(?:[^`]+)`", # Backtick command execution
-            r"\$\([^)]+\)", # Command substitution
-            r"system\(['\"]", # PHP system function
-            r"exec\(['\"]",  # PHP exec function
-            r"shell_exec\(", # PHP shell_exec function
-            r"passthru\(",   # PHP passthru function
-            r"Runtime\.getRuntime\(\)\.exec\(" # Java runtime exec
-        ]
-        
-        # Path traversal patterns
-        path_traversal_patterns = [
-            r"\.\.\/\.\.\/", # Basic directory traversal
-            r"%2e%2e%2f",    # URL encoded traversal
-            r"\.\.\\\.\.\\", # Windows path traversal
-            r"(?:/etc/passwd|/etc/shadow|/proc/self|c:\\windows\\system32|boot\.ini)",
-            r"file:///",     # Local file URL
-            r"php://filter", # PHP stream filter
-            r"zip://",       # PHP zip wrapper
-            r"phar://"       # PHP phar wrapper
+
+        # NEW: Whitelist patterns for common URL structures that should NOT trigger alerts
+        whitelist_patterns = [
+            # Common version parameters
+            r"\.js\?v=[\w\.\-]+$",
+            r"\.css\?v=[\w\.\-]+$",
+            r"\.(js|css)\?ver=[\d\.]+$",
+            r"\.(js|css)\?version=[\d\.]+$",
+            
+            # Cache busting parameters
+            r"\.(js|css|png|jpg|gif)\?t=\d+$",
+            r"\.(js|css|png|jpg|gif)\?_=\d+$",
+            
+            # CDN URLs with integrity hashes
+            r"\.min\.(js|css)\?[\w\-]+=[\w\-]+$",
+            
+            # Common CMS paths with standard query parameters
+            r"/wp-content/.*\?ver=[\d\.]+$",
+            r"/sites/default/files/.*\?[\w]+=[\w]+$"
         ]
         
         # =============================================
-        # PATTERN CHECKING IMPLEMENTATION
+        # PATTERN CHECKING IMPLEMENTATION - WITH CONTEXT AWARENESS
         # =============================================
+
+        # NEW: First check if request should be whitelisted before analysis
+        is_whitelisted = False
         
-        # Check for critical SQL injection patterns first - these warrant immediate flagging
-        for pattern in critical_sql_patterns:
-            if re.search(pattern, decoded_content, re.IGNORECASE):
-                threat_details.append(f"Critical SQL injection detected: {pattern}")
-                status = 'attack'
-                attack_type = 'sql_injection'
-                attack_score = 100  # Maximum score for critical patterns
-                break
-        
-        # If not already marked as an attack, check for SQL injection patterns
-        if status != 'attack':
-            sql_matches = []
-            for pattern in sql_injection_patterns:
-                if re.search(pattern, decoded_content, re.IGNORECASE):
-                    sql_matches.append(pattern)
-                    attack_score += 15  # Increment score for each SQL pattern found
+        # 1. Check if this is a static resource with a successful response 
+        if is_static_resource and status_code in [200, 304]:
+            is_whitelisted = True
             
-            if sql_matches:
-                attack_type = 'sql_injection'
-                for match in sql_matches[:3]:  # Limit to first 3 patterns to avoid overwhelming logs
-                    threat_details.append(f"SQL injection pattern: {match}")
+        # 2. Check against whitelist patterns
+        if request_path:
+            for pattern in whitelist_patterns:
+                if re.search(pattern, request_path):
+                    is_whitelisted = True
+                    break
+                    
+        # 3. If it's a JavaScript library with a valid response code
+        if is_js_library and status_code in [200, 304]:
+            is_whitelisted = True
+                # Add this code before is_vulnerable_endpoint is first used (around line 1030)
+        
+        # ENHANCED VULNERABILITY DETECTION - Special handling for known vulnerable endpoints
+        known_vulnerable_endpoints = [
+            '/vuln_blog/search.php',
+            '/vuln_blog/login.php',
+            '/vuln_blog/user.php',
+            '/vuln_blog/comments.php',
+            '/vuln_blog/profile.php',
+            '/phpmyadmin/index.php',
+            '/admin/login.php',
+            '/wp-login.php',
+            '/wp-admin'
+        ]
+        
+        is_vulnerable_endpoint = False
+        if request_path:
+            for endpoint in known_vulnerable_endpoints:
+                if endpoint.lower() in request_path.lower():
+                    is_vulnerable_endpoint = True
+                    logger.info(f"Request to known vulnerable endpoint: {request_path}")
+                    break
+        # 4. NEVER whitelist vulnerable blog or admin paths with query parameters
+        if is_vulnerable_endpoint and query_string:
+            is_whitelisted = False
+            logger.debug(f"Not whitelisting vulnerable endpoint with query: {full_request_path}")
+        
+        # IMPROVED SQL INJECTION DETECTION - Check both URL path and query separately
+        # Only proceed with analysis if not whitelisted
+        if not is_whitelisted:
+            # Pre-check vulnerable paths with query parameters - fast path for obvious attacks
+            is_obvious_attack = False
+            if query_string and is_vulnerable_endpoint:
+                # Common SQL injection patterns in query parameters
+                obvious_patterns = [
+                    r"'.*OR.*'.*=.*'",              # 'OR '1'='1
+                    r"--",                          # SQL comment
+                    r"UNION.*SELECT",               # UNION SELECT
+                    r"DROP.*TABLE",                 # DROP TABLE
+                    r";\s*SELECT",                  # Chained queries
+                    r"SLEEP\s*\(",                  # Time-based injection
+                    r"SELECT.*FROM",                # SELECT FROM
+                    r"admin'.*--",                  # admin'--
+                    r"BENCHMARK\s*\(",              # BENCHMARK
+                    r"information_schema"           # Database schema access
+                ]
                 
-                # If multiple SQL patterns or certain login patterns, mark as attack
-                if attack_score >= 30 or 'OR 1=1' in decoded_content:
-                    status = 'attack'
-                else:
-                    status = 'suspicious'
-        
-        # Check for XSS patterns if not already a confirmed attack
-        if attack_score < 80:  # Still check XSS even if SQL is suspected
-            xss_matches = []
-            for pattern in xss_patterns:
-                if re.search(pattern, decoded_content, re.IGNORECASE):
-                    xss_matches.append(pattern)
-                    attack_score += 10  # XSS patterns add to the score
-            
-            if xss_matches and (attack_type is None or attack_score < 30):
-                attack_type = 'xss'
-                for match in xss_matches[:3]:
-                    threat_details.append(f"XSS pattern: {match}")
+                # URL-decode the query for better matching
+                decoded_query = unquote(query_string)
                 
-                if attack_score >= 20 or len(xss_matches) >= 2:
-                    status = 'attack' if status != 'attack' else status
-                else:
-                    status = 'suspicious' if status != 'attack' else status
-        
-        # Check for command injection
-        if attack_score < 80:
-            cmd_matches = []
-            for pattern in command_injection_patterns:
-                if re.search(pattern, decoded_content, re.IGNORECASE):
-                    cmd_matches.append(pattern)
-                    attack_score += 20  # Command injection is serious
-            
-            if cmd_matches:
-                attack_type = attack_type or 'command_injection'
-                for match in cmd_matches[:2]:
-                    threat_details.append(f"Command injection pattern: {match}")
-                status = 'attack'  # Command injection attempts are always attacks
-        
-        # Check for path traversal
-        if attack_score < 80:
-            path_matches = []
-            for pattern in path_traversal_patterns:
-                if re.search(pattern, decoded_content, re.IGNORECASE):
-                    path_matches.append(pattern)
-                    attack_score += 15
-            
-            if path_matches:
-                attack_type = attack_type or 'path_traversal'
-                for match in path_matches[:2]:
-                    threat_details.append(f"Path traversal pattern: {match}")
+                # Check for obvious attack patterns
+                for pattern in obvious_patterns:
+                    if re.search(pattern, decoded_query, re.IGNORECASE):
+                        is_obvious_attack = True
+                        attack_type = 'sql_injection'
+                        status = 'attack'
+                        attack_score = 100
+                        threat_details.append(f"SQL injection detected in query parameters: {pattern}")
+                        logger.warning(f"SQL INJECTION DETECTED: {full_request_path}, pattern: {pattern}")
+                        break
+
+            # If not an obvious attack, proceed with detailed analysis
+            if not is_obvious_attack:
+                # Check for critical SQL injection patterns first - these warrant immediate flagging
+                for pattern in critical_sql_patterns:
+                    if re.search(pattern, decoded_content, re.IGNORECASE):
+                        threat_details.append(f"Critical SQL injection detected: {pattern}")
+                        status = 'attack'
+                        attack_type = 'sql_injection'
+                        attack_score = 100  # Maximum score for critical patterns
+                        break
                 
-                if attack_score >= 15 or len(path_matches) >= 1:
-                    status = 'attack' if status != 'attack' else status
-                else:
-                    status = 'suspicious' if status != 'attack' else status
-        
-        # Check for CSRF if it's a form submission
-        if request_method == "POST" and attack_score < 50:
-            csrf_matches = []
-            for pattern in csrf_patterns:
-                if re.search(pattern, log_content, re.IGNORECASE):
-                    csrf_matches.append(pattern)
-                    attack_score += 5  # CSRF is typically lower scoring as it requires more context
-            
-            if csrf_matches:
-                attack_type = attack_type or 'csrf'
-                threat_details.append(f"Possible CSRF attempt: missing or invalid referer")
-                status = 'suspicious' if status == 'normal' else status
-        
-        # Check for data exfiltration attempts
-        if attack_score < 80:
-            exfil_matches = []
-            for pattern in exfiltration_patterns:
-                if re.search(pattern, decoded_content, re.IGNORECASE):
-                    exfil_matches.append(pattern)
-                    attack_score += 10
-            
-            if exfil_matches:
-                attack_type = attack_type or 'data_exfiltration'
-                for match in exfil_matches[:2]:
-                    threat_details.append(f"Possible data exfiltration: {match}")
-                status = 'suspicious' if status == 'normal' else status
-        
-        # Check for session hijacking attempts
-        if attack_score < 80:
-            session_matches = []
-            for pattern in session_patterns:
-                if re.search(pattern, decoded_content, re.IGNORECASE):
-                    session_matches.append(pattern)
-                    attack_score += 15
-            
-            if session_matches:
-                attack_type = attack_type or 'session_hijacking'
-                for match in session_matches[:2]:
-                    threat_details.append(f"Possible session hijacking: {match}")
+                # If not already marked as an attack, check for SQL injection patterns
+                if status != 'attack':
+                    sql_matches = []
+                    for pattern in sql_injection_patterns:
+                        if re.search(pattern, decoded_content, re.IGNORECASE):
+                            sql_matches.append(pattern)
+                            attack_score += 15  # Increment score for each SQL pattern found
+                    
+                    if sql_matches:
+                        attack_type = 'sql_injection'
+                        for match in sql_matches[:3]:  # Limit to first 3 patterns to avoid overwhelming logs
+                            threat_details.append(f"SQL injection pattern: {match}")
+                        
+                        # If multiple SQL patterns or certain login patterns, mark as attack
+                        if attack_score >= 30 or 'OR 1=1' in decoded_content:
+                            status = 'attack'
+                        else:
+                            status = 'suspicious'
                 
-                if 'document.cookie' in decoded_content and ('fetch(' in decoded_content or 'new Image(' in decoded_content):
-                    status = 'attack'
-                    attack_score += 30
-                else:
-                    status = 'suspicious' if status == 'normal' else status
-        
-        # Check specific vulnerable application endpoints mentioned in test scenarios
-        if '/vuln_blog/' in log_content:
-            vuln_endpoints = {
-                'login.php': 'authentication',
-                'search.php': 'information disclosure',
-                'comments.php': 'data manipulation',
-                'profile.php': 'account takeover'
-            }
-            
-            for endpoint, risk_type in vuln_endpoints.items():
-                if endpoint in log_content:
-                    threat_details.append(f"Access to vulnerable endpoint: {endpoint} (risk: {risk_type})")
-                    attack_score += 5
-                    # Don't change status just for accessing endpoint, but track it
-        
+                # Check for XSS patterns if not already a confirmed attack
+                if attack_score < 80:  # Still check XSS even if SQL is suspected
+                    xss_matches = []
+                    for pattern in xss_patterns:
+                        if re.search(pattern, decoded_content, re.IGNORECASE):
+                            xss_matches.append(pattern)
+                            attack_score += 10  # XSS patterns add to the score
+                    
+                    if xss_matches and (attack_type is None or attack_score < 30):
+                        attack_type = 'xss'
+                        for match in xss_matches[:3]:
+                            threat_details.append(f"XSS pattern: {match}")
+                        
+                        if attack_score >= 20 or len(xss_matches) >= 2:
+                            status = 'attack' if status != 'attack' else status
+                        else:
+                            status = 'suspicious' if status != 'attack' else status
+                
+                # Check for command injection
+                if attack_score < 80:
+                    cmd_matches = []
+                    for pattern in command_injection_patterns:
+                        if re.search(pattern, decoded_content, re.IGNORECASE):
+                            cmd_matches.append(pattern)
+                            attack_score += 20  # Command injection is serious
+                    
+                    if cmd_matches:
+                        attack_type = attack_type or 'command_injection'
+                        for match in cmd_matches[:2]:
+                            threat_details.append(f"Command injection pattern: {match}")
+                        status = 'attack'  # Command injection attempts are always attacks
+                
+                # Check for path traversal
+                if attack_score < 80:
+                    path_matches = []
+                    for pattern in path_traversal_patterns:
+                        if re.search(pattern, decoded_content, re.IGNORECASE):
+                            path_matches.append(pattern)
+                            attack_score += 15
+                    
+                    if path_matches:
+                        attack_type = attack_type or 'path_traversal'
+                        for match in path_matches[:2]:
+                            threat_details.append(f"Path traversal pattern: {match}")
+                        
+                        if attack_score >= 15 or len(path_matches) >= 1:
+                            status = 'attack' if status != 'attack' else status
+                        else:
+                            status = 'suspicious' if status != 'attack' else status
+                
+                # Check for CSRF if it's a form submission
+                if request_method == "POST" and attack_score < 50:
+                    csrf_matches = []
+                    for pattern in csrf_patterns:
+                        if re.search(pattern, log_content, re.IGNORECASE):
+                            csrf_matches.append(pattern)
+                            attack_score += 5  # CSRF is typically lower scoring as it requires more context
+                    
+                    if csrf_matches:
+                        attack_type = attack_type or 'csrf'
+                        threat_details.append(f"Possible CSRF attempt: missing or invalid referer")
+                        status = 'suspicious' if status == 'normal' else status
+                
+                # Data exfiltration check with context awareness
+                if attack_score < 80:
+                    # Skip static resources and whitelisted requests
+                    if not is_static_resource and not is_js_library:
+                        exfil_matches = []
+                        for pattern in exfiltration_patterns:
+                            if re.search(pattern, decoded_content, re.IGNORECASE):
+                                # Extra context check for large query parameters
+                                if "data=" in pattern:
+                                    # JavaScript files with version params should be ignored
+                                    if file_extension == 'js' and '?v=' in request_path:
+                                        continue
+                                    # Legitimate resources with version parameters should be ignored
+                                    if re.search(r'\.(js|css|png|jpg|gif)\?', request_path):
+                                        continue
+                                
+                            exfil_matches.append(pattern)
+                            attack_score += 10
+                        
+                        if exfil_matches:
+                            attack_type = attack_type or 'data_exfiltration'
+                            for match in exfil_matches[:2]:
+                                threat_details.append(f"Possible data exfiltration: {match}")
+                            status = 'suspicious' if status == 'normal' else status
+                
+                # Check for session hijacking attempts
+                if attack_score < 80:
+                    session_matches = []
+                    for pattern in session_patterns:
+                        if re.search(pattern, decoded_content, re.IGNORECASE):
+                            session_matches.append(pattern)
+                            attack_score += 15
+                    
+                    if session_matches:
+                        attack_type = attack_type or 'session_hijacking'
+                        for match in session_matches[:2]:
+                            threat_details.append(f"Possible session hijacking: {match}")
+                        
+                        if 'document.cookie' in decoded_content and ('fetch(' in decoded_content or 'new Image(' in decoded_content):
+                            status = 'attack'
+                            attack_score += 30
+                        else:
+                            status = 'suspicious' if status != 'attack' else status
+                
+                # Check specific vulnerable application endpoints mentioned in test scenarios
+                if '/vuln_blog/' in log_content:
+                    vuln_endpoints = {
+                        'login.php': 'authentication',
+                        'search.php': 'information disclosure',
+                        'comments.php': 'data manipulation',
+                        'profile.php': 'account takeover'
+                    }
+                    
+                    for endpoint, risk_type in vuln_endpoints.items():
+                        if endpoint in log_content:
+                            threat_details.append(f"Access to vulnerable endpoint: {endpoint} (risk: {risk_type})")
+                            attack_score += 5
+                            # Don't change status just for accessing endpoint, but track it
+
         # Final attack score adjustments based on multiple indicators
         if attack_score >= 50 and status != 'attack':
             status = 'attack'
         elif attack_score >= 20 and status == 'normal':
             status = 'suspicious'
+        
+        # NEW: Log whitelisted resources with debug level
+        if is_whitelisted:
+            logger.debug(f"Whitelisted request: {request_method} {request_path} (static: {is_static_resource}, js_lib: {is_js_library})")
         
         # Create normalized data with enhanced information
         normalized_data = {
@@ -971,6 +1281,11 @@ def create_parsed_log_from_raw(raw_log):
             'request_method': request_method,
             'request_path': request_path,
             'request_params': request_params,
+            'status_code': status_code,
+            'file_extension': file_extension,
+            'is_static_resource': is_static_resource,
+            'is_js_library': is_js_library,
+            'is_whitelisted': is_whitelisted,
             'analysis': {
                 'suspicious_patterns': status != 'normal',
                 'attack_score': attack_score,
@@ -983,7 +1298,7 @@ def create_parsed_log_from_raw(raw_log):
         # Create a ParsedLog entry with enhanced security information
         parsed_log = ParsedLog.objects.create(
             raw_log=raw_log,
-            timestamp=raw_log.timestamp,
+            timestamp=log_timestamp,  # Use the extracted timestamp
             source_ip=source_ip,
             source_type=source_type,
             request_method=request_method,
@@ -1087,6 +1402,107 @@ def process_raw_logs_directly(limit=50):
     return processed
 
 
+def process_raw_logs_with_timestamp_validation(limit=50):
+    """Process raw logs with proper timestamp extraction and validation with timezone handling"""
+    import re
+    from django.db.models import Q
+    from datetime import datetime
+    
+    # Get raw logs that have is_parsed=False AND don't already have a ParsedLog
+    raw_logs = RawLog.objects.filter(is_parsed=False).exclude(
+        Q(id__in=ParsedLog.objects.values_list('raw_log_id', flat=True))
+    ).order_by('-timestamp')[:limit]
+    
+    processed = 0
+    skipped = 0
+    
+    # Use settings.TIME_ZONE to get the server timezone
+    server_timezone = timezone.get_current_timezone()
+    india_timezone = timezone.get_fixed_timezone(330)  # +5:30 timezone (330 minutes)
+    
+    for raw_log in raw_logs:
+        try:
+            with transaction.atomic():
+                # Re-query the log inside the transaction to get a fresh copy
+                fresh_log = RawLog.objects.select_for_update().get(id=raw_log.id)
+                
+                # Skip if already processed by another thread/process
+                if fresh_log.is_parsed:
+                    skipped += 1
+                    continue
+                    
+                # First check if a ParsedLog already exists
+                existing_parsed = ParsedLog.objects.filter(raw_log=fresh_log).first()
+                if existing_parsed:
+                    # Just update the is_parsed flag and skip creating a new entry
+                    fresh_log.is_parsed = True
+                    fresh_log.save(update_fields=['is_parsed'])
+                    skipped += 1
+                    continue
+                
+                # Get content
+                log_content = fresh_log.content
+                
+                # Get source type safely
+                source_type = ''
+                if hasattr(fresh_log, 'source') and fresh_log.source:
+                    source_type = fresh_log.source.source_type
+                
+                # Try to extract timestamp from log content
+                log_timestamp = fresh_log.timestamp  # Default fallback
+                
+                # For Apache logs
+                if source_type.lower() in ('apache', 'apache_access'):
+                    timestamp_match = re.search(r'\[(\d{2}/\w{3}/\d{4}:\d{2}:\d{2}:\d{2} [+\-]\d{4})\]', log_content)
+                    if timestamp_match:
+                        try:
+                            time_str = timestamp_match.group(1)
+                            parsed_time = datetime.strptime(time_str, '%d/%b/%Y:%H:%M:%S %z')
+                            
+                            # If the log already contains timezone info, use it directly
+                            # This preserves the original timestamp from the log
+                            fresh_log.timestamp = parsed_time
+                            fresh_log.save(update_fields=['timestamp'])
+                            log_timestamp = parsed_time
+                        except Exception as e:
+                            logger.debug(f"Failed to parse Apache timestamp: {e}")
+                
+                # For MySQL logs            
+                elif source_type.lower() in ('mysql', 'mysql_error'):
+                    timestamp_match = re.search(r'(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})', log_content)
+                    if timestamp_match:
+                        try:
+                            time_str = timestamp_match.group(1)
+                            parsed_time = datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S')
+                            
+                            # MySQL logs typically don't include timezone info
+                            # Add the India timezone (+5:30) to make it timezone-aware
+                            if timezone.is_naive(parsed_time):
+                                parsed_time = timezone.make_aware(parsed_time, india_timezone)
+                                
+                            # Update the raw log timestamp
+                            fresh_log.timestamp = parsed_time
+                            fresh_log.save(update_fields=['timestamp'])
+                            log_timestamp = parsed_time
+                        except Exception as e:
+                            logger.debug(f"Failed to parse MySQL timestamp: {e}")
+                
+                # Now create the parsed log with the validated timestamp
+                parsed_log = create_parsed_log_from_raw(fresh_log)
+                
+                if parsed_log:
+                    processed += 1
+                else:
+                    skipped += 1
+                    
+        except Exception as e:
+            logger.error(f"Error processing raw log {raw_log.id}: {str(e)}")
+            skipped += 1
+    
+    logger.info(f"Processed {processed} logs, skipped {skipped}")
+    return processed
+
+
 @login_required
 @require_POST
 def test_log_paths(request):
@@ -1187,8 +1603,8 @@ def analyze_logs_api(request):
             except ValueError:
                 pass
         
-        # Process logs
-        processed_raw = process_raw_logs_directly(logs_count)
+        # Process logs with enhanced timestamp validation
+        processed_raw = process_raw_logs_with_timestamp_validation(logs_count)
         
         # Count threats found in recently analyzed logs
         from django.utils import timezone
@@ -1455,6 +1871,7 @@ def upload_log_file(request):
             # Try standard system log paths for this file
             potential_paths = []
             
+            
             if file_type == 'apache':
                 potential_paths = [
                     os.path.join('/var/log/apache2', filename),
@@ -1558,3 +1975,45 @@ def upload_log_file(request):
             'success': False,
             'error': str(e)
         }, status=500)
+
+
+def _initialize_file_positions(self):
+    """Initialize file positions for all active log sources"""
+    self.file_positions = {}
+    
+    for source in self.log_sources:
+        try:
+            # Skip invalid paths
+            if not source.file_path or not os.path.exists(source.file_path):
+                continue
+            
+            # Get file size - we'll start from the END of the file by default
+            file_size = os.path.getsize(source.file_path)
+            
+            # Get position from database or use file size if there's no record (START FROM END)
+            position, created = LogFilePosition.objects.get_or_create(
+                source=source,
+                defaults={
+                    'position': file_size,  # Start from the end for new files
+                    'last_read': timezone.now()
+                }
+            )
+            
+            # Make sure we never start from the beginning for existing files
+            # This ensures we only process the newest logs
+            if created or position.position == 0:
+                position.position = file_size
+                position.save()
+            
+            # Store in memory
+            self.file_positions[source.id] = {
+                'path': source.file_path,
+                'position': position.position,
+                'last_read': position.last_read,
+                'size': file_size,
+                'source': source
+            }
+            
+            logger.info(f"Initialized position for {source.name}: {position.position}/{file_size}")
+        except Exception as e:
+            logger.error(f"Error initializing position for {source.name}: {str(e)}")

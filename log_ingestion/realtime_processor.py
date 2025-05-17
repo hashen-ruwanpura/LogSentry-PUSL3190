@@ -254,7 +254,7 @@ class RealtimeLogProcessor:
                 # Skip invalid paths
                 if not source.file_path or not os.path.exists(source.file_path):
                     continue
-                    
+                
                 # Get file size
                 file_size = os.path.getsize(source.file_path)
                 
@@ -262,17 +262,18 @@ class RealtimeLogProcessor:
                 position, created = LogFilePosition.objects.get_or_create(
                     source=source,
                     defaults={
-                        'position': file_size,  # Start from the end for new files
+                        'position': file_size,  # Start from the END for new files
                         'last_read': timezone.now()
                     }
                 )
                 
-                # If the file is smaller than our last position, it was probably rotated
-                if file_size < position.position:
-                    logger.info(f"File {source.file_path} appears to have been rotated (size: {file_size}, last pos: {position.position})")
-                    position.position = 0
+                # CRITICAL FIX: Always ensure we start from the end, never the beginning
+                # This prevents re-processing old entries that might be ignored due to whitelisting
+                if created or position.position == 0:
+                    position.position = file_size  
                     position.save()
-                
+                    logger.info(f"New file position set to END for {source.file_path}: {file_size} bytes")
+            
                 # Store in memory
                 self.file_positions[source.id] = {
                     'path': source.file_path,
@@ -282,7 +283,6 @@ class RealtimeLogProcessor:
                     'source': source
                 }
                 
-                logger.info(f"Initialized position for {source.name}: {position.position}/{file_size}")
             except Exception as e:
                 logger.error(f"Error initializing position for {source.name}: {str(e)}")
                 
@@ -542,11 +542,39 @@ class RealtimeLogProcessor:
                                 with transaction.atomic():
                                     for line in lines:
                                         if line.strip():
-                                            # Create RawLog entry with timezone-aware timestamp
+                                            # Extract timestamp from log content
+                                            log_timestamp = timezone.now()  # Default fallback
+                                            
+                                            # For Apache logs
+                                            if source.source_type.lower() in ('apache', 'apache_access'):
+                                                timestamp_match = re.search(r'\[(\d{2}/\w{3}/\d{4}:\d{2}:\d{2}:\d{2} [+\-]\d{4})\]', line)
+                                                if timestamp_match:
+                                                    try:
+                                                        time_str = timestamp_match.group(1)
+                                                        parsed_time = datetime.strptime(time_str, '%d/%b/%Y:%H:%M:%S %z')
+                                                        log_timestamp = parsed_time
+                                                    except Exception as e:
+                                                        logger.debug(f"Failed to parse Apache timestamp: {e}")
+                                            
+                                            # For MySQL logs
+                                            elif source.source_type.lower() in ('mysql', 'mysql_error'):
+                                                timestamp_match = re.search(r'(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})', line)
+                                                if timestamp_match:
+                                                    try:
+                                                        time_str = timestamp_match.group(1)
+                                                        parsed_time = datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S')
+                                                        # Make timezone-aware
+                                                        if timezone.is_naive(parsed_time):
+                                                            parsed_time = timezone.make_aware(parsed_time)
+                                                        log_timestamp = parsed_time
+                                                    except Exception as e:
+                                                        logger.debug(f"Failed to parse MySQL timestamp: {e}")
+                                            
+                                            # Create RawLog entry with extracted timestamp
                                             RawLog.objects.create(
                                                 source=source,
                                                 content=line.strip(),
-                                                timestamp=timezone.now(),
+                                                timestamp=log_timestamp,  # Use extracted timestamp
                                                 is_parsed=False
                                             )
                         
