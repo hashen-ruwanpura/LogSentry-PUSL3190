@@ -1,6 +1,7 @@
 import os
 import time
 import logging
+import re
 from kafka import KafkaProducer, KafkaConsumer
 import json
 import threading
@@ -394,3 +395,69 @@ class EnhancedLogCollectionManager:
                 self.filebeat_manager.stop_filebeat()
             except Exception as e:
                 logger.error(f"Error stopping filebeat: {str(e)}")
+
+class MySQLLogPatternFilter:
+    """Filter for identifying and handling repetitive MySQL error logs."""
+    
+    def __init__(self):
+        # Patterns to identify common MySQL table definition errors
+        self.known_error_patterns = [
+            r"Incorrect definition of table mysql\.column_stats: expected column 'histogram'",
+            r"Incorrect definition of table mysql\.column_stats: expected column 'hist_type'",
+            # Add other common error patterns here
+        ]
+        
+        # Track patterns and their occurrence counts
+        self.pattern_counts = {}
+        self.last_reset_time = time.time()
+        self.reset_interval = 300  # Reset counts every 5 minutes
+    
+    def should_process_log(self, log_content):
+        """
+        Determine if a log should be processed based on pattern matching.
+        Returns True if log should be processed, False if it should be filtered out.
+        """
+        # Check if we need to reset pattern counts
+        current_time = time.time()
+        if current_time - self.last_reset_time > self.reset_interval:
+            self.pattern_counts = {}
+            self.last_reset_time = current_time
+        
+        # Check against known patterns
+        for pattern in self.known_error_patterns:
+            if re.search(pattern, log_content):
+                # Count occurrences of this pattern
+                if pattern in self.pattern_counts:
+                    self.pattern_counts[pattern] += 1
+                    
+                    # If we've seen this pattern too many times, filter it out
+                    # Only process 1 out of every 100 repetitive errors
+                    if self.pattern_counts[pattern] % 100 != 0:
+                        return False
+                else:
+                    self.pattern_counts[pattern] = 1
+                
+                # Log this occurrence if it's the first or periodic
+                if self.pattern_counts[pattern] == 1 or self.pattern_counts[pattern] % 100 == 0:
+                    logger.debug(f"MySQL error pattern matched ({self.pattern_counts[pattern]} occurrences): {pattern}")
+                    # Still process the first occurrence of each pattern
+                    return True
+                    
+                return False
+        
+        # Not a known error pattern, process it
+        return True
+        
+# Add this to the MySQL log collector in collectors.py
+
+class MySQLLogCollector:
+    def __init__(self):
+        self.pattern_filter = MySQLLogPatternFilter()
+        
+    def process_line(self, line):
+        # Skip if it matches a repetitive error pattern
+        if not self.pattern_filter.should_process_log(line):
+            return None
+            
+        # Continue with normal processing
+        # [existing code]

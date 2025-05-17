@@ -2324,3 +2324,74 @@ class EmailOrUsernameModelBackend(ModelBackend):
                 if user.check_password(password):
                     return user
             return None
+
+@login_required
+def dashboard_counts_api(request):
+    """API endpoint to get current dashboard counts from cache with time filter"""
+    from django.core.cache import cache
+    from datetime import timedelta
+    
+    # Get the timeframe parameter from the request or use the default
+    timeframe = request.GET.get('timeframe', '1d')
+    
+    # Determine the time range based on timeframe parameter
+    now = timezone.now()
+    if timeframe == '1h':
+        start_time = now - timedelta(hours=1)
+        cache_key_suffix = '_1h'
+    elif timeframe == '3h':
+        start_time = now - timedelta(hours=3)
+        cache_key_suffix = '_3h'
+    elif timeframe == '12h':
+        start_time = now - timedelta(hours=12)
+        cache_key_suffix = '_12h'
+    elif timeframe == '7d':
+        start_time = now - timedelta(days=7)
+        cache_key_suffix = '_7d'
+    elif timeframe == '30d':
+        start_time = now - timedelta(days=30)
+        cache_key_suffix = '_30d'
+    else:  # Default to 1d (24 hours)
+        start_time = now - timedelta(days=1)
+        cache_key_suffix = '_1d'
+
+    # Try to get time-specific counts from cache first
+    raw_count = cache.get(f'log_count_raw{cache_key_suffix}')
+    parsed_count = cache.get(f'log_count_parsed{cache_key_suffix}')
+    threat_count = cache.get(f'log_count_threats{cache_key_suffix}')
+    
+    # If not in cache, query the database with time filter
+    if raw_count is None:
+        try:
+            raw_count = RawLog.objects.filter(timestamp__gte=start_time).count()
+            cache.set(f'log_count_raw{cache_key_suffix}', raw_count, 60)
+        except Exception as e:
+            logger.error(f"Error counting raw logs: {e}")
+            raw_count = 0
+    
+    if parsed_count is None:
+        try:
+            parsed_count = ParsedLog.objects.filter(timestamp__gte=start_time).count()
+            cache.set(f'log_count_parsed{cache_key_suffix}', parsed_count, 60)
+        except Exception as e:
+            logger.error(f"Error counting parsed logs: {e}")
+            parsed_count = 0
+    
+    if threat_count is None:
+        try:
+            threat_count = ParsedLog.objects.filter(
+                timestamp__gte=start_time,
+                status__in=['suspicious', 'attack']
+            ).count()
+            cache.set(f'log_count_threats{cache_key_suffix}', threat_count, 60)
+        except Exception as e:
+            logger.error(f"Error counting threats: {e}")
+            threat_count = 0
+    
+    return JsonResponse({
+        'raw_count': raw_count,
+        'parsed_count': parsed_count,
+        'threat_count': threat_count,
+        'timeframe': timeframe,
+        'last_updated': timezone.now().isoformat()
+    })

@@ -105,4 +105,7 @@ urlpatterns = [
     path('api/auth/register-device/', notification_views.register_device, name='register_device'),
     path('api/auth/unregister-device/', notification_views.unregister_device, name='unregister_device'),
 
+    # New dashboard counts API endpoint
+    path('api/dashboard-counts/', views.dashboard_counts_api, name='dashboard_counts_api'),
+
 ]

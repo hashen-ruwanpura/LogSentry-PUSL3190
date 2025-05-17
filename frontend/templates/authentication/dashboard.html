@@ -459,6 +459,15 @@
             gap: 10px !important;
             pointer-events: auto !important;
         }
+
+        .highlight-update {
+            animation: flash-highlight 1s ease-in-out;
+        }
+        
+        @keyframes flash-highlight {
+            0%, 100% { background-color: transparent; }
+            50% { background-color: rgba(63, 81, 181, 0.2); }
+        }
     </style>
 </head>
 <body>
@@ -534,7 +543,7 @@
                                     </div>
                                     <div>
                                         <div class="metric-title">Total Logs</div>
-                                        <div class="metric-value">{{ total_logs }}</div>
+                                        <div class="metric-value" id="total-logs-count">{{ total_logs }}</div>
                                     </div>
                                 </div>
                             </div>
@@ -547,7 +556,7 @@
                                     </div>
                                     <div>
                                         <div class="metric-title">High Alerts</div>
-                                        <div class="metric-value">{{ high_level_alerts }}</div>
+                                        <div class="metric-value" id="high-alerts-count">{{ high_level_alerts }}</div>
                                     </div>
                                 </div>
                             </div>
@@ -1081,6 +1090,47 @@
                     }
                 });
             }
+
+            // Add this inside your existing document.ready function
+            let dashboardRefreshInterval;
+
+            function startDashboardRefresh() {
+                // Clear any existing interval
+                if (dashboardRefreshInterval) {
+                    clearInterval(dashboardRefreshInterval);
+                }
+                
+                // Set up polling every 10 seconds
+                dashboardRefreshInterval = setInterval(fetchDashboardCounts, 10000);
+            }
+
+            function fetchDashboardCounts() {
+                // Get the current timeframe from the hidden element or default to 1d
+                const timeframe = document.getElementById('current-timeframe')?.textContent || '1d';
+                
+                fetch(`/api/dashboard-counts/?timeframe=${timeframe}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        // Update the metric values in the UI
+                        document.getElementById('total-logs-count').textContent = data.raw_count;
+                        document.getElementById('high-alerts-count').textContent = data.threat_count;
+                        
+                        // Flash updated elements to indicate change
+                        ['total-logs-count', 'high-alerts-count'].forEach(id => {
+                            const el = document.getElementById(id);
+                            if (el) {
+                                el.classList.add('highlight-update');
+                                setTimeout(() => el.classList.remove('highlight-update'), 1000);
+                            }
+                        });
+                        
+                        console.log(`Dashboard updated with ${data.timeframe} timeframe data: ${data.raw_count} logs, ${data.threat_count} threats`);
+                    })
+                    .catch(error => console.error('Error fetching dashboard counts:', error));
+            }
+
+            // Add this at the end of your document.ready function
+            startDashboardRefresh();
         });
 
         // Add a modal for the no alerts message

@@ -755,7 +755,9 @@
             }
             
             // Test log paths button
-            document.getElementById('testLogPathBtn').addEventListener('click', testLogPaths);
+            document.getElementById('testLogPathBtn').addEventListener('click', function() {
+                testLogPaths();
+            });
             
             // Real-time analysis settings
             const enableRealtimeSwitch = document.getElementById('enable_realtime');
@@ -796,100 +798,105 @@
                 const fileInput = document.getElementById(`${logType}_log_file`);
                 const pathInput = document.getElementById(`${logType}_log_path`);
                 
-                if (!dropzone || !fileInput || !pathInput) {
-                    console.error(`Missing elements for ${logType} file upload setup`);
-                    return;
-                }
-                
                 // Handle file selection through input
                 fileInput.addEventListener('change', function(e) {
                     if (this.files.length > 0) {
                         const file = this.files[0];
                         
-                        // Update the path input with file name
-                        // For security reasons browsers don't provide the full file path
-                        // We'll use a placeholder path plus the filename
-                        pathInput.value = file.name;
-                        
-                        // Add visual feedback
+                        // Show loading state
                         dropzone.classList.add('file-selected');
                         dropzone.innerHTML = `
                             <div class="selected-file p-2">
-                                <i class="fas fa-file-alt me-2"></i>
-                                <strong>${file.name}</strong> (${formatFileSize(file.size)})
+                                <i class="fas fa-spinner fa-spin me-2"></i>
+                                <strong>${file.name}</strong> - Processing...
+                            </div>
+                        `;
+                        
+                        // Determine the likely file path based on the filename and type
+                        let likelyPath;
+                        if (logType === 'apache') {
+                            likelyPath = `C:\\xampp\\apache\\logs\\${file.name}`;
+                        } else { // mysql
+                            likelyPath = `C:\\xampp\\mysql\\data\\${file.name}`;
+                        }
+                        
+                        // Set the path input
+                        pathInput.value = likelyPath;
+                        
+                        // Show success state with file info
+                        dropzone.innerHTML = `
+                            <div class="selected-file p-2">
+                                <i class="fas fa-check-circle text-success me-2"></i>
+                                <strong>${file.name}</strong>
+                                <span class="ms-2 text-muted small">Path: ${likelyPath}</span>
                                 <button type="button" class="btn-close ms-2" aria-label="Remove file"></button>
                             </div>
                         `;
                         
-                        // Handle remove button
+                        // Add remove button handler
                         dropzone.querySelector('.btn-close').addEventListener('click', function(evt) {
                             evt.preventDefault();
                             evt.stopPropagation();
                             
                             // Reset file input and dropzone
                             fileInput.value = '';
+                            pathInput.value = '';
                             dropzone.classList.remove('file-selected');
-                            dropzone.innerHTML = `
-                                <div class="dz-message">
-                                    <div class="dz-icon mb-3">
-                                        <i class="fas fa-cloud-upload-alt fa-3x text-muted"></i>
-                                    </div>
-                                    <div class="dz-text">
-                                        <p>Drag & drop ${logType} log file here</p>
-                                        <p class="text-muted small">or click to select file</p>
-                                    </div>
-                                </div>
-                            `;
+                            dropzone.innerHTML = getDropzoneHTML(logType);
                         });
+                        
+                        // After setting the path, automatically test it
+                        if (window.testLogPaths) {
+                            setTimeout(function() {
+                                window.testLogPaths();
+                            }, 500);
+                        }
                     }
                 });
                 
-                // Set up drag and drop functionality
-                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-                    dropzone.addEventListener(eventName, function(e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                    }, false);
+                // Initialize drag and drop functionality
+                dropzone.addEventListener('dragover', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.classList.add('dragover');
                 });
                 
-                // Visual feedback for drag events
-                ['dragenter', 'dragover'].forEach(eventName => {
-                    dropzone.addEventListener(eventName, function() {
-                        this.classList.add('dragover');
-                    }, false);
+                dropzone.addEventListener('dragleave', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.classList.remove('dragover');
                 });
                 
-                ['dragleave', 'drop'].forEach(eventName => {
-                    dropzone.addEventListener(eventName, function() {
-                        this.classList.remove('dragover');
-                    }, false);
-                });
-                
-                // Handle file drop
                 dropzone.addEventListener('drop', function(e) {
-                    const files = e.dataTransfer.files;
-                    if (files.length) {
-                        // Update the file input
-                        fileInput.files = files;
-                        
-                        // Trigger change event to process the file
-                        const event = new Event('change', { bubbles: true });
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.classList.remove('dragover');
+                    
+                    if (e.dataTransfer.files.length) {
+                        fileInput.files = e.dataTransfer.files;
+                        const event = new Event('change');
                         fileInput.dispatchEvent(event);
                     }
                 });
                 
-                // Make dropzone clickable
+                // Make the dropzone clickable
                 dropzone.addEventListener('click', function() {
                     fileInput.click();
                 });
                 
-                // Helper function to format file size
-                function formatFileSize(bytes) {
-                    if (bytes === 0) return '0 Bytes';
-                    const k = 1024;
-                    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-                    const i = Math.floor(Math.log(bytes) / Math.log(k));
-                    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+                // Helper function to get dropzone HTML
+                function getDropzoneHTML(type) {
+                    return `
+                        <div class="dz-message">
+                            <div class="dz-icon mb-3">
+                                <i class="fas fa-cloud-upload-alt fa-3x text-muted"></i>
+                            </div>
+                            <div class="dz-text">
+                                <p>Drag & drop ${type} log file here</p>
+                                <p class="text-muted small">or click to select file</p>
+                            </div>
+                        </div>
+                    `;
                 }
             }
         });
@@ -985,8 +992,14 @@
         
         // Test if log paths are accessible
         function testLogPaths() {
-            const apachePath = document.getElementById('apache_log_path').value;
-            const mysqlPath = document.getElementById('mysql_log_path').value;
+            const apachePath = document.getElementById('apache_log_path').value.trim();
+            const mysqlPath = document.getElementById('mysql_log_path').value.trim();
+            
+            // Show at least one path is required
+            if (!apachePath && !mysqlPath) {
+                showAlert('warning', 'Please provide at least one log file path to test.');
+                return;
+            }
             
             // Display loading indicator
             document.getElementById('testLogPathBtn').innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Testing...';
@@ -1006,18 +1019,58 @@
             .then(response => response.json())
             .then(data => {
                 // Reset button
-                document.getElementById('testLogPathBtn').innerHTML = 'Test Log Paths';
+                document.getElementById('testLogPathBtn').innerHTML = '<i class="fas fa-check-circle"></i> Test Log Paths';
                 document.getElementById('testLogPathBtn').disabled = false;
                 
+                // Build detailed message
+                let resultMsg = '';
+                let alertType = 'info';
+                
                 if (data.success) {
-                    showAlert('success', 'Log paths are valid and accessible.');
+                    resultMsg = '<strong>Success!</strong> Log paths are valid and accessible.<br><ul>';
+                    alertType = 'success';
+                    
+                    if (apachePath) {
+                        const apacheSize = data.apache.size > 0 ? `(${formatFileSize(data.apache.size)})` : '';
+                        resultMsg += `<li>Apache log: Valid ${apacheSize}</li>`;
+                    }
+                    if (mysqlPath) {
+                        const mysqlSize = data.mysql.size > 0 ? `(${formatFileSize(data.mysql.size)})` : '';
+                        resultMsg += `<li>MySQL log: Valid ${mysqlSize}</li>`;
+                    }
+                    resultMsg += '</ul>';
                 } else {
-                    showAlert('danger', `Error: ${data.error}`);
+                    alertType = 'danger';
+                    resultMsg = '<strong>Error:</strong> Issues found with log paths.<br><ul>';
+                    
+                    if (apachePath) {
+                        if (!data.apache.exists) {
+                            resultMsg += `<li>Apache log: File not found - ${apachePath}</li>`;
+                        } else if (!data.apache.readable) {
+                            resultMsg += `<li>Apache log: File found but not readable - ${apachePath}</li>`;
+                        } else if (data.apache.error) {
+                            resultMsg += `<li>Apache log: ${data.apache.error}</li>`;
+                        }
+                    }
+                    
+                    if (mysqlPath) {
+                        if (!data.mysql.exists) {
+                            resultMsg += `<li>MySQL log: File not found - ${mysqlPath}</li>`;
+                        } else if (!data.mysql.readable) {
+                            resultMsg += `<li>MySQL log: File found but not readable - ${mysqlPath}</li>`;
+                        } else if (data.mysql.error) {
+                            resultMsg += `<li>MySQL log: ${data.mysql.error}</li>`;
+                        }
+                    }
+                    
+                    resultMsg += '</ul>';
                 }
+                
+                showAlert(alertType, resultMsg);
             })
             .catch(error => {
                 // Reset button
-                document.getElementById('testLogPathBtn').innerHTML = 'Test Log Paths';
+                document.getElementById('testLogPathBtn').innerHTML = '<i class="fas fa-check-circle"></i> Test Log Paths';
                 document.getElementById('testLogPathBtn').disabled = false;
                 showAlert('danger', `Failed to test log paths: ${error.message}`);
             });
@@ -1110,12 +1163,35 @@
             // Update UI
             updateAnalysisStatus(enabled);
             
-            // Restart countdown if enabled
-            if (enabled) {
-                startAnalysisCountdown(interval);
-            }
-            
-            showAlert('success', 'Real-time analysis settings saved.');
+            // Send settings to server
+            fetch('/api/start-real-time-analysis/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify({
+                    interval: interval,
+                    logs_count: logsCount,
+                    enabled: enabled
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert('success', 'Real-time analysis settings saved.');
+                    
+                    // Restart countdown if enabled
+                    if (enabled) {
+                        startAnalysisCountdown(interval);
+                    }
+                } else {
+                    showAlert('danger', `Error saving settings: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                showAlert('danger', `Network error: ${error.message}`);
+            });
         }
         
         // Start the countdown for the next analysis run
@@ -1432,6 +1508,131 @@
                 e.target.closest('.custom-path-group').querySelector('input').value = '';
             }
         }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Add this function to handle file selection without uploading
+        function setupFileUploader(logType) {
+            const fileInput = document.getElementById(`${logType}_log_file`);
+            const pathInput = document.getElementById(`${logType}_log_path`);
+            const dropzone = document.getElementById(`${logType}_dropzone`);
+            
+            // Handle file selection through input
+            fileInput.addEventListener('change', function(e) {
+                if (this.files.length > 0) {
+                    const file = this.files[0];
+                    
+                    // Show loading state
+                    dropzone.classList.add('file-selected');
+                    dropzone.innerHTML = `
+                        <div class="selected-file p-2">
+                            <i class="fas fa-spinner fa-spin me-2"></i>
+                            <strong>${file.name}</strong> - Processing...
+                        </div>
+                    `;
+                    
+                    // Determine the likely file path based on the filename and type
+                    let likelyPath;
+                    if (logType === 'apache') {
+                        likelyPath = `C:\\xampp\\apache\\logs\\${file.name}`;
+                    } else { // mysql
+                        likelyPath = `C:\\xampp\\mysql\\data\\${file.name}`;
+                    }
+                    
+                    // Set the path input
+                    pathInput.value = likelyPath;
+                    
+                    // Show success state with file info
+                    dropzone.innerHTML = `
+                        <div class="selected-file p-2">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            <strong>${file.name}</strong>
+                            <span class="ms-2 text-muted small">Path: ${likelyPath}</span>
+                            <button type="button" class="btn-close ms-2" aria-label="Remove file"></button>
+                        </div>
+                    `;
+                    
+                    // Add remove button handler
+                    dropzone.querySelector('.btn-close').addEventListener('click', function(evt) {
+                        evt.preventDefault();
+                        evt.stopPropagation();
+                        
+                        // Reset file input and dropzone
+                        fileInput.value = '';
+                        pathInput.value = '';
+                        dropzone.classList.remove('file-selected');
+                        dropzone.innerHTML = getDropzoneHTML(logType);
+                    });
+                    
+                    // After setting the path, automatically test it
+                    if (window.testLogPaths) {
+                        setTimeout(function() {
+                            window.testLogPaths();
+                        }, 500);
+                    }
+                }
+            });
+            
+            // Initialize drag and drop functionality
+            dropzone.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.classList.add('dragover');
+            });
+            
+            dropzone.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.classList.remove('dragover');
+            });
+            
+            dropzone.addEventListener('drop', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.classList.remove('dragover');
+                
+                if (e.dataTransfer.files.length) {
+                    fileInput.files = e.dataTransfer.files;
+                    const event = new Event('change');
+                    fileInput.dispatchEvent(event);
+                }
+            });
+            
+            // Make the dropzone clickable
+            dropzone.addEventListener('click', function() {
+                fileInput.click();
+            });
+            
+            // Helper function to get dropzone HTML
+            function getDropzoneHTML(type) {
+                return `
+                    <div class="dz-message">
+                        <div class="dz-icon mb-3">
+                            <i class="fas fa-cloud-upload-alt fa-3x text-muted"></i>
+                        </div>
+                        <div class="dz-text">
+                            <p>Drag & drop ${type} log file here</p>
+                            <p class="text-muted small">or click to select file</p>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // Make sure to initialize these when the page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            setupFileUploader('apache');
+            setupFileUploader('mysql');
+            
+            // Make the testLogPaths function globally available
+            window.testLogPaths = testLogPaths;
+        });
     </script>
 
     <!-- Add this at the bottom of settings.html before </body> -->

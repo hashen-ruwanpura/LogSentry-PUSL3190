@@ -1,39 +1,39 @@
 from django.apps import AppConfig
 import logging
 import os
-import sys
+import threading
+import time
 
 logger = logging.getLogger(__name__)
 
 class LogIngestionConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'log_ingestion'
-
+    
     def ready(self):
-        # Import signal handlers
-        import log_ingestion.signals
-        
-        # Check if we're running the main Django process (not a reloader)
-        # This prevents starting duplicate processes when using auto-reload in development
-        if os.environ.get('RUN_MAIN', None) != 'true' and 'runserver' in sys.argv:
-            logger.info("Django main process detected - initializing services")
+        """Initialize the real-time log processor when the app is ready"""
+        # Only run in the main thread, not during Django's auto-reloading
+        if os.environ.get('RUN_MAIN') != 'true':
+            # Start the processor in a separate thread with delay to ensure DB is ready
+            threading.Thread(target=self._delayed_start, daemon=True).start()
+    
+    def _delayed_start(self):
+        """Start the real-time processor with a delay to ensure DB is ready"""
+        try:
+            # Wait for the Django app to fully initialize
+            time.sleep(5)
             
-            # Start Kafka and ZooKeeper
-            from .kafka_manager import start_kafka_services
-            start_kafka_services()
+            # Now start the processor
+            from log_ingestion.realtime_processor import RealtimeLogProcessor
+            processor = RealtimeLogProcessor.get_instance()
             
-            # Start the real-time log processor if enabled
-            from django.conf import settings
-            if getattr(settings, 'ENABLE_REALTIME_LOG_PROCESSING', False) and not getattr(settings, 'TESTING', False):
-                # Start in a separate thread to avoid blocking app startup
-                import threading
-                from .realtime_processor import RealtimeLogProcessor
+            # Try to start it - this will use stored settings
+            success = processor.start()
+            
+            if success:
+                logger.info("Real-time log processor started successfully on app startup")
+            else:
+                logger.warning("Failed to start real-time log processor on app startup")
                 
-                def start_processor():
-                    processor = RealtimeLogProcessor.get_instance()
-                    processor.start()
-                
-                # Start after a short delay to ensure the app is fully loaded
-                timer = threading.Timer(5.0, start_processor)
-                timer.daemon = True
-                timer.start()
+        except Exception as e:
+            logger.error(f"Error starting real-time processor: {str(e)}", exc_info=True)

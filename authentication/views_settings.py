@@ -156,42 +156,22 @@ def update_profile(request):
 @login_required
 @require_POST
 def save_log_settings(request):
-    """Handle log path settings form submission with improved file handling and analysis"""
+    """Handle log path settings form submission prioritizing direct path analysis"""
     try:
-        # Extract form data
+        # Extract form data - paths are the primary way to configure logs
         apache_log_path = request.POST.get('apache_log_path', '').strip()
         mysql_log_path = request.POST.get('mysql_log_path', '').strip()
         log_retention = int(request.POST.get('log_retention', 30))
         
-        # Get system log paths (comma-separated)
+        # Get system log paths and custom log paths
         system_log_paths = request.POST.get('system_log_paths', '/var/log,C:\\Windows\\Logs').strip()
         system_log_paths_list = [path.strip() for path in system_log_paths.split(',') if path.strip()]
         
-        # Get custom log paths from multi-value form field
         custom_log_paths = request.POST.getlist('custom_log_paths[]')
         custom_log_paths_list = [path.strip() for path in custom_log_paths if path.strip()]
         
-        # Get client IP for audit logging
-        client_ip = request.META.get('REMOTE_ADDR', None)
-        
-        # Check for existing Apache source to record change
-        try:
-            existing_apache = LogSource.objects.get(name='Apache Web Server')
-            old_apache_path = existing_apache.file_path
-        except LogSource.DoesNotExist:
-            old_apache_path = None
-            
-        # Check for existing MySQL source to record change
-        try:
-            existing_mysql = LogSource.objects.get(name='MySQL Database Server')
-            old_mysql_path = existing_mysql.file_path
-        except LogSource.DoesNotExist:
-            old_mysql_path = None
-        
-        # Save system and custom log paths (existing code)
+        # Save system and custom log paths
         from authentication.models import SystemSettings
-        
-        # Save system log paths
         SystemSettings.objects.update_or_create(
             section='logs',
             settings_key='system_log_paths',
@@ -202,7 +182,6 @@ def save_log_settings(request):
             }
         )
         
-        # Save custom log paths
         SystemSettings.objects.update_or_create(
             section='logs',
             settings_key='custom_log_paths',
@@ -213,145 +192,130 @@ def save_log_settings(request):
             }
         )
         
-        # Create media directory for file uploads
-        media_root = getattr(settings, 'MEDIA_ROOT', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'media'))
-        logs_dir = os.path.join(media_root, 'logs')
-        os.makedirs(logs_dir, exist_ok=True)
+        # Record changes for audit logs
+        client_ip = request.META.get('REMOTE_ADDR', None)
+        old_apache_path = None
+        old_mysql_path = None
         
-        # Flag to track if we need to process logs
-        files_processed = False
+        try:
+            existing_apache = LogSource.objects.get(name='Apache Web Server')
+            old_apache_path = existing_apache.file_path
+        except LogSource.DoesNotExist:
+            pass
+            
+        try:
+            existing_mysql = LogSource.objects.get(name='MySQL Database Server')
+            old_mysql_path = existing_mysql.file_path
+        except LogSource.DoesNotExist:
+            pass
         
-        # Process Apache log file upload
-        if 'apache_log_file' in request.FILES and request.FILES['apache_log_file']:
+        # Process file uploads ONLY if direct path is not provided
+        # This maintains compatibility with the upload feature but prioritizes paths
+        if not apache_log_path and 'apache_log_file' in request.FILES and request.FILES['apache_log_file']:
+            # Only save the file if user didn't provide a direct path
             try:
                 apache_file = request.FILES['apache_log_file']
-                # Create a unique name based on timestamp and original filename
+                media_root = getattr(settings, 'MEDIA_ROOT', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'media'))
+                logs_dir = os.path.join(media_root, 'logs')
+                os.makedirs(logs_dir, exist_ok=True)
+                
                 original_name = os.path.basename(apache_file.name)
                 safe_name = f"apache_{int(time.time())}_{original_name}"
                 saved_path = os.path.join(logs_dir, safe_name)
                 
-                # Manual file save with proper error handling
                 with open(saved_path, 'wb+') as destination:
                     for chunk in apache_file.chunks():
                         destination.write(chunk)
                 
-                # Use this path if successful
                 apache_log_path = saved_path
-                files_processed = True
-                logger.info(f"Apache file saved to: {apache_log_path}")
+                logger.info(f"Apache file uploaded and saved to: {apache_log_path}")
             except Exception as e:
                 logger.error(f"Failed to save Apache file: {str(e)}")
-                # If upload fails but path is provided, keep the path
-                if not apache_log_path and request.POST.get('apache_log_path'):
-                    apache_log_path = request.POST.get('apache_log_path').strip()
         
-        # Process MySQL log file upload
-        if 'mysql_log_file' in request.FILES and request.FILES['mysql_log_file']:
+        # Similar logic for MySQL
+        if not mysql_log_path and 'mysql_log_file' in request.FILES and request.FILES['mysql_log_file']:
             try:
                 mysql_file = request.FILES['mysql_log_file']
-                # Create a unique name based on timestamp and original filename
+                media_root = getattr(settings, 'MEDIA_ROOT', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'media'))
+                logs_dir = os.path.join(media_root, 'logs')
+                os.makedirs(logs_dir, exist_ok=True)
+                
                 original_name = os.path.basename(mysql_file.name)
                 safe_name = f"mysql_{int(time.time())}_{original_name}"
                 saved_path = os.path.join(logs_dir, safe_name)
                 
-                # Manual file save with proper error handling
                 with open(saved_path, 'wb+') as destination:
                     for chunk in mysql_file.chunks():
                         destination.write(chunk)
                 
-                # Use this path if successful
                 mysql_log_path = saved_path
-                files_processed = True
-                logger.info(f"MySQL file saved to: {mysql_log_path}")
+                logger.info(f"MySQL file uploaded and saved to: {mysql_log_path}")
             except Exception as e:
                 logger.error(f"Failed to save MySQL file: {str(e)}")
-                # If upload fails but path is provided, keep the path
-                if not mysql_log_path and request.POST.get('mysql_log_path'):
-                    mysql_log_path = request.POST.get('mysql_log_path').strip()
         
-        # Validate log files
-        if apache_log_path:
-            apache_validation = validate_log_file(apache_log_path, 'apache')
-            if not apache_validation['valid_log']:
-                messages.warning(request, f"Apache log file may have issues: {apache_validation['error']}")
-
-        if mysql_log_path:
-            mysql_validation = validate_log_file(mysql_log_path, 'mysql')  
-            if not mysql_validation['valid_log']:
-                messages.warning(request, f"MySQL log file may have issues: {mysql_validation['error']}")
-
-        # Don't update database if no paths are provided
-        if not apache_log_path and not mysql_log_path:
-            messages.error(request, "No log paths specified. Please enter at least one valid log file path.")
-            request.session['error_message'] = "No log paths specified. Please enter at least one valid log file path."
-            return redirect('settings')
-        
-        # Update database with non-empty paths only
+        # Validate the provided paths - but don't copy the file
         sources_to_process = []
         
         # For Apache
         if apache_log_path:
-            apache_source, created = LogSource.objects.update_or_create(
-                name='Apache Web Server',
-                defaults={
-                    'source_type': 'apache_access',
-                    'file_path': apache_log_path,
-                    'enabled': True,
-                    'kafka_topic': 'apache_logs',
-                    'use_filebeat': False
-                }
-            )
-            if not created and hasattr(apache_source, 'created_at'):
-                # Preserve the created_at timestamp for existing sources
-                apache_source.created_at = LogSource.objects.get(id=apache_source.id).created_at
-                apache_source.save(update_fields=['created_at'])
-            
-            sources_to_process.append(apache_source)
+            # Verify the file exists and is readable
+            if not os.path.isfile(apache_log_path):
+                messages.warning(request, f"Apache log path doesn't exist: {apache_log_path}")
+            elif not os.access(apache_log_path, os.R_OK):
+                messages.warning(request, f"Apache log path exists but is not readable: {apache_log_path}")
+            else:
+                apache_source, created = LogSource.objects.update_or_create(
+                    name='Apache Web Server',
+                    defaults={
+                        'source_type': 'apache_access',
+                        'file_path': apache_log_path,
+                        'enabled': True
+                    }
+                )
+                sources_to_process.append(apache_source)
         
         # For MySQL
         if mysql_log_path:
-            mysql_source, created = LogSource.objects.update_or_create(
-                name='MySQL Database Server',
-                defaults={
-                    'source_type': 'mysql_error',
-                    'file_path': mysql_log_path,
-                    'enabled': True,
-                    'kafka_topic': 'mysql_logs',
-                    'use_filebeat': False
-                }
-            )
-            if not created and hasattr(mysql_source, 'created_at'):
-                # Preserve the created_at timestamp for existing sources
-                mysql_source.created_at = LogSource.objects.get(id=mysql_source.id).created_at
-                mysql_source.save(update_fields=['created_at'])
-            
-            sources_to_process.append(mysql_source)
+            # Verify the file exists and is readable
+            if not os.path.isfile(mysql_log_path):
+                messages.warning(request, f"MySQL log path doesn't exist: {mysql_log_path}")
+            elif not os.access(mysql_log_path, os.R_OK):
+                messages.warning(request, f"MySQL log path exists but is not readable: {mysql_log_path}")
+            else:
+                mysql_source, created = LogSource.objects.update_or_create(
+                    name='MySQL Database Server',
+                    defaults={
+                        'source_type': 'mysql_error',
+                        'file_path': mysql_log_path,
+                        'enabled': True
+                    }
+                )
+                sources_to_process.append(mysql_source)
         
-        # Only process logs if files were uploaded or explicitly requested
-        analysis_results = None
-        if files_processed or request.POST.get('process_logs') == 'true':
-            # Process and analyze the log files immediately for feedback
+        if not sources_to_process:
+            messages.error(request, "No valid log paths were configured. Please check the paths and permissions.")
+            request.session['error_message'] = "No valid log paths were configured."
+            return redirect('settings')
+        
+        # Process logs if explicitly requested
+        if request.POST.get('process_logs') == 'true':
             log_count, threat_count = process_logs_from_sources(sources_to_process, request.user)
             
-            # Provide specific feedback about the analysis
             if log_count > 0:
                 if threat_count > 0:
                     analysis_msg = f"Analyzed {log_count} log entries and found {threat_count} potential security threats!"
                     messages.warning(request, analysis_msg)
-                    request.session['warning_message'] = analysis_msg
                 else:
                     analysis_msg = f"Analyzed {log_count} log entries. No immediate security threats detected."
                     messages.success(request, analysis_msg)
-                    request.session['success_message'] = analysis_msg
             else:
-                messages.info(request, "No log entries were found to analyze.")
+                messages.info(request, "No log entries found to analyze.")
         
-        # Add confirmation message
-        messages.success(request, "Log settings saved successfully")
+        messages.success(request, "Log paths configured successfully")
         
-        # Audit Apache log path change if path changed
-        if apache_log_path and apache_log_path != old_apache_path and old_apache_path is not None:
-            from authentication.models import ConfigAuditLog
+        # Audit log path changes
+        from authentication.models import ConfigAuditLog
+        if apache_log_path and apache_log_path != old_apache_path and old_apache_path:
             ConfigAuditLog.objects.create(
                 user=request.user,
                 change_type='apache_path',
@@ -361,9 +325,7 @@ def save_log_settings(request):
                 source_ip=client_ip
             )
             
-        # Audit MySQL log path change if path changed
-        if mysql_log_path and mysql_log_path != old_mysql_path and old_mysql_path is not None:
-            from authentication.models import ConfigAuditLog
+        if mysql_log_path and mysql_log_path != old_mysql_path and old_mysql_path:
             ConfigAuditLog.objects.create(
                 user=request.user,
                 change_type='mysql_path',
@@ -372,6 +334,10 @@ def save_log_settings(request):
                 description=f"Changed MySQL log path from {old_mysql_path} to {mysql_log_path}",
                 source_ip=client_ip
             )
+        
+        # Restart the realtime processor to pick up new log paths
+        processor = RealtimeLogProcessor.get_instance()
+        processor.restart()
         
     except Exception as e:
         logger.error(f"Error saving log settings: {str(e)}", exc_info=True)
@@ -1127,35 +1093,64 @@ def test_log_paths(request):
     """API endpoint to test if log paths are valid and accessible"""
     try:
         data = json.loads(request.body)
-        apache_path = data.get('apache_path')
-        mysql_path = data.get('mysql_path')
+        apache_path = data.get('apache_path', '').strip()
+        mysql_path = data.get('mysql_path', '').strip()
         
-        # Check Apache path
-        apache_valid = os.path.isfile(apache_path) and os.access(apache_path, os.R_OK)
+        results = {
+            'success': True,
+            'apache': {'exists': False, 'readable': False, 'valid_log': False, 'size': 0, 'error': None},
+            'mysql': {'exists': False, 'readable': False, 'valid_log': False, 'size': 0, 'error': None}
+        }
         
-        # Check MySQL path
-        mysql_valid = os.path.isfile(mysql_path) and os.access(mysql_path, os.R_OK)
+        # Test Apache path if provided
+        if apache_path:
+            try:
+                # Check if file exists
+                results['apache']['exists'] = os.path.isfile(apache_path)
+                
+                if results['apache']['exists']:
+                    # Check if file is readable
+                    results['apache']['readable'] = os.access(apache_path, os.R_OK)
+                    # Get file size
+                    results['apache']['size'] = os.path.getsize(apache_path)
+                    # Validate log file format
+                    validation = validate_log_file(apache_path, 'apache')
+                    results['apache']['valid_log'] = validation['valid_log']
+                    if not validation['valid_log']:
+                        results['apache']['error'] = validation['error']
+                else:
+                    results['apache']['error'] = f"File not found: {apache_path}"
+            except Exception as e:
+                results['apache']['error'] = str(e)
         
-        if apache_valid and mysql_valid:
-            return JsonResponse({
-                'success': True,
-                'message': "Both log paths are valid and accessible."
-            })
-        elif apache_valid:
-            return JsonResponse({
-                'success': False,
-                'error': "MySQL log path is not valid or not accessible."
-            })
-        elif mysql_valid:
-            return JsonResponse({
-                'success': False,
-                'error': "Apache log path is not valid or not accessible."
-            })
-        else:
-            return JsonResponse({
-                'success': False,
-                'error': "Neither log path is valid or accessible."
-            })
+        # Test MySQL path if provided
+        if mysql_path:
+            try:
+                # Check if file exists
+                results['mysql']['exists'] = os.path.isfile(mysql_path)
+                
+                if results['mysql']['exists']:
+                    # Check if file is readable
+                    results['mysql']['readable'] = os.access(mysql_path, os.R_OK)
+                    # Get file size
+                    results['mysql']['size'] = os.path.getsize(mysql_path)
+                    # Validate log file format
+                    validation = validate_log_file(mysql_path, 'mysql')
+                    results['mysql']['valid_log'] = validation['valid_log']
+                    if not validation['valid_log']:
+                        results['mysql']['error'] = validation['error']
+                else:
+                    results['mysql']['error'] = f"File not found: {mysql_path}"
+            except Exception as e:
+                results['mysql']['error'] = str(e)
+        
+        # Determine overall success
+        results['success'] = (
+            (not apache_path or (results['apache']['exists'] and results['apache']['readable'])) and
+            (not mysql_path or (results['mysql']['exists'] and results['mysql']['readable']))
+        )
+        
+        return JsonResponse(results)
         
     except json.JSONDecodeError:
         return JsonResponse({
@@ -1283,12 +1278,51 @@ def start_real_time_analysis(request):
         logs_count = int(data.get('logs_count', 50))
         enabled = data.get('enabled', True)
         
+        # Save settings to database for persistence
+        from authentication.models import SystemSettings
+        
+        # Save interval setting
+        SystemSettings.objects.update_or_create(
+            section='real_time_analysis',
+            settings_key='interval',
+            defaults={
+                'settings_value': str(interval),
+                'last_updated': timezone.now(),
+                'updated_by': request.user
+            }
+        )
+        
+        # Save logs count setting
+        SystemSettings.objects.update_or_create(
+            section='real_time_analysis',
+            settings_key='logs_count',
+            defaults={
+                'settings_value': str(logs_count),
+                'last_updated': timezone.now(),
+                'updated_by': request.user
+            }
+        )
+        
+        # Save enabled setting
+        SystemSettings.objects.update_or_create(
+            section='real_time_analysis',
+            settings_key='enabled',
+            defaults={
+                'settings_value': 'true' if enabled else 'false',
+                'last_updated': timezone.now(),
+                'updated_by': request.user
+            }
+        )
+        
         # Get the singleton instance
         processor = RealtimeLogProcessor.get_instance()
         
+        # Explicitly set the enabled state 
+        processor.enabled = enabled
+        
         if enabled:
             # Start or reconfigure real-time analysis
-            success = processor.start(interval=interval, logs_count=logs_count)
+            success = processor.start(interval=interval, logs_count=logs_count, enabled=enabled)
             status = "started" if success else "failed"
         else:
             # Stop real-time analysis
@@ -1299,7 +1333,8 @@ def start_real_time_analysis(request):
             'success': True,
             'status': status,
             'interval': interval,
-            'logs_count': logs_count
+            'logs_count': logs_count, 
+            'enabled': enabled
         })
         
     except Exception as e:
@@ -1384,6 +1419,141 @@ def clean_log_sources(request):
         })
         
     except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@login_required
+@require_POST
+def upload_log_file(request):
+    """API endpoint to handle log file uploads and return the full path"""
+    try:
+        # Check if get_path_only is set - this is for file path resolution only
+        get_path_only = request.POST.get('get_path_only') == 'true'
+        
+        # If we're just getting the path, we can use the file's full path
+        if get_path_only:
+            apache_file = request.FILES.get('apache_log_file')
+            mysql_file = request.FILES.get('mysql_log_file')
+            
+            file_obj = apache_file or mysql_file
+            file_type = 'apache' if apache_file else 'mysql' if mysql_file else None
+            
+            if not file_obj:
+                return JsonResponse({
+                    'success': False, 
+                    'error': 'No file provided'
+                }, status=400)
+                
+            # Get the system path from the filename
+            # Since browsers don't provide full paths for security reasons,
+            # we need to attempt to find the file on common system log paths
+            filename = os.path.basename(file_obj.name)
+            
+            # Try standard system log paths for this file
+            potential_paths = []
+            
+            if file_type == 'apache':
+                potential_paths = [
+                    os.path.join('/var/log/apache2', filename),
+                    os.path.join('/var/log/httpd', filename),
+                    os.path.join(r'C:\xampp\apache\logs', filename),
+                    os.path.join(r'C:\Program Files\Apache Software Foundation\Apache2.4\logs', filename)
+                ]
+            else:  # mysql
+                potential_paths = [
+                    os.path.join('/var/log/mysql', filename),
+                    os.path.join(r'C:\xampp\mysql\data', filename),
+                    os.path.join(r'C:\ProgramData\MySQL\MySQL Server 8.0\Data', filename)
+                ]
+            
+            # Check if any of these paths exist
+            found_path = None
+            for path in potential_paths:
+                if os.path.exists(path) and os.access(path, os.R_OK):
+                    found_path = path
+                    break
+                    
+            # If we found a path, return it
+            if found_path:
+                # Validate log file
+                validation = validate_log_file(found_path, file_type)
+                
+                return JsonResponse({
+                    'success': True,
+                    'file_path': found_path,
+                    'file_name': filename,
+                    'validation': validation
+                })
+            
+            # If not found, we need to save the file
+            media_root = getattr(settings, 'MEDIA_ROOT', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'media'))
+            logs_dir = os.path.join(media_root, 'logs')
+            os.makedirs(logs_dir, exist_ok=True)
+            
+            # Create a unique name based on timestamp
+            safe_name = f"{file_type}_{int(time.time())}_{filename}"
+            saved_path = os.path.join(logs_dir, safe_name)
+            
+            # Save the file
+            with open(saved_path, 'wb+') as destination:
+                for chunk in file_obj.chunks():
+                    destination.write(chunk)
+                    
+            # Return the saved path with a note that it's a copy
+            validation = validate_log_file(saved_path, file_type)
+            
+            return JsonResponse({
+                'success': True,
+                'file_path': saved_path,
+                'file_name': filename,
+                'is_copy': True,
+                'validation': validation
+            })
+            
+        # Standard file upload handling (for backward compatibility)
+        else:
+            apache_file = request.FILES.get('apache_log_file')
+            mysql_file = request.FILES.get('mysql_log_file')
+            
+            file_obj = apache_file or mysql_file
+            file_type = 'apache' if apache_file else 'mysql' if mysql_file else None
+            
+            if not file_obj:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'No file provided'
+                }, status=400)
+                
+            # Create media directory
+            media_root = getattr(settings, 'MEDIA_ROOT', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'media'))
+            logs_dir = os.path.join(media_root, 'logs')
+            os.makedirs(logs_dir, exist_ok=True)
+            
+            # Save file with proper handling for large files
+            original_name = os.path.basename(file_obj.name)
+            safe_name = f"{file_type}_{int(time.time())}_{original_name}"
+            saved_path = os.path.join(logs_dir, safe_name)
+            
+            with open(saved_path, 'wb+') as destination:
+                for chunk in file_obj.chunks():
+                    destination.write(chunk)
+                    
+            # Validate the log file
+            validation = validate_log_file(saved_path, file_type)
+            
+            return JsonResponse({
+                'success': True,
+                'file_path': saved_path,
+                'file_name': original_name,
+                'file_size': file_obj.size,
+                'validation': validation
+            })
+            
+    except Exception as e:
+        logger.error(f"Error handling log file: {str(e)}", exc_info=True)
         return JsonResponse({
             'success': False,
             'error': str(e)
