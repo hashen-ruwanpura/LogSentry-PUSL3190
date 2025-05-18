@@ -263,7 +263,17 @@ def dashboard_view(request):
         
         # Only make database queries that are absolutely needed
         # Use prefetch_related and select_related to reduce query count
+        # Instead of this slow query counting all raw logs
         total_logs = RawLog.objects.filter(timestamp__gte=start_time).count()
+
+        # Use this cached approach
+        from django.core.cache import cache
+        cache_key = f"total_logs_{timeframe}"
+        total_logs = cache.get(cache_key)
+        if total_logs is None:
+            # Only run the expensive query if absolutely needed
+            total_logs = RawLog.objects.filter(timestamp__gte=start_time).count()
+            cache.set(cache_key, total_logs, 3600)  # Cache for 1 hour
         
         # Get Apache logs - optimize with a single query and filter in Python
         apache_logs = list(RawLog.objects.filter(

@@ -957,6 +957,18 @@ def create_parsed_log_from_raw(raw_log):
             logger.warning(f"Error decoding log content: {str(e)}")
             decoded_content = log_content  # Fallback to original content
             
+        # Track log processing in cache - increment total logs processed counter
+        today_str = timezone.now().strftime('%Y-%m-%d')
+        total_logs_key = f"logs_processed_total:{today_str}"
+        source_logs_key = f"logs_processed_{source_type}:{today_str}"
+        
+        # Increment counters
+        current_total = cache.get(total_logs_key) or 0
+        cache.set(total_logs_key, current_total + 1, 86400) # 24 hours
+        
+        current_source_total = cache.get(source_logs_key) or 0
+        cache.set(source_logs_key, current_source_total + 1, 86400) # 24 hours
+            
         # MYSQL ERROR WHITELIST - Skip non-security relevant MySQL messages
         if source_type and source_type.lower() in ('mysql', 'mysql_error'):
             # Using the global mysql_error_whitelist defined at module level
@@ -1001,33 +1013,13 @@ def create_parsed_log_from_raw(raw_log):
             # Check if log matches any whitelisted pattern
             for pattern in mysql_error_whitelist:
                 if re.search(pattern, log_content, re.IGNORECASE):
-                    # Create a benign parsed log entry
-                    parsed_log = ParsedLog.objects.create(
-                        raw_log=raw_log,
-                        timestamp=log_timestamp,  # Assuming log_timestamp is already extracted
-                        source_ip=None,
-                        source_type=source_type,
-                        request_method=None,
-                        request_path=None,
-                        status='normal',  # Mark as normal, not suspicious
-                        normalized_data={
-                            'content': log_content,
-                            'message': log_content[:1000],
-                            'source_type': source_type,
-                            'source_ip': None,
-                            'is_whitelisted': True,
-                            'whitelisted_reason': 'Non-security MySQL message'
-                        },
-                        analyzed=True,
-                        analysis_time=timezone.now()
-                    )
-                    
-                    # Mark raw log as parsed
+                    # OPTIMIZATION: Don't create ParsedLog for whitelisted MySQL messages
+                    # Just mark raw log as parsed - we've already tracked the count in cache
                     raw_log.is_parsed = True
                     raw_log.save(update_fields=['is_parsed'])
                     
-                    logger.debug(f"Whitelisted MySQL message: {log_content[:100]}...")
-                    return parsed_log
+                    logger.debug(f"Whitelisted MySQL message (not stored): {log_content[:100]}...")
+                    return None
         
         # Extract IP address
         ip_match = re.search(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', log_content)
@@ -1649,7 +1641,24 @@ def create_parsed_log_from_raw(raw_log):
         normalized_data['analysis']['mitre_technique'] = mitre_technique
         normalized_data['analysis']['mitre_technique_id'] = mitre_technique_id
         
-        # Create a ParsedLog entry with enhanced security information
+        # OPTIMIZATION: Only store suspicious or attack logs in the database
+        if status == 'normal':
+            # Update cache with normal log metrics
+            normal_logs_key = f"logs_normal_{source_type}:{today_str}"
+            current_normal = cache.get(normal_logs_key) or 0
+            cache.set(normal_logs_key, current_normal + 1, 86400)
+            
+            # Mark raw log as parsed
+            raw_log.is_parsed = True
+            raw_log.save(update_fields=['is_parsed'])
+            
+            # DELETE THE NORMAL RAW LOG TO SAVE SPACE - UNCOMMENT THIS
+            raw_log.delete()
+            
+            logger.debug(f"Normal log processed but not stored: {log_content[:100]}...")
+            return None
+        
+        # Only create a ParsedLog for suspicious/attack logs
         parsed_log = ParsedLog.objects.create(
             raw_log=raw_log,
             timestamp=log_timestamp,  # Use the extracted timestamp
