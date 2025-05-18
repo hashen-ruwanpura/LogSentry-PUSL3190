@@ -1701,33 +1701,37 @@ def mitre_details_view(request):
         count=Count('id')
     ).order_by('-count')
     
-    # Prepare data for tactics heatmap
+    # Prepare data for tactics heatmap - USE THIS UPDATED CODE
     tactics_by_day = {}
     
-    # Use TruncDay to get daily counts of each tactic
-    from django.db.models.functions import TruncDay
+    # FIXED VERSION: Process the dates in Python instead of using TruncDay
+    # Get all threats with their timestamps and tactics
+    threat_data = list(threats.values('created_at', 'mitre_tactic'))
     
-    daily_tactic_counts = threats.annotate(
-        day=TruncDay('created_at')
-    ).values(
-        'day', 'mitre_tactic'
-    ).annotate(
-        count=Count('id')
-    ).order_by('day')
-    
-    # Process the data for chart rendering
-    days = set()
-    tactics = set()
-    
-    for entry in daily_tactic_counts:
-        day_str = entry['day'].strftime('%Y-%m-%d')
-        days.add(day_str)
-        tactics.add(entry['mitre_tactic'])
+    # Process manually in Python
+    for item in threat_data:
+        # Convert to date string without timezone issues
+        day_str = item['created_at'].strftime('%Y-%m-%d')
+        tactic_name = item['mitre_tactic']
         
+        # Initialize day entry if needed
         if day_str not in tactics_by_day:
             tactics_by_day[day_str] = {}
-        
-        tactics_by_day[day_str][entry['mitre_tactic']] = entry['count']
+            
+        # Increment count for this tactic on this day
+        if tactic_name in tactics_by_day[day_str]:
+            tactics_by_day[day_str][tactic_name] += 1
+        else:
+            tactics_by_day[day_str][tactic_name] = 1
+    
+    # Process the data for chart rendering
+    days = set(tactics_by_day.keys())
+    tactics = set()
+    
+    # Get all unique tactics
+    for day_data in tactics_by_day.values():
+        for tactic_name in day_data.keys():
+            tactics.add(tactic_name)
     
     # Convert to sorted lists for the chart
     days_list = sorted(list(days))
@@ -1743,6 +1747,452 @@ def mitre_details_view(request):
     
     # Get recent threats for the list view
     recent_threats = threats.order_by('-created_at')[:50]
+    
+    # Check for export request
+        # In the mitre_details_view function, replace the PDF export section:
+    if request.GET.get('export') == 'pdf':
+        # Generate PDF using reportlab
+        from reportlab.lib.pagesizes import letter, landscape
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image, PageBreak
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib import colors
+        from reportlab.lib.units import inch
+        from reportlab.graphics.shapes import Drawing, Rect
+        from reportlab.graphics.charts.barcharts import VerticalBarChart
+        from io import BytesIO
+        from django.http import HttpResponse
+        import os
+        
+        # Create response object
+        response = HttpResponse(content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="LogSentry_MITRE_Analysis_{timezone.now().strftime("%Y%m%d_%H%M")}.pdf"'
+        
+        # Create PDF document
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), 
+                               rightMargin=36, leftMargin=36, 
+                               topMargin=36, bottomMargin=36)
+        
+        # Define LogSentry brand colors
+        brand_primary = colors.HexColor('#3f51b5')  # Primary blue
+        brand_secondary = colors.HexColor('#6c757d')
+        brand_accent = colors.HexColor('#7986cb')
+        brand_light = colors.HexColor('#f5f7fa')
+        brand_dark = colors.HexColor('#212529')
+        
+        # Create custom styles
+        styles = getSampleStyleSheet()
+        
+        # Custom title style
+        styles.add(ParagraphStyle(
+            name='LogSentryTitle',
+            parent=styles['Title'],
+            fontName='Helvetica-Bold',
+            fontSize=24,
+            textColor=brand_primary,
+            spaceAfter=12,
+            alignment=1  # Center alignment
+        ))
+        
+        # Custom heading styles
+        styles.add(ParagraphStyle(
+            name='LogSentryHeading1',
+            parent=styles['Heading1'],
+            fontName='Helvetica-Bold',
+            fontSize=18,
+            textColor=brand_primary,
+            spaceAfter=12,
+        ))
+        
+        styles.add(ParagraphStyle(
+            name='LogSentryHeading2',
+            parent=styles['Heading2'],
+            fontName='Helvetica-Bold',
+            fontSize=14,
+            textColor=brand_primary,
+            spaceAfter=10,
+        ))
+        
+        # Normal text style
+        styles.add(ParagraphStyle(
+            name='LogSentryNormal',
+            parent=styles['Normal'],
+            fontSize=10,
+            leading=14,
+            spaceAfter=8,
+        ))
+        
+        # Footer style
+        footer_style = ParagraphStyle(
+            name='Footer',
+            parent=styles['Normal'],
+            fontSize=8,
+            textColor=brand_secondary,
+        )
+        
+        # Initialize elements list
+        elements = []
+        
+        # Helper function for creating header/footer
+        def add_page_elements(canvas, doc):
+            # Save canvas state
+            canvas.saveState()
+            
+            # Header with logo and title
+            canvas.setFillColor(brand_primary)
+            canvas.rect(36, doc.height + 36, doc.width, 24, fill=True, stroke=False)
+            
+            # Header text (LogSentry)
+            canvas.setFont('Helvetica-Bold', 14)
+            canvas.setFillColor(colors.white)
+            canvas.drawString(46, doc.height + doc.topMargin + 6, "LogSentry")
+            
+            # Add subtitle
+            canvas.setFont('Helvetica', 10)
+            canvas.drawString(140, doc.height + doc.topMargin + 6, "MITRE ATT&CK Framework Analysis")
+            
+            # Add page number to header
+            canvas.drawRightString(doc.width + 20, doc.height + doc.topMargin + 6, f"Page {doc.page}")
+            
+            # Add footer
+            canvas.setFont('Helvetica', 8)
+            canvas.setFillColor(brand_secondary)
+            
+            # Left side: generated date
+            generation_text = f"Generated on {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            canvas.drawString(doc.leftMargin, 20, generation_text)
+            
+            # Right side: powered by
+            canvas.drawRightString(doc.width + 30, 20, "Powered by LogSentry")
+            
+            # Restore canvas state
+            canvas.restoreState()
+        
+        # First page / Cover
+        elements.append(Spacer(1, 50))
+        
+        # Title
+        elements.append(Paragraph(f"MITRE ATT&CK Framework Analysis", styles['LogSentryTitle']))
+        elements.append(Spacer(1, 10))
+        
+        # Period and filters subtitle
+        report_subtitle = f"{period_name}"
+        if tactic != 'all':
+            report_subtitle += f" - Tactic: {tactic}"
+        if search_query:
+            report_subtitle += f" - Search: {search_query}"
+        
+        elements.append(Paragraph(report_subtitle, styles['Heading2']))
+        elements.append(Spacer(1, 30))
+        
+        # Add a decorative line
+        def add_separator():
+            elements.append(Spacer(1, 6))
+            line = Drawing(500, 2)
+            line.add(Rect(0, 0, 500, 1, fillColor=brand_accent, strokeColor=None))
+            elements.append(line)
+            elements.append(Spacer(1, 15))
+        
+        # Executive Summary Section
+        elements.append(Paragraph("Executive Summary", styles['LogSentryHeading1']))
+        add_separator()
+        
+        elements.append(Paragraph(
+            "This report provides an analysis of security threats based on the MITRE ATT&CK framework. "
+            "It summarizes threat tactics and techniques detected by LogSentry during the selected time period, "
+            "helping security teams identify patterns and focus their investigation efforts.",
+            styles['LogSentryNormal']
+        ))
+        elements.append(Spacer(1, 20))
+        
+        # Key Metrics Section - Create a table for key metrics
+        elements.append(Paragraph("Key Metrics", styles['LogSentryHeading2']))
+        
+        # Summary statistics in a better-looking table
+        summary_data = [
+            ['Metric', 'Value', 'Details'],
+            ['Total Threats', str(threats.count()), period_name],
+            ['Threats with Tactics', str(threats.exclude(mitre_tactic='').count()), 
+             f"{(threats.exclude(mitre_tactic='').count() / max(threats.count(), 1) * 100):.1f}% of threats"],
+            ['Threats with Techniques', str(threats.exclude(mitre_technique='').count()), 
+             f"{(threats.exclude(mitre_technique='').count() / max(threats.count(), 1) * 100):.1f}% of threats"],
+            ['Unique Tactics', str(tactic_stats.count()), "Different attack patterns detected"]
+        ]
+        
+        # Create and style the summary table
+        summary_table = Table(summary_data, colWidths=[180, 120, 220])
+        summary_table.setStyle(TableStyle([
+            # Header styling
+            ('BACKGROUND', (0, 0), (-1, 0), brand_primary),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('TOPPADDING', (0, 0), (-1, 0), 8),
+            
+            # Data rows styling
+            ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+            ('TEXTCOLOR', (0, 1), (0, -1), brand_dark),  # Left column headers in dark
+            ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+            ('ALIGN', (1, 1), (1, -1), 'CENTER'),  # Center the values
+            ('FONTSIZE', (0, 1), (-1, -1), 10),
+            
+            # Grid styling
+            ('GRID', (0, 0), (-1, -1), 0.5, brand_secondary),
+            ('BOX', (0, 0), (-1, -1), 1, brand_primary),
+            
+            # Alternating row colors
+            ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#f8f9fa')),
+            ('BACKGROUND', (0, 3), (-1, 3), colors.HexColor('#f8f9fa')),
+        ]))
+        
+        elements.append(summary_table)
+        elements.append(Spacer(1, 30))
+        
+        # Add page break after executive summary
+        elements.append(PageBreak())
+        
+        # MITRE ATT&CK Tactics Section
+        elements.append(Paragraph("MITRE ATT&CK Tactics", styles['LogSentryHeading1']))
+        add_separator()
+        elements.append(Paragraph("Distribution of detected threat tactics", styles['LogSentryNormal']))
+        elements.append(Spacer(1, 15))
+        
+        # Create tactics table with enhanced styling
+        tactics_data = [['Tactic', 'Count', 'Percentage']]
+        
+        # Calculate total for percentages
+        total_tactics = sum(t['count'] for t in tactic_stats)
+        
+        for idx, tactic in enumerate(tactic_stats):
+            percentage = (tactic['count'] / total_tactics * 100) if total_tactics > 0 else 0
+            tactics_data.append([
+                tactic['mitre_tactic'],
+                tactic['count'],
+                f"{percentage:.1f}%"
+            ])
+        
+        if len(tactics_data) > 1:
+            tactics_table = Table(tactics_data, colWidths=[300, 100, 100])
+            
+            # Create row colors for alternating rows
+            row_colors = []
+            for i in range(1, len(tactics_data)):
+                if i % 2 == 0:
+                    row_colors.append(('BACKGROUND', (0, i), (-1, i), colors.HexColor('#f8f9fa')))
+            
+            tactics_table.setStyle(TableStyle([
+                # Header styling
+                ('BACKGROUND', (0, 0), (-1, 0), brand_primary),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('ALIGN', (0, 0), (-1, 0), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('FONTSIZE', (0, 0), (-1, 0), 12),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+                ('TOPPADDING', (0, 0), (-1, 0), 8),
+                
+                # Data rows styling
+                ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+                ('ALIGN', (1, 1), (-1, -1), 'CENTER'),  # Center the numeric values
+                ('FONTSIZE', (0, 1), (-1, -1), 10),
+                
+                # Grid styling
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('BOX', (0, 0), (-1, -1), 1, brand_primary),
+                
+                # Additional styling
+                *row_colors  # Apply alternating row colors
+            ]))
+            
+            elements.append(tactics_table)
+        else:
+            elements.append(Paragraph("No tactic data available", styles['LogSentryNormal']))
+        
+        elements.append(Spacer(1, 30))
+        
+        # MITRE ATT&CK Techniques Section
+        elements.append(Paragraph("MITRE ATT&CK Techniques", styles['LogSentryHeading1']))
+        add_separator()
+        elements.append(Paragraph("Distribution of detected techniques", styles['LogSentryNormal']))
+        elements.append(Spacer(1, 15))
+        
+        # Create techniques table with enhanced styling
+        techniques_data = [['Technique', 'Count', 'Percentage']]
+        
+        # Calculate total for percentages
+        total_techniques = sum(t['count'] for t in technique_stats)
+        
+        for idx, technique in enumerate(technique_stats):
+            percentage = (technique['count'] / total_techniques * 100) if total_techniques > 0 else 0
+            techniques_data.append([
+                technique['mitre_technique'],
+                technique['count'],
+                f"{percentage:.1f}%"
+            ])
+        
+        if len(techniques_data) > 1:
+            techniques_table = Table(techniques_data, colWidths=[300, 100, 100])
+            
+            # Create row colors for alternating rows
+            row_colors = []
+            for i in range(1, len(techniques_data)):
+                if i % 2 == 0:
+                    row_colors.append(('BACKGROUND', (0, i), (-1, i), colors.HexColor('#f8f9fa')))
+            
+            techniques_table.setStyle(TableStyle([
+                # Header styling
+                ('BACKGROUND', (0, 0), (-1, 0), brand_primary),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('ALIGN', (0, 0), (-1, 0), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('FONTSIZE', (0, 0), (-1, 0), 12),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+                ('TOPPADDING', (0, 0), (-1, 0), 8),
+                
+                # Data rows styling
+                ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+                ('ALIGN', (1, 1), (-1, -1), 'CENTER'),  # Center the numeric values
+                ('FONTSIZE', (0, 1), (-1, -1), 10),
+                
+                # Grid styling
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('BOX', (0, 0), (-1, -1), 1, brand_primary),
+                
+                # Additional styling
+                *row_colors  # Apply alternating row colors
+            ]))
+            
+            elements.append(techniques_table)
+        else:
+            elements.append(Paragraph("No technique data available", styles['LogSentryNormal']))
+        
+        elements.append(PageBreak())
+        
+        # Recent Threats Section
+        elements.append(Paragraph("Recent Security Threats", styles['LogSentryHeading1']))
+        add_separator()
+        elements.append(Paragraph("Most recent threats with MITRE classifications", styles['LogSentryNormal']))
+        elements.append(Spacer(1, 15))
+        
+        # Create recent threats table
+        threats_data = [['Timestamp', 'Source IP', 'Severity', 'Tactic', 'Technique']]
+        
+        for threat in recent_threats[:25]:  # Limit to 25 most recent
+            threats_data.append([
+                threat.created_at.strftime("%Y-%m-%d %H:%M"),
+                threat.source_ip or "Unknown",
+                threat.severity,
+                threat.mitre_tactic or '-',
+                threat.mitre_technique or '-'
+            ])
+        
+        # Create color map for severity levels
+        severity_colors = {
+            'critical': colors.HexColor('#dc3545'),
+            'high': colors.HexColor('#fd7e14'),
+            'medium': colors.HexColor('#ffc107'),
+            'low': colors.HexColor('#17a2b8')
+        }
+        
+        # Apply severity colors to cells
+        severity_styles = []
+        for i in range(1, len(threats_data)):
+            severity = threats_data[i][2].lower()
+            if severity in severity_colors:
+                severity_styles.append(('TEXTCOLOR', (2, i), (2, i), severity_colors[severity]))
+                severity_styles.append(('FONTNAME', (2, i), (2, i), 'Helvetica-Bold'))
+        
+        if len(threats_data) > 1:
+            # Create row colors for alternating rows
+            row_colors = []
+            for i in range(1, len(threats_data)):
+                if i % 2 == 0:
+                    row_colors.append(('BACKGROUND', (0, i), (-1, i), colors.HexColor('#f8f9fa')))
+            
+            threats_table = Table(threats_data, colWidths=[90, 90, 70, 140, 140])
+            threats_table.setStyle(TableStyle([
+                # Header styling
+                ('BACKGROUND', (0, 0), (-1, 0), brand_primary),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('ALIGN', (0, 0), (-1, 0), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('FONTSIZE', (0, 0), (-1, 0), 12),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+                ('TOPPADDING', (0, 0), (-1, 0), 8),
+                
+                # Data rows styling
+                ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+                ('FONTSIZE', (0, 1), (-1, -1), 9),
+                
+                # Grid styling
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('BOX', (0, 0), (-1, -1), 1, brand_primary),
+                
+                # Apply severity colors
+                *severity_styles,
+                
+                # Apply alternating row colors
+                *row_colors
+            ]))
+            
+            elements.append(threats_table)
+        else:
+            elements.append(Paragraph("No recent threats found matching the current filters", styles['LogSentryNormal']))
+        
+        # Add recommendations section
+        elements.append(Spacer(1, 30))
+        elements.append(Paragraph("Security Recommendations", styles['LogSentryHeading2']))
+        elements.append(Spacer(1, 5))
+        
+        # Add recommendations based on the data
+        if total_tactics > 0:
+            top_tactic = tactic_stats[0]['mitre_tactic'] if tactic_stats else "Unknown"
+            elements.append(Paragraph(
+                f"• Focus defense efforts on the most common tactic: <b>{top_tactic}</b>",
+                styles['LogSentryNormal']
+            ))
+            
+            if 'defense_evasion' in [t['mitre_tactic'].lower() for t in tactic_stats]:
+                elements.append(Paragraph(
+                    "• Review and enhance logging mechanisms as defense evasion tactics were detected",
+                    styles['LogSentryNormal']
+                ))
+                
+            if 'initial_access' in [t['mitre_tactic'].lower() for t in tactic_stats]:
+                elements.append(Paragraph(
+                    "• Strengthen perimeter security and access controls to prevent initial access attempts",
+                    styles['LogSentryNormal']
+                ))
+                
+            elements.append(Paragraph(
+                "• Conduct regular security awareness training for all staff",
+                styles['LogSentryNormal']
+            ))
+            
+            elements.append(Paragraph(
+                "• Consider implementing additional detection rules based on the most common techniques",
+                styles['LogSentryNormal']
+            ))
+        else:
+            elements.append(Paragraph(
+                "No specific recommendations available for the current dataset.",
+                styles['LogSentryNormal']
+            ))
+        
+        # Build PDF document with custom page template
+        doc.build(elements, onFirstPage=add_page_elements, onLaterPages=add_page_elements)
+        
+        # Get PDF content
+        pdf = buffer.getvalue()
+        buffer.close()
+        response.write(pdf)
+        
+        return response
     
     context = {
         'period_name': period_name,
@@ -1792,7 +2242,7 @@ def analyze_alert_with_ai(request, alert_id):
                 'error': f"Alert #{alert_id} not found"
             }, status=404)
         
-        # Check for cached analysis (less than 1 hour old)
+        # Check for cached analysis (less than  1 hour old)
         cached_analysis = ThreatAnalysis.objects.filter(
             threat=threat,
             analysis_type=action_type,
@@ -2494,7 +2944,7 @@ def dashboard_counts_api(request):
     cache_key = f"dashboard_metrics:{timeframe}"
     dashboard_metrics = cache.get(cache_key)
     
-    # If standardized cache hit, return the metrics in the expected format
+    # If dashboard_metrics is not None, it means we have valid cached data
     if dashboard_metrics is not None:
         return JsonResponse({
             'raw_count': dashboard_metrics.get('total_logs', 0),

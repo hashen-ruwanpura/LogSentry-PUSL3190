@@ -532,6 +532,7 @@
                             <ul class="dropdown-menu">
                                 <li><a class="dropdown-item" href="?{{ request.GET.urlencode }}&export=csv">Export to CSV</a></li>
                                 <li><a class="dropdown-item" href="?{{ request.GET.urlencode }}&export=json">Export to JSON</a></li>
+                                <li><a class="dropdown-item" href="?{{ request.GET.urlencode }}&export=pdf">Export to PDF</a></li>
                             </ul>
                         </div>
                         <button id="refresh-btn" class="btn btn-sm btn-primary">
@@ -1044,6 +1045,65 @@
                     heatmapContainer.appendChild(fallbackMsg);
                 }
             }
+
+            // Enhance PDF export functionality
+            const exportLinks = document.querySelectorAll('.dropdown-menu .dropdown-item');
+            exportLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    // Check if this is the PDF export link
+                    if (this.href.includes('export=pdf')) {
+                        e.preventDefault(); // Prevent default navigation
+                        
+                        // Show loading state
+                        const dropdownButton = document.querySelector('.dropdown button');
+                        const originalButtonText = dropdownButton.innerHTML;
+                        dropdownButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating PDF...';
+                        dropdownButton.disabled = true;
+                        
+                        // Show notification if available
+                        if (window.showNotification) {
+                            window.showNotification('Generating PDF report. Please wait...', 'info');
+                        }
+                        
+                        // Create an iframe to handle the download without navigating away
+                        const downloadFrame = document.createElement('iframe');
+                        downloadFrame.style.display = 'none';
+                        document.body.appendChild(downloadFrame);
+                        
+                        // Set up completion handlers
+                        downloadFrame.onload = function() {
+                            // Reset button after iframe loads (PDF generation complete)
+                            setTimeout(() => {
+                                dropdownButton.innerHTML = originalButtonText;
+                                dropdownButton.disabled = false;
+                                
+                                // Show success notification
+                                if (window.showNotification) {
+                                    window.showNotification('PDF generated successfully!', 'success');
+                                }
+                                
+                                // Remove the iframe after a delay
+                                setTimeout(() => {
+                                    if (document.body.contains(downloadFrame)) {
+                                        document.body.removeChild(downloadFrame);
+                                    }
+                                }, 1000);
+                            }, 500);
+                        };
+                        
+                        // Handle potential errors or timeouts
+                        setTimeout(() => {
+                            if (dropdownButton.disabled) {
+                                dropdownButton.innerHTML = originalButtonText;
+                                dropdownButton.disabled = false;
+                            }
+                        }, 30000); // 30 second timeout
+                        
+                        // Start the download
+                        downloadFrame.src = this.href;
+                    }
+                });
+            });
         });
 
         // Sidebar Toggle Functionality
