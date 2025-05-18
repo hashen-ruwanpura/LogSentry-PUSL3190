@@ -595,8 +595,9 @@
                                 <i class="fas fa-download"></i> Export
                             </button>
                             <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" href="?{{ request.GET.urlencode }}&export=csv">Export to CSV</a></li>
-                                <li><a class="dropdown-item" href="?{{ request.GET.urlencode }}&export=json">Export to JSON</a></li>
+                                <li><a class="dropdown-item export-link" href="?{{ request.GET.urlencode }}&export=pdf"><i class="fas fa-file-pdf"></i> Export to PDF</a></li>
+                                <li><a class="dropdown-item" href="?{{ request.GET.urlencode }}&export=csv"><i class="fas fa-file-csv"></i> Export to CSV</a></li>
+                                <li><a class="dropdown-item" href="?{{ request.GET.urlencode }}&export=json"><i class="fas fa-file-code"></i> Export to JSON</a></li>
                             </ul>
                         </div>
                         <button id="refresh-btn" class="btn btn-sm btn-primary">
@@ -666,7 +667,11 @@
                         <div class="stat-title">Optimal Queries</div>
                         <div class="stat-value">{{ normal_queries }}</div>
                         <div class="stat-subtitle">
-                            {{ normal_queries|floatformat:1 }}% of total queries
+                            {% if total_logs > 0 %}
+                                {% widthratio normal_queries total_logs 100 %}% of total queries
+                            {% else %}
+                                0.0% of total queries
+                            {% endif %}
                         </div>
                     </div>
                     <div class="stat-card">
@@ -702,13 +707,15 @@
                             <h4 class="mb-3 mt-4">Query Performance</h4>
                             <div class="progress" style="height: 30px;">
                                 {% if total_logs > 0 %}
-                                <div class="progress-bar bg-success" role="progressbar" style="width: {{ normal_queries|floatformat:1 }}%" 
-                                     aria-valuenow="{{ normal_queries }}" aria-valuemin="0" aria-valuemax="100">
-                                    Optimal ({{ normal_queries|floatformat:1 }}%)
+                                {% widthratio normal_queries total_logs 100 as normal_percent %}
+                                {% widthratio slow_queries total_logs 100 as slow_percent %}
+                                <div class="progress-bar bg-success" role="progressbar" style="width: {{ normal_percent }}%" 
+                                     aria-valuenow="{{ normal_percent }}" aria-valuemin="0" aria-valuemax="100">
+                                    Optimal ({{ normal_percent }}%)
                                 </div>
-                                <div class="progress-bar bg-danger" role="progressbar" style="width: {{ slow_queries|floatformat:1 }}%" 
-                                     aria-valuenow="{{ slow_queries }}" aria-valuemin="0" aria-valuemax="100">
-                                    Slow ({{ slow_queries|floatformat:1 }}%)
+                                <div class="progress-bar bg-danger" role="progressbar" style="width: {{ slow_percent }}%" 
+                                     aria-valuenow="{{ slow_percent }}" aria-valuemin="0" aria-valuemax="100">
+                                    Slow ({{ slow_percent }}%)
                                 </div>
                                 {% else %}
                                 <div class="progress-bar" role="progressbar" style="width: 100%" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">
@@ -1261,6 +1268,70 @@
         document.addEventListener('DOMContentLoaded', function() {
             setupRealTimeUpdates();
         });
+    </script>
+
+    <!-- Add this script at the end of the file, just before the closing </body> tag -->
+    <script>
+        // Add this right after the setupRealTimeUpdates function
+        
+        // Handle PDF export process
+        document.addEventListener('DOMContentLoaded', function() {
+            setupPdfExport();
+        });
+        
+        function setupPdfExport() {
+            // Find all PDF export links
+            const pdfExportLinks = document.querySelectorAll('.dropdown-item.export-link');
+            
+            pdfExportLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    // Check if this is the PDF export link
+                    if (this.href.includes('export=pdf')) {
+                        e.preventDefault();
+                        
+                        // Show loading state
+                        const exportButton = document.querySelector('.dropdown button');
+                        const originalButtonText = exportButton.innerHTML;
+                        exportButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating PDF...';
+                        exportButton.disabled = true;
+                        
+                        // Show notification if the function exists
+                        if (window.showNotification) {
+                            window.showNotification('Generating MySQL logs PDF report. This may take a moment...', 'info');
+                        }
+                        
+                        // Create a hidden iframe to handle the download
+                        const downloadFrame = document.createElement('iframe');
+                        downloadFrame.style.display = 'none';
+                        document.body.appendChild(downloadFrame);
+                        
+                        // Set up completion handlers
+                        setTimeout(() => {
+                            // Reset button after a delay (PDF generation might take time)
+                            exportButton.innerHTML = originalButtonText;
+                            exportButton.disabled = false;
+                            
+                            // Show success notification
+                            if (window.showNotification) {
+                                window.showNotification('MySQL logs PDF generated successfully!', 'success');
+                            }
+                        }, 3000); // Allow 3 seconds for PDF generation
+                        
+                        // Handle potential errors
+                        downloadFrame.onerror = function() {
+                            exportButton.innerHTML = originalButtonText;
+                            exportButton.disabled = false;
+                            if (window.showNotification) {
+                                window.showNotification('There was an error generating the PDF. Please try again.', 'error');
+                            }
+                        };
+                        
+                        // Load the URL in the iframe
+                        downloadFrame.src = this.href;
+                    }
+                });
+            });
+        }
     </script>
 </body>
 </html>
