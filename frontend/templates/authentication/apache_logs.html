@@ -558,8 +558,9 @@
                                 <i class="fas fa-download"></i> Export
                             </button>
                             <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" href="?{{ request.GET.urlencode }}&export=csv">Export to CSV</a></li>
-                                <li><a class="dropdown-item" href="?{{ request.GET.urlencode }}&export=json">Export to JSON</a></li>
+                                <li><a class="dropdown-item export-link" href="?{{ request.GET.urlencode }}&export=pdf"><i class="fas fa-file-pdf"></i> Export to PDF</a></li>
+                                <li><a class="dropdown-item" href="?{{ request.GET.urlencode }}&export=csv"><i class="fas fa-file-csv"></i> Export to CSV</a></li>
+                                <li><a class="dropdown-item" href="?{{ request.GET.urlencode }}&export=json"><i class="fas fa-file-code"></i> Export to JSON</a></li>
                             </ul>
                         </div>
                         <button id="refresh-btn" class="btn btn-sm btn-primary">
@@ -870,6 +871,11 @@
                 .then(data => {
                     updateLogsTable(data.logs);
                     updateStatistics(data.stats);
+                    
+                    // Use the new functions to update methods and top stats
+                    if (data.common_methods) updateHttpMethods(data.common_methods);
+                    if (data.top_paths && data.top_ips) updateTopStats(data.top_paths, data.top_ips);
+                    
                     isUpdating = false;
                 })
                 .catch(error => {
@@ -949,6 +955,69 @@
                         statCard.appendChild(refreshIndicator);
                     }
                 }
+                
+                // Update debug information if visible
+                const debugSection = document.querySelector('.debug-section');
+                if (debugSection && debugSection.style.display !== 'none') {
+                    const debugParas = debugSection.querySelectorAll('p');
+                    if (debugParas.length >= 3) {
+                        debugParas[0].textContent = `Total logs: ${stats.total_logs}`;
+                        debugParas[1].textContent = `Period: ${stats.period_name}`;
+                        debugParas[2].textContent = `Status codes: 2xx: ${stats.status_2xx}, 3xx: ${stats.status_3xx}, 4xx: ${stats.status_4xx}, 5xx: ${stats.status_5xx}`;
+                    }
+                }
+            }
+            
+            // Add new function to update HTTP Methods
+            function updateHttpMethods(commonMethods) {
+                if (!commonMethods || !commonMethods.length) return;
+                
+                // Find the HTTP Methods container
+                const methodsContainer = document.querySelector('.stat-card:nth-child(3) .d-flex');
+                if (!methodsContainer) return;
+                
+                // Create HTML for methods
+                const methodsHtml = commonMethods.map(method => `
+                    <span class="method-badge method-${(method.request_method || 'unknown').toLowerCase()}">
+                        ${method.request_method || 'UNKNOWN'}: ${method.count}
+                    </span>
+                `).join('');
+                
+                // Update the container
+                methodsContainer.innerHTML = methodsHtml;
+            }
+            
+            // Add new function to update Top Stats
+            function updateTopStats(paths, ips) {
+                // Update top paths
+                if (paths && paths.length) {
+                    const pathsList = document.querySelector('.top-stats-card:nth-child(1) .top-stats-list');
+                    if (pathsList) {
+                        const pathsHtml = paths.map(path => `
+                            <li>
+                                <span class="item-label" title="${path.request_path}">${path.request_path}</span>
+                                <span class="item-count">${path.count}</span>
+                            </li>
+                        `).join('');
+                        
+                        pathsList.innerHTML = pathsHtml || '<li>No data available</li>';
+                    }
+                }
+                
+                // Update top IPs
+                if (ips && ips.length) {
+                    const ipsList = document.querySelector('.top-stats-card:nth-child(2) .top-stats-list');
+                    if (ipsList) {
+                        const ipsHtml = ips.map(ip => `
+                            <li>
+                                <span class="item-label">${ip.source_ip}</span>
+                                <span class="item-count">${ip.count}</span>
+                            </li>
+                        `).join('');
+                        
+                        ipsList.innerHTML = ipsHtml || '<li>No data available</li>';
+                    }
+                }
             }
             
             // Initial fetch after page loads
@@ -968,6 +1037,60 @@
                     }, 1000);
                 });
             }
+        }
+    </script>
+
+    <script>
+        // Add this right after the setupRealTimeUpdates function
+    
+        // Handle PDF export process
+        document.addEventListener('DOMContentLoaded', function() {
+            setupPdfExport();
+        });
+        
+        function setupPdfExport() {
+            // Find all PDF export links
+            const pdfExportLinks = document.querySelectorAll('.dropdown-item.export-link');
+            
+            pdfExportLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    // Check if this is the PDF export link
+                    if (this.href.includes('export=pdf')) {
+                        e.preventDefault();
+                        
+                        // Show loading state
+                        const exportButton = document.querySelector('.dropdown button');
+                        const originalButtonText = exportButton.innerHTML;
+                        exportButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating PDF...';
+                        exportButton.disabled = true;
+                        
+                        // Show notification if the function exists
+                        if (window.showNotification) {
+                            window.showNotification('Generating PDF report. This may take a moment...', 'info');
+                        }
+                        
+                        // Create a hidden iframe to handle the download
+                        const downloadFrame = document.createElement('iframe');
+                        downloadFrame.style.display = 'none';
+                        document.body.appendChild(downloadFrame);
+                        
+                        // Set up completion handlers
+                        setTimeout(() => {
+                            // Reset button after a delay (PDF generation might take time)
+                            exportButton.innerHTML = originalButtonText;
+                            exportButton.disabled = false;
+                            
+                            // Show success notification
+                            if (window.showNotification) {
+                                window.showNotification('PDF generated successfully!', 'success');
+                            }
+                        }, 3000); // Allow 3 seconds for PDF generation
+                        
+                        // Load the URL in the iframe
+                        downloadFrame.src = this.href;
+                    }
+                });
+            });
         }
     </script>
 </body>
