@@ -124,31 +124,31 @@ MITRE_ATTACK_MAPPINGS = {
 # Add secondary mappings for more specific detections
 ATTACK_PATTERN_MITRE_MAPPINGS = {
     # Command injection specific patterns
-    'cat[\s\n]+\/etc\/passwd': {
+    r'cat[\s\n]+\/etc\/passwd': {
         'tactic': 'Discovery',
         'tactic_id': 'TA0007',
         'technique': 'System Information Discovery',
         'technique_id': 'T1082'
     },
-    'nc[\s\n]+\-e': {
+    r'nc[\s\n]+\-e': {
         'tactic': 'Command and Control',
         'tactic_id': 'TA0011',
         'technique': 'Remote Access Software',
         'technique_id': 'T1219'
     },
-    'bash[\s\n]+\-i': {
+    r'bash[\s\n]+\-i': {
         'tactic': 'Command and Control',
         'tactic_id': 'TA0011', 
         'technique': 'Remote Access Software',
         'technique_id': 'T1219'
     },
-    'wget[\s\n]+http': {
+    r'wget[\s\n]+http': {
         'tactic': 'Command and Control',
         'tactic_id': 'TA0011',
         'technique': 'Ingress Tool Transfer',
         'technique_id': 'T1105'
     },
-    'curl[\s\n]+http': {
+    r'curl[\s\n]+http': {
         'tactic': 'Command and Control',
         'tactic_id': 'TA0011',
         'technique': 'Ingress Tool Transfer',
@@ -156,7 +156,7 @@ ATTACK_PATTERN_MITRE_MAPPINGS = {
     },
     
     # SQL injection specific patterns
-    'UNION[\s\n]+SELECT': {
+    r'UNION[\s\n]+SELECT': {
         'tactic': 'Collection',
         'tactic_id': 'TA0009',
         'technique': 'Data from Information Repositories',
@@ -170,7 +170,7 @@ ATTACK_PATTERN_MITRE_MAPPINGS = {
     },
     
     # Path traversal specific patterns
-    '\/etc\/passwd': {
+    r'\/etc\/passwd': {
         'tactic': 'Credential Access',
         'tactic_id': 'TA0006',
         'technique': 'OS Credential Dumping',
@@ -753,7 +753,7 @@ def process_logs_from_sources(sources, current_user=None):
                     source=source,
                     defaults={
                         'position': file_size,  # Set to current file size to mark as processed
-                        'last_read': timezone.now()
+                        'last_updated': timezone.now()
                     }
                 )
                 logger.info(f"Updated file position for {source.name} to {file_size}")
@@ -811,15 +811,42 @@ def process_logs_from_sources(sources, current_user=None):
 
 def create_parsed_log_from_raw(raw_log):
     from urllib.parse import unquote
-    import re
     from datetime import datetime
+    import hashlib
+    from django.core.cache import cache
     
     try:
+        # First check if this is a duplicate raw log by content hash
+        # Get raw log content and create a hash
+        log_content = raw_log.content
+        content_hash = hashlib.md5(log_content.encode('utf-8')).hexdigest()
+        
+        # Check if we've recently processed this exact log content
+        cache_key = f"processed_log:{content_hash}"
+        if cache.get(cache_key):
+            # We've already processed this exact log content recently
+            logger.debug(f"Skipping duplicate log content with hash {content_hash[:8]}")
+            raw_log.is_parsed = True
+            raw_log.save(update_fields=['is_parsed'])
+            return None
+            
+        # Set this content as processed for the next hour
+        cache.set(cache_key, True, 10800)  # 3 hours cache (increased from 1 hour)
+        
+        # Check for duplicate in database as a backup mechanism
+        existing_logs = ParsedLog.objects.filter(
+            raw_log__content=log_content,
+            timestamp__gte=timezone.now() - timezone.timedelta(hours=6)
+        ).exists()
+        
+        if existing_logs:
+            logger.debug(f"Found duplicate log content in database for hash {content_hash[:8]}")
+            raw_log.is_parsed = True
+            raw_log.save(update_fields=['is_parsed'])
+            return None
+        
         # Get source type safely
         source_type = raw_log.source.source_type if hasattr(raw_log, 'source') else ''
-        
-        # Get content
-        log_content = raw_log.content
         
         # Extract timestamp from raw_log or use current time
         log_timestamp = raw_log.timestamp if hasattr(raw_log, 'timestamp') else timezone.now()
@@ -1750,7 +1777,7 @@ def test_log_paths(request):
             'success': True,
             'apache': {'exists': False, 'readable': False, 'valid_log': False, 'size': 0, 'error': None},
             'mysql': {'exists': False, 'readable': False, 'valid_log': False, 'size': 0, 'error': None}
-        }
+                             }
         
         # Test Apache path if provided
         if apache_path:
@@ -2473,16 +2500,29 @@ def determine_mitre_classification(content, attack_type, attack_patterns=None):
     # First check for specific attack patterns (more accurate)
     if attack_patterns:
         for pattern in attack_patterns:
-            # Extract the regex pattern without the regex syntax
+            # Extract the pattern text without regex syntax
             pattern_text = pattern
-            if pattern.startswith('(?:'):
-                pattern_text = pattern[3:-1]  # Remove the non-capturing group syntax
-            elif pattern.startswith('r"') and pattern.endswith('"'):
-                pattern_text = pattern[2:-1]  # Remove r" and "
-                
-            # Try to find a match in our ATTACK_PATTERN_MITRE_MAPPINGS
+            if isinstance(pattern, str):
+                # Handle different pattern formats
+                if pattern.startswith('(?:'):
+                    pattern_text = pattern[3:-1]  # Remove non-capturing group syntax
+                elif pattern.startswith(r'r"') and pattern.endswith('"'):
+                    pattern_text = pattern[2:-1]  # Remove r" and "
+                elif pattern.startswith(r"r'") and pattern.endswith("'"):
+                    pattern_text = pattern[2:-1]  # Remove r' and '
+            
+            # Check against MITRE mappings - try exact first
             for key, mapping in ATTACK_PATTERN_MITRE_MAPPINGS.items():
-                if key in pattern_text:
+                # Remove 'r' prefix and quotes from raw string patterns
+                clean_key = key
+                if isinstance(key, str) and key.startswith('r'):
+                    if key.startswith(r'r"') and key.endswith('"'):
+                        clean_key = key[2:-1]
+                    elif key.startswith(r"r'") and key.endswith("'"):
+                        clean_key = key[2:-1]
+                
+                # Try to match the pattern
+                if clean_key in pattern_text or pattern_text in clean_key:
                     return (
                         mapping['tactic'],
                         mapping['tactic_id'],
@@ -2490,7 +2530,28 @@ def determine_mitre_classification(content, attack_type, attack_patterns=None):
                         mapping['technique_id']
                     )
     
-    # If specific pattern matching failed, use the general attack type
+    # If specific pattern matching failed, try content-based detection
+    for key, mapping in ATTACK_PATTERN_MITRE_MAPPINGS.items():
+        # Remove the 'r' prefix and quotes for raw string patterns
+        clean_key = key
+        if isinstance(key, str) and key.startswith('r'):
+            if key.startswith(r'r"') and key.endswith('"'):
+                clean_key = key[2:-1]
+            elif key.startswith(r"r'") and key.endswith("'"):
+                clean_key = key[2:-1]
+        
+        # Strip the regex syntax markers for comparison
+        clean_key = clean_key.replace(r'\s', ' ').replace(r'\n', '\n').replace(r'\/', '/')
+        
+        if clean_key in content:
+            return (
+                mapping['tactic'],
+                mapping['tactic_id'],
+                mapping['technique'],
+                mapping['technique_id']
+            )
+    
+    # If content-based detection failed, use the general attack type
     if attack_type and attack_type in MITRE_ATTACK_MAPPINGS:
         mapping = MITRE_ATTACK_MAPPINGS[attack_type]
         return (

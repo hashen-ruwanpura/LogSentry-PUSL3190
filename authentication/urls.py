@@ -108,4 +108,7 @@ urlpatterns = [
     # New dashboard counts API endpoint
     path('api/dashboard-counts/', views.dashboard_counts_api, name='dashboard_counts_api'),
 
+    # Security alerts API endpoint
+    path('api/security-alerts/', views.security_alerts_api, name='security_alerts_api'),
+
 ]

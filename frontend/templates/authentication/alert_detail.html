@@ -555,7 +555,15 @@
                             
                             <div class="detail-row">
                                 <div class="detail-label">Log Timestamp</div>
-                                <div class="detail-value">{{ related_log.timestamp|date:"M d, Y H:i:s" }}</div>
+                                <div class="detail-value">
+                                    {% if real_log_timestamp %}
+                                        {{ real_log_timestamp|date:"M d, Y H:i:s" }}
+                                    {% elif related_log.timestamp %}
+                                        {{ related_log.timestamp|date:"M d, Y H:i:s" }}
+                                    {% else %}
+                                        Not available
+                                    {% endif %}
+                                </div>
                             </div>
                             
                             {% if related_log.request_method %}

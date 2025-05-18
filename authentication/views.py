@@ -62,6 +62,72 @@ def get_start_date_from_timeframe(timeframe):
         return now - timedelta(days=30)
     else:  # Default to 1d
         return now - timedelta(days=1)
+def extract_timestamp_from_log(log_content, source_type):
+    """Extract timestamp from raw log content based on source type"""
+    if not log_content:
+        return timezone.now()
+        
+    # For Apache logs
+    if source_type and source_type.lower() in ('apache', 'apache_access'):
+        # Try multiple common Apache log formats
+        timestamp_patterns = [
+            r'\[(\d{2}/\w{3}/\d{4}:\d{2}:\d{2}:\d{2} [+\-]\d{4})\]',  # Standard Apache
+            r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})',                 # ISO format
+            r'(\d{2}/\w{3}/\d{4}:\d{2}:\d{2}:\d{2})'                  # Without timezone
+        ]
+        
+        for pattern in timestamp_patterns:
+            timestamp_match = re.search(pattern, log_content)
+            if timestamp_match:
+                try:
+                    time_str = timestamp_match.group(1)
+                    # Handle different formats
+                    if '/' in time_str and ':' in time_str:
+                        if '+' in time_str or '-' in time_str:
+                            parsed_time = datetime.strptime(time_str, '%d/%b/%Y:%H:%M:%S %z')
+                        else:
+                            parsed_time = datetime.strptime(time_str, '%d/%b/%Y:%H:%M:%S')
+                    else:
+                        parsed_time = datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S')
+                        
+                    # Make timezone-aware if needed
+                    if timezone.is_naive(parsed_time):
+                        parsed_time = timezone.make_aware(parsed_time)
+                    return parsed_time
+                except Exception as e:
+                    logger.debug(f"Failed to parse Apache timestamp with pattern {pattern}: {e}")
+    
+    # For MySQL logs
+    elif source_type and source_type.lower() in ('mysql', 'mysql_error'):
+        # Try multiple MySQL timestamp formats
+        timestamp_patterns = [
+            r'(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})',                # Standard MySQL
+            r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+Z)',            # ISO with Z
+            r'(\d{2}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})'                  # Short format
+        ]
+        
+        for pattern in timestamp_patterns:
+            timestamp_match = re.search(pattern, log_content)
+            if timestamp_match:
+                try:
+                    time_str = timestamp_match.group(1)
+                    # Handle different formats
+                    if 'T' in time_str and 'Z' in time_str:
+                        parsed_time = datetime.strptime(time_str, '%Y-%m-%dT%H:%M:%S.%fZ')
+                    elif '/' in time_str:
+                        parsed_time = datetime.strptime(time_str, '%m/%d/%y %H:%M:%S')
+                    else:
+                        parsed_time = datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S')
+                    
+                    # Make timezone-aware
+                    if timezone.is_naive(parsed_time):
+                        parsed_time = timezone.make_aware(parsed_time)
+                    return parsed_time
+                except Exception as e:
+                    logger.debug(f"Failed to parse MySQL timestamp with pattern {pattern}: {e}")
+                
+    # Default fallback to entry creation time if available
+    return timezone.now()
 
 # Add this safety check to both view functions after setting context
 def safe_render(request, template_name, context):
@@ -821,9 +887,22 @@ def alert_detail(request, alert_id):
         # Get the specific threat by ID
         threat = Threat.objects.get(id=alert_id)
         
+        # Initialize the context dictionary FIRST
+        context = {
+            'threat': threat,
+            'related_log': None,
+            'raw_log_content': None,
+            'real_log_timestamp': None,
+            'similar_threats': [],
+            'is_blacklisted': False,
+            'page_title': f"Alert Details: {threat.id}",
+            'ai_analysis': None,
+            'mitre_details': {}
+        }
+        
         # Handle form submissions
         if request.method == 'POST':
-            # Your existing POST handling code here
+            # Form handling code...
             pass
 
         # Get related parsed log if available
@@ -832,121 +911,77 @@ def alert_detail(request, alert_id):
         
         if hasattr(threat, 'parsed_log') and threat.parsed_log:
             related_log = threat.parsed_log
+            context['related_log'] = related_log
             
-            # Directly access the raw log content through proper relationship path
+            # Get raw log content - IMPROVED RETRIEVAL
             if hasattr(related_log, 'raw_log') and related_log.raw_log:
                 raw_log_content = related_log.raw_log.content
-            
-            # If raw_log_content is still None, check if we have normalized_data
-            if not raw_log_content and hasattr(related_log, 'normalized_data') and related_log.normalized_data:
-                if 'content' in related_log.normalized_data:
-                    raw_log_content = related_log.normalized_data['content']
-        
-        # IMPROVED FALLBACK: If raw log content wasn't found or is empty, try to get it from source file
-        if not raw_log_content and related_log and hasattr(related_log, 'request_path'):
-            try:
-                # Look for logs with matching request path
-                matching_logs = RawLog.objects.filter(
-                    content__icontains=related_log.request_path
-                ).order_by('-timestamp')[:5]  # Get most recent matches
+                context['raw_log_content'] = raw_log_content
                 
-                if matching_logs.exists():
-                    raw_log_content = matching_logs[0].content
-                    logger.info(f"Retrieved raw log via request path match: {related_log.request_path}")
-            except Exception as e:
-                logger.warning(f"Error trying to find log by path: {str(e)}")
+                # Extract timestamp from raw log content
+                if hasattr(related_log.raw_log, 'source') and related_log.raw_log.source:
+                    log_timestamp = extract_timestamp_from_log(
+                        raw_log_content, 
+                        related_log.raw_log.source.source_type
+                    )
+                    # Add the real timestamp to the context
+                    context['real_log_timestamp'] = log_timestamp
         
-        # If we still don't have raw log content, try to find the newest log with similar characteristics
-        if not raw_log_content and related_log:
+        # If raw_log_content is still None, try direct database lookup
+        if not raw_log_content and hasattr(threat, 'parsed_log') and threat.parsed_log:
             try:
-                # If we have source_ip, try to match by that and path
-                if threat.source_ip:
-                    # Look for logs that contain both the IP and the path if available
-                    query = Q(content__icontains=threat.source_ip)
+                # Try to get the raw log directly from the database
+                from log_ingestion.models import RawLog
+                if hasattr(threat.parsed_log, 'raw_log_id') and threat.parsed_log.raw_log_id:
+                    raw_log = RawLog.objects.get(id=threat.parsed_log.raw_log_id)
+                    raw_log_content = raw_log.content
+                    context['raw_log_content'] = raw_log_content
                     
-                    if hasattr(related_log, 'request_path') and related_log.request_path:
-                        query &= Q(content__icontains=related_log.request_path)
-                    
-                    # Match on timestamp (within a reasonable window) for better accuracy
-                    if hasattr(threat, 'created_at') and threat.created_at:
-                        time_window = timedelta(minutes=5)
-                        time_start = threat.created_at - time_window
-                        time_end = threat.created_at + time_window
-                        query &= Q(timestamp__range=(time_start, time_end))
-                    
-                    matching_logs = RawLog.objects.filter(query).order_by('-timestamp')[:1]
-                    
-                    if matching_logs.exists():
-                        raw_log_content = matching_logs[0].content
-                        logger.info(f"Found raw log by IP and path match for threat {alert_id}")
+                    # Extract timestamp from this raw log content
+                    if hasattr(raw_log, 'source'):
+                        log_timestamp = extract_timestamp_from_log(
+                            raw_log_content, 
+                            raw_log.source.source_type
+                        )
+                        context['real_log_timestamp'] = log_timestamp
             except Exception as e:
-                logger.warning(f"Error trying fallback log retrieval: {str(e)}")
-                
-        # If still no content, try one more approach - get any log with matching command injection signature
+                logger.warning(f"Failed to retrieve raw log directly: {e}")
+        
+        # ADVANCED: Find the raw log by matching command injection signature
         if not raw_log_content and "command_injection" in threat.description.lower():
             try:
-                matching_logs = RawLog.objects.filter(
-                    content__icontains=threat.source_ip,
-                    content__regex=r'(GET|POST|PUT|DELETE)\s+.*?phpmyadmin.*?\.php'
-                ).order_by('-timestamp')[:1]
+                from log_ingestion.models import RawLog
+                # Look for logs with specific command injection patterns
+                potential_logs = RawLog.objects.filter(
+                    content__icontains='/phpmyadmin/index.php',
+                    timestamp__gte=threat.created_at - timezone.timedelta(hours=24),
+                    timestamp__lte=threat.created_at + timezone.timedelta(hours=1)
+                ).order_by('-timestamp')[:5]  # Get the 5 most recent matching logs
                 
-                if matching_logs.exists():
-                    raw_log_content = matching_logs[0].content
-                    logger.info(f"Found raw log by command injection signature for threat {alert_id}")
+                if potential_logs.exists():
+                    raw_log_content = potential_logs[0].content
+                    context['raw_log_content'] = raw_log_content
+                    context['raw_log_note'] = "Related log found by command injection signature match"
+                    
+                    # Extract timestamp from this raw log content
+                    log_timestamp = extract_timestamp_from_log(
+                        raw_log_content, 
+                        potential_logs[0].source.source_type
+                    )
+                    context['real_log_timestamp'] = log_timestamp
             except Exception as e:
-                logger.warning(f"Error in final fallback log retrieval: {str(e)}")
-                
-        # IMPROVED: Ensure we have MITRE information - if missing, try to derive it from analysis_data
-        if (not threat.mitre_tactic or threat.mitre_tactic == 'Unclassified') and threat.analysis_data:
-            mitre_data = threat.analysis_data.get('mitre_tactic')
-            if mitre_data:
-                threat.mitre_tactic = mitre_data
-                threat.mitre_technique = threat.analysis_data.get('mitre_technique', '')
-                threat.save(update_fields=['mitre_tactic', 'mitre_technique'])
-            
-        # IMPROVED: Add MITRE ATT&CK details for better context
-        mitre_details = {}
-        if threat.mitre_tactic and threat.mitre_tactic != 'Unclassified':
-            # Lookup the full MITRE ATT&CK details
-            mitre_details = {
-                'tactic': threat.mitre_tactic,
-                'tactic_id': threat.analysis_data.get('mitre_tactic_id', '') if threat.analysis_data else '',
-                'technique': threat.mitre_technique,
-                'technique_id': threat.analysis_data.get('mitre_technique_id', '') if threat.analysis_data else '',
-                'url': f"https://attack.mitre.org/techniques/{threat.analysis_data.get('mitre_technique_id', '').split('.')[0]}" if threat.analysis_data and threat.analysis_data.get('mitre_technique_id') else ''
-            }
+                logger.warning(f"Failed to find logs by command injection: {e}")
         
-        # Get similar threats (same source IP or MITRE tactic)
+        # Get similar threats
         similar_threats = Threat.objects.filter(
             Q(source_ip=threat.source_ip) | Q(mitre_tactic=threat.mitre_tactic)
         ).exclude(id=threat.id).order_by('-created_at')[:5]
+        context['similar_threats'] = similar_threats
         
         # Check if IP is in blacklist
-        is_blacklisted = BlacklistedIP.objects.filter(ip_address=threat.source_ip).exists() if threat.source_ip else False
-        
-        # Check if we already have an AI analysis for this threat
-        ai_analysis = None
-        try:
-            threat_analysis = ThreatAnalysis.objects.filter(
-                threat=threat,
-                analysis_type='analyze'
-            ).order_by('-generated_at').first()
-            
-            if threat_analysis:
-                ai_analysis = threat_analysis.content
-        except Exception as e:
-            logger.warning(f"Error retrieving AI analysis for threat {alert_id}: {str(e)}")
-        
-        context = {
-            'threat': threat,
-            'related_log': related_log,
-            'raw_log_content': raw_log_content,
-            'similar_threats': similar_threats,
-            'is_blacklisted': is_blacklisted,
-            'page_title': f"Alert Details: {threat.id}",
-            'ai_analysis': ai_analysis,
-            'mitre_details': mitre_details,  # Add MITRE details to context
-        }
+        if threat.source_ip:
+            is_blacklisted = BlacklistedIP.objects.filter(ip_address=threat.source_ip).exists()
+            context['is_blacklisted'] = is_blacklisted
         
         return render(request, 'authentication/alert_detail.html', context)
         
@@ -1881,6 +1916,8 @@ def profile_stats_api(request):
     try:
         user = request.user
         
+
+        
         # Calculate statistics for the user
         # Time range for recent activities - last 30 days
         start_date = timezone.now() - timedelta(days=30)
@@ -1934,6 +1971,8 @@ def profile_stats_api(request):
                 'timestamp': log.analysis_time.strftime('%Y-%m-%d %H:%M:%S'),
                 'icon': "fas fa-search"
             })
+        
+       
         
         # Sort by timestamp
         recent_activities.sort(key=lambda x: x['timestamp'], reverse=True)
@@ -2452,3 +2491,73 @@ def dashboard_counts_api(request):
         'timeframe': timeframe,
         'last_updated': timezone.now().isoformat()
     })
+
+@login_required
+def security_alerts_api(request):
+    """API endpoint to get the latest security alerts for dashboard"""
+    try:
+        # Get timeframe parameter
+        timeframe = request.GET.get('timeframe', '1d')
+        
+        # Get the most recent time a threat was loaded by the client
+        last_update = request.GET.get('last_update')
+        
+        # Convert to datetime if provided
+        if last_update:
+            try:
+                last_update = timezone.datetime.fromisoformat(last_update.replace('Z', '+00:00'))
+            except (ValueError, TypeError):
+                last_update = None
+        
+        # Determine time range based on timeframe
+        start_time = get_start_date_from_timeframe(timeframe)
+        
+        # ENHANCED: Calculate a minimum acceptable time for "recent" alerts
+        # This ensures we only show truly recent alerts, regardless of when they were created
+        min_acceptable_time = timezone.now() - timezone.timedelta(hours=6)
+        if min_acceptable_time > start_time:
+            # If timeframe is long but we want recent alerts, use the minimum time
+            filtered_start_time = min_acceptable_time
+        else:
+            filtered_start_time = start_time
+        
+        # Get latest alerts with enhanced filtering
+        alerts_query = Threat.objects.filter(
+            created_at__gte=filtered_start_time
+        ).order_by('-created_at')
+        
+        # If last_update is provided, only get alerts newer than that
+        if last_update:
+            alerts_query = alerts_query.filter(created_at__gt=last_update)
+            
+        # Limit to 10 most recent alerts
+        alerts = alerts_query[:10]
+        
+        # Format for JSON response
+        alerts_data = []
+        for alert in alerts:
+            alerts_data.append({
+                'id': alert.id,
+                'created_at': alert.created_at.isoformat(),
+                'formatted_time': alert.created_at.strftime('%b %d, %H:%M'),
+                'source_ip': alert.source_ip or 'Unknown',
+                'severity': alert.severity,
+                'mitre_tactic': alert.mitre_tactic or 'Unclassified',
+                'description': alert.description,
+                'url': reverse('alert_detail', args=[alert.id])
+            })
+        
+        # Return alerts and new last_update timestamp
+        return JsonResponse({
+            'alerts': alerts_data,
+            'last_update': timezone.now().isoformat(),
+            'count': len(alerts_data),
+            'has_new': len(alerts_data) > 0
+        })
+    
+    except Exception as e:
+        logger.error(f"Error in security_alerts_api: {str(e)}")
+        return JsonResponse({
+            'error': str(e),
+            'alerts': []
+        }, status=500)
