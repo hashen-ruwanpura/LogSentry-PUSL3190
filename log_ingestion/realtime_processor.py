@@ -961,6 +961,7 @@ class RealtimeLogProcessor:
             from django.db.models import Count
             from django.core.cache import cache
             from datetime import timedelta
+            from threat_detection.models import Threat
             
             now = timezone.now()
             
@@ -979,12 +980,8 @@ class RealtimeLogProcessor:
             parsed_total = ParsedLog.objects.count()
             threat_total = ParsedLog.objects.filter(status__in=['suspicious', 'attack']).count()
             
-            # Store total counts in cache
-            cache.set('log_count_raw', raw_total, 60)
-            cache.set('log_count_parsed', parsed_total, 60)
-            cache.set('log_count_threats', threat_total, 60)
-            
-            # Store filtered counts for each time period
+            # STANDARDIZED CACHE KEYS - match what dashboard_view uses
+            # Cache the full dashboard metrics for each timeframe
             for period_key, start_time in time_periods.items():
                 try:
                     # Count logs in this time period
@@ -995,24 +992,107 @@ class RealtimeLogProcessor:
                         status__in=['suspicious', 'attack']
                     ).count()
                     
-                    # Store in cache with period-specific keys
-                    cache.set(f'log_count_raw_{period_key}', raw_count, 60)
-                    cache.set(f'log_count_parsed_{period_key}', parsed_count, 60)
-                    cache.set(f'log_count_threats_{period_key}', threat_count, 60)
+                    # High level alerts count (modify according to your schema)
+                    high_alerts = Threat.objects.filter(
+                        created_at__gte=start_time,
+                        severity__in=['high', 'critical']
+                    ).count()
+                    
+                    # Authentication metrics
+                    auth_failures = ParsedLog.objects.filter(
+                        timestamp__gte=start_time,
+                        status='failure'
+                    ).count()
+                    
+                    auth_success = ParsedLog.objects.filter(
+                        timestamp__gte=start_time,
+                        status='success'
+                    ).count()
+                    
+                    # Store in standardized dashboard_metrics format used in dashboard_view
+                    dashboard_metrics = {
+                        'total_logs': raw_count,
+                        'high_level_alerts': high_alerts,
+                        'auth_failures': auth_failures,
+                        'auth_success': auth_success,
+                        'parsed_count': parsed_count,
+                        'threat_count': threat_count,
+                        'apache_metrics': self._get_apache_metrics(start_time),
+                        'mysql_metrics': self._get_mysql_metrics(start_time),
+                        'last_updated': timezone.now().isoformat()
+                    }
+                    
+                    # Store in unified cache key format
+                    unified_cache_key = f"dashboard_metrics:{period_key}"
+                    cache.set(unified_cache_key, dashboard_metrics, 60)
+                    
                 except Exception as e:
                     logger.error(f"Error calculating counts for period {period_key}: {e}")
-            
+        
             # Report the 24h counts in logs for reference
             period_24h = '1d'
-            raw_24h = cache.get(f'log_count_raw_{period_24h}') or 0
-            threat_24h = cache.get(f'log_count_threats_{period_24h}') or 0
+            dashboard_24h = cache.get(f"dashboard_metrics:{period_24h}") or {}
+            raw_24h = dashboard_24h.get('total_logs', 0)
+            threat_24h = dashboard_24h.get('high_level_alerts', 0)
             
             logger.info(f"Refreshed dashboard counts: {raw_total} total raw logs, {raw_24h} in last 24h, {threat_total} total threats, {threat_24h} in last 24h")
             return True
         except Exception as e:
             logger.error(f"Error refreshing dashboard counts: {str(e)}")
             return False
-            
+
+    # Helper method to get Apache metrics
+    def _get_apache_metrics(self, start_time):
+        from django.db.models import Q
+        
+        # Get Apache logs count
+        apache_count = RawLog.objects.filter(
+            Q(source__source_type='apache') | Q(source__source_type='apache_access'),
+            timestamp__gte=start_time
+        ).count()
+        
+        # Get Apache errors
+        apache_4xx = ParsedLog.objects.filter(
+            raw_log__source__source_type__in=['apache', 'apache_access'],
+            raw_log__timestamp__gte=start_time,
+            status_code__gte=400,
+            status_code__lt=500
+        ).count()
+        
+        apache_5xx = ParsedLog.objects.filter(
+            raw_log__source__source_type__in=['apache', 'apache_access'],
+            raw_log__timestamp__gte=start_time,
+            status_code__gte=500
+        ).count()
+        
+        return {
+            'total_requests': apache_count,
+            'client_errors': apache_4xx,
+            'server_errors': apache_5xx
+        }
+
+    # Helper method to get MySQL metrics
+    def _get_mysql_metrics(self, start_time):
+        from django.db.models import Q
+        
+        # Get MySQL logs count
+        mysql_count = RawLog.objects.filter(
+            Q(source__source_type='mysql') | Q(source__source_type='mysql_error'),
+            timestamp__gte=start_time
+        ).count()
+        
+        # Get slow queries
+        mysql_slow = ParsedLog.objects.filter(
+            Q(raw_log__source__source_type='mysql') | Q(raw_log__source__source_type='mysql_error'),
+            raw_log__timestamp__gte=start_time,
+            execution_time__gt=1.0
+        ).count()
+        
+        return {
+            'total_queries': mysql_count,
+            'slow_queries': mysql_slow
+        }
+    
     def stop(self):
         """Stop the real-time log processor"""
         if not self.running:

@@ -178,6 +178,99 @@ ATTACK_PATTERN_MITRE_MAPPINGS = {
     }
 }
 
+# Add these new mappings to the ATTACK_PATTERN_MITRE_MAPPINGS dictionary
+ATTACK_PATTERN_MITRE_MAPPINGS.update({
+    # Command execution patterns
+    r'exec\s*\(': {
+        'tactic': 'Execution',
+        'tactic_id': 'TA0002',
+        'technique': 'Command and Scripting Interpreter: PHP',
+        'technique_id': 'T1059.001'
+    },
+    r'system\s*\(': {
+        'tactic': 'Execution',
+        'tactic_id': 'TA0002',
+        'technique': 'Command and Scripting Interpreter: PHP',
+        'technique_id': 'T1059.001'
+    },
+    r'eval\s*\(': {
+        'tactic': 'Execution',
+        'tactic_id': 'TA0002',
+        'technique': 'Command and Scripting Interpreter: PHP',
+        'technique_id': 'T1059.001'
+    },
+    r'shell_exec\s*\(': {
+        'tactic': 'Execution',
+        'tactic_id': 'TA0002',
+        'technique': 'Command and Scripting Interpreter: PHP',
+        'technique_id': 'T1059.001'
+    },
+    
+    # Common admin interface access
+    r'/phpmyadmin': {
+        'tactic': 'Initial Access',
+        'tactic_id': 'TA0001',
+        'technique': 'Valid Accounts: Default Accounts',
+        'technique_id': 'T1078.001'
+    },
+    r'/admin': {
+        'tactic': 'Initial Access',
+        'tactic_id': 'TA0001',
+        'technique': 'Valid Accounts: Default Accounts',
+        'technique_id': 'T1078.001'
+    },
+    
+    # Common discovery commands
+    r'ls\s+-la': {
+        'tactic': 'Discovery',
+        'tactic_id': 'TA0007',
+        'technique': 'File and Directory Discovery',
+        'technique_id': 'T1083'
+    },
+    r'cat\s+/proc': {
+        'tactic': 'Discovery',
+        'tactic_id': 'TA0007',
+        'technique': 'System Information Discovery',
+        'technique_id': 'T1082'
+    },
+    r'uname\s+-a': {
+        'tactic': 'Discovery',
+        'tactic_id': 'TA0007',
+        'technique': 'System Information Discovery',
+        'technique_id': 'T1082'
+    },
+    
+    # Malware delivery patterns
+    r'\.exe\s+download': {
+        'tactic': 'Command and Control',
+        'tactic_id': 'TA0011',
+        'technique': 'Ingress Tool Transfer',
+        'technique_id': 'T1105'
+    },
+    r'powershell\s+-e': {
+        'tactic': 'Execution',
+        'tactic_id': 'TA0002',
+        'technique': 'PowerShell',
+        'technique_id': 'T1059.001'
+    },
+    
+    # File upload attacks
+    r'file_uploads': {
+        'tactic': 'Defense Evasion',
+        'tactic_id': 'TA0005',
+        'technique': 'Upload Malicious Tool',
+        'technique_id': 'T1608.001'
+    },
+    
+    # Enhanced classification for phpMyAdmin
+    r'/phpmyadmin/index\.php': {
+        'tactic': 'Initial Access',
+        'tactic_id': 'TA0001',
+        'technique': 'Valid Accounts: Default Accounts',
+        'technique_id': 'T1078.001'
+    },
+})
+
 
 @login_required
 def settings_view(request):
@@ -1777,7 +1870,7 @@ def test_log_paths(request):
             'success': True,
             'apache': {'exists': False, 'readable': False, 'valid_log': False, 'size': 0, 'error': None},
             'mysql': {'exists': False, 'readable': False, 'valid_log': False, 'size': 0, 'error': None}
-                             }
+                                                     }
         
         # Test Apache path if provided
         if apache_path:
@@ -2481,7 +2574,7 @@ def upload_log_file(request):
 
 def determine_mitre_classification(content, attack_type, attack_patterns=None):
     """
-    Determines the MITRE ATT&CK tactic and technique based on attack type and content
+    Enhanced MITRE ATT&CK framework classification with multi-layer analysis
     
     Args:
         content (str): The log content to analyze
@@ -2491,38 +2584,62 @@ def determine_mitre_classification(content, attack_type, attack_patterns=None):
     Returns:
         tuple: (tactic, tactic_id, technique, technique_id)
     """
-    # Default values if no mapping is found
-    default_tactic = "Unclassified"
-    default_technique = ""
-    default_tactic_id = ""
-    default_technique_id = ""
+    # Initialize context extraction
+    context_data = {
+        'is_admin_interface': False,
+        'has_command_chars': False,
+        'urls': [],
+        'commands': []
+    }
     
-    # First check for specific attack patterns (more accurate)
+    # Extract context from content
+    if content:
+        # Check if accessing admin interfaces
+        admin_paths = ['phpmyadmin', 'wp-admin', '/admin', '/administrator']
+        context_data['is_admin_interface'] = any(p in content.lower() for p in admin_paths)
+        
+        # Check for command injection characters
+        command_chars = [';', '|', '&&', '`', '$(',')']
+        context_data['has_command_chars'] = any(c in content for c in command_chars)
+        
+        # Extract URLs
+        url_matches = re.findall(r'(?:GET|POST|PUT|DELETE)\s+([^\s]+)', content)
+        context_data['urls'] = url_matches
+        
+        # Extract potential command patterns
+        command_matches = re.findall(r'(?:;|&&|\||\$\(|\`)\s*([a-zA-Z0-9_/.\-]+)', content)
+        context_data['commands'] = command_matches
+    
+    # 1. LAYER 1: Check for specific attack patterns with highest priority
     if attack_patterns:
         for pattern in attack_patterns:
-            # Extract the pattern text without regex syntax
             pattern_text = pattern
+            
+            # Handle different pattern formats
             if isinstance(pattern, str):
-                # Handle different pattern formats
                 if pattern.startswith('(?:'):
                     pattern_text = pattern[3:-1]  # Remove non-capturing group syntax
-                elif pattern.startswith(r'r"') and pattern.endswith('"'):
+                elif pattern.startswith('r"') and pattern.endswith('"'):
                     pattern_text = pattern[2:-1]  # Remove r" and "
-                elif pattern.startswith(r"r'") and pattern.endswith("'"):
+                elif pattern.startswith("r'") and pattern.endswith("'"):
                     pattern_text = pattern[2:-1]  # Remove r' and '
             
-            # Check against MITRE mappings - try exact first
+            # Direct mapping lookup
             for key, mapping in ATTACK_PATTERN_MITRE_MAPPINGS.items():
-                # Remove 'r' prefix and quotes from raw string patterns
                 clean_key = key
                 if isinstance(key, str) and key.startswith('r'):
+                    # Handle raw string patterns
                     if key.startswith(r'r"') and key.endswith('"'):
                         clean_key = key[2:-1]
                     elif key.startswith(r"r'") and key.endswith("'"):
                         clean_key = key[2:-1]
                 
-                # Try to match the pattern
+                # Strip regex markers for better comparisons
+                clean_key = clean_key.replace(r'\s', ' ').replace(r'\n', '\n')
+                pattern_text = pattern_text.replace(r'\s', ' ').replace(r'\n', '\n')
+                
                 if clean_key in pattern_text or pattern_text in clean_key:
+                    logger.debug(f"MITRE match via attack pattern: {clean_key} -> {mapping['technique']}")
                     return (
                         mapping['tactic'],
                         mapping['tactic_id'],
@@ -2530,9 +2647,9 @@ def determine_mitre_classification(content, attack_type, attack_patterns=None):
                         mapping['technique_id']
                     )
     
-    # If specific pattern matching failed, try content-based detection
+    # 2. LAYER 2: Check content against pattern mappings
     for key, mapping in ATTACK_PATTERN_MITRE_MAPPINGS.items():
-        # Remove the 'r' prefix and quotes for raw string patterns
+        # Clean up key for comparison
         clean_key = key
         if isinstance(key, str) and key.startswith('r'):
             if key.startswith(r'r"') and key.endswith('"'):
@@ -2540,20 +2657,36 @@ def determine_mitre_classification(content, attack_type, attack_patterns=None):
             elif key.startswith(r"r'") and key.endswith("'"):
                 clean_key = key[2:-1]
         
-        # Strip the regex syntax markers for comparison
+        # Strip regex markers for text comparison
         clean_key = clean_key.replace(r'\s', ' ').replace(r'\n', '\n').replace(r'\/', '/')
         
-        if clean_key in content:
+        # Try exact matching and substring matching with case insensitivity
+        if clean_key.lower() in content.lower():
+            logger.debug(f"MITRE match via content pattern: {clean_key} -> {mapping['technique']}")
             return (
                 mapping['tactic'],
                 mapping['tactic_id'],
                 mapping['technique'],
                 mapping['technique_id']
             )
+            
+        # Try regex matching as a fallback
+        try:
+            if re.search(key, content, re.IGNORECASE):
+                logger.debug(f"MITRE match via regex pattern: {key} -> {mapping['technique']}")
+                return (
+                    mapping['tactic'],
+                    mapping['tactic_id'],
+                    mapping['technique'],
+                    mapping['technique_id']
+                )
+        except:
+            pass  # Ignore regex errors and continue
     
-    # If content-based detection failed, use the general attack type
+    # 3. LAYER 3: Check general attack type mapping
     if attack_type and attack_type in MITRE_ATTACK_MAPPINGS:
         mapping = MITRE_ATTACK_MAPPINGS[attack_type]
+        logger.debug(f"MITRE match via attack type: {attack_type} -> {mapping['technique']}")
         return (
             mapping['tactic'],
             mapping['tactic_id'],
@@ -2561,25 +2694,131 @@ def determine_mitre_classification(content, attack_type, attack_patterns=None):
             mapping['technique_id']
         )
     
-    # Use specific content-based detection for common cases
-    if "phpMyAdmin" in content and any(cmd in content.lower() for cmd in [";", "|", "&&"]):
-        # phpMyAdmin command injection is very specific - Execution via web shell
-        return (
-            "Execution",
-            "TA0002",
-            "Command and Scripting Interpreter: PHP",
-            "T1059.001"
-        )
+    # 4. LAYER 4: Context-based detection with extracted data
     
-    # Check for common web vulnerabilities targeting admin interfaces
-    if any(x in content for x in ["/wp-admin", "/admin", "/administrator", "/phpmyadmin"]):
-        if "login" in content.lower() and any(x in content.lower() for x in ["=", "post", "auth"]):
+    # 4.1 PhpMyAdmin with command injection (extremely common in your logs)
+    if "phpMyAdmin" in content or "/phpmyadmin" in content:
+        if context_data['has_command_chars'] or any(cmd in content for cmd in ['cat', 'wget', 'curl', 'bash']):
+            logger.debug("MITRE match via phpMyAdmin command injection context")
             return (
-                "Initial Access", 
-                "TA0001",
-                "Valid Accounts: Default Accounts",
+                "Execution", 
+                "TA0002",
+                "Command and Scripting Interpreter: PHP",
+                "T1059.001"
+            )
+        else:
+            # phpMyAdmin access without obvious command injection
+            logger.debug("MITRE match via phpMyAdmin access")
+            return (
+                "Initial Access",
+                "TA0001", 
+                "Valid Accounts: Default Accounts", 
                 "T1078.001"
             )
     
-    return (default_tactic, default_tactic_id, default_technique, default_technique_id)
+    # 4.2 Command injection detection with URL patterns
+    if context_data['has_command_chars'] and (attack_type == 'command_injection' or not attack_type):
+        # Found command chars - check if specific commands are identifiable
+        if any(cmd in content.lower() for cmd in ['wget', 'curl', 'fetch']):
+            logger.debug("MITRE match via download commands")
+            return (
+                "Command and Control",
+                "TA0011",
+                "Ingress Tool Transfer",
+                "T1105"
+            )
+        elif any(cmd in content.lower() for cmd in ['cat', 'type', 'ls', 'dir']):
+            logger.debug("MITRE match via discovery commands")
+            return (
+                "Discovery",
+                "TA0007",
+                "File and Directory Discovery",
+                "T1083"
+            )
+        else:
+            # Generic command execution
+            logger.debug("MITRE match via generic command execution")
+            return (
+                "Execution",
+                "TA0002",
+                "Command and Scripting Interpreter",
+                "T1059"
+            )
+    
+    # 4.3 SQL Injection patterns
+    if 'UNION SELECT' in content or 'information_schema' in content or attack_type == 'sql_injection':
+        return (
+            "Credential Access",
+            "TA0006",
+            "Exploitation for Credential Access",
+            "T1212"
+        )
+    
+    # 4.4 Admin interface access attempts
+    if context_data['is_admin_interface']:
+        return (
+            "Initial Access",
+            "TA0001",
+            "Valid Accounts: Default Accounts",
+            "T1078.001"
+        )
+    
+    # 4.5 URL path traversal detection
+    if any(p in content for p in ['../', '..\\', '%2e%2e']):
+        return (
+            "Discovery",
+            "TA0007",
+            "File and Directory Discovery",
+            "T1083"
+        )
+    
+    # 5. LAYER 5: Heuristic content analysis as last resort
+    # This ensures we never leave attacks as "Unclassified"
+    
+    # Last resort - analyze URL patterns for classification
+    url_path = ""
+    if context_data['urls'] and context_data['urls'][0]:
+        url_path = context_data['urls'][0]
+    
+    # Check URL paths
+    if url_path:
+        if '/wp-' in url_path or '/admin' in url_path or 'login' in url_path:
+            return (
+                "Initial Access",
+                "TA0001",
+                "Valid Accounts",
+                "T1078"
+            )
+        elif '.php' in url_path:
+            return (
+                "Execution",
+                "TA0002", 
+                "Command and Scripting Interpreter: PHP",
+                "T1059.001"
+            )
+    
+    # If all else fails, make an educated guess based on available info
+    if attack_type:
+        if 'injection' in attack_type:
+            return (
+                "Execution",
+                "TA0002",
+                "Command and Scripting Interpreter",
+                "T1059"
+            )
+        elif 'xss' in attack_type.lower() or attack_type == 'csrf':
+            return (
+                "Defense Evasion",
+                "TA0005",
+                "Exploit Public-Facing Application",
+                "T1190"
+            )
+    
+    # Final fallback that still provides some classification
+    return (
+        "Initial Access",
+        "TA0001",
+        "Exploit Public-Facing Application",
+        "T1190"
+    )
 

@@ -222,6 +222,12 @@ def dashboard_view(request):
     # Get the timeframe parameter
     timeframe = request.GET.get('timeframe', '1d')
     
+    # Force cache refresh if requested
+    refresh_cache = request.GET.get('refresh', '0') == '1'
+    
+    # Cache key based on timeframe
+    cache_key = f"dashboard_metrics:{timeframe}"
+    
     # Determine the time range based on timeframe parameter
     now = timezone.now()
     if timeframe == '1h':
@@ -244,120 +250,164 @@ def dashboard_view(request):
         period_name = 'Last 24 Hours'
         timeframe = '1d'
 
-    # Get log metrics - updated to include correct source types
-    total_logs = RawLog.objects.filter(timestamp__gte=start_time).count()
+    # Try to get metrics from cache first
+    context = None
+    if not refresh_cache:
+        from django.core.cache import cache
+        context = cache.get(cache_key)
     
-    # Get Apache logs - updated to match actual source type
-    apache_count = RawLog.objects.filter(
-        Q(source__source_type='apache_access') | Q(source__source_type='apache'),
-        timestamp__gte=start_time
-    ).count()
-    
-    # Get MySQL logs - updated to include both mysql and mysql_error
-    mysql_count = RawLog.objects.filter(
-        Q(source__source_type='mysql') | Q(source__source_type='mysql_error'), 
-        timestamp__gte=start_time
-    ).count()
-    
-    # Get Apache errors - CORRECTED FIELD ACCESS
-    apache_4xx = ParsedLog.objects.filter(
-        Q(raw_log__source__source_type='apache_access') | Q(raw_log__source__source_type='apache'),
-        raw_log__timestamp__gte=start_time,
-        status_code__gte=400,
-        status_code__lt=500
-    ).count()
-    
-    apache_5xx = ParsedLog.objects.filter(
-        Q(raw_log__source__source_type='apache_access') | Q(raw_log__source__source_type='apache'),
-        raw_log__timestamp__gte=start_time,
-        status_code__gte=500
-    ).count()
-    
-    # Get MySQL slow queries - CORRECTED FIELD ACCESS
-    mysql_slow = ParsedLog.objects.filter(
-        Q(raw_log__source__source_type='mysql') | Q(raw_log__source__source_type='mysql_error'),
-        raw_log__timestamp__gte=start_time,
-        execution_time__gte=1.0  # Queries taking more than 1 second
-    ).count()
-    
-    # Calculate Apache percentages instead of using template filters
-    if apache_count > 0:
-        apache_success_percentage = ((apache_count - apache_4xx - apache_5xx) / apache_count) * 100
-        apache_4xx_percentage = (apache_4xx / apache_count) * 100
-        apache_5xx_percentage = (apache_5xx / apache_count) * 100
+    # If context is None, calculate metrics
+    if context is None:
+        # Get log metrics with optimized aggregation
+        from django.db.models import Count, Q
+        
+        # Only make database queries that are absolutely needed
+        # Use prefetch_related and select_related to reduce query count
+        total_logs = RawLog.objects.filter(timestamp__gte=start_time).count()
+        
+        # Get Apache logs - optimize with a single query and filter in Python
+        apache_logs = list(RawLog.objects.filter(
+            Q(source__source_type='apache_access') | Q(source__source_type='apache'),
+            timestamp__gte=start_time
+        ).values('id', 'source__source_type'))
+        
+        apache_count = len(apache_logs)
+        
+        # Get MySQL logs - optimized with the same approach
+        mysql_logs = list(RawLog.objects.filter(
+            Q(source__source_type='mysql') | Q(source__source_type='mysql_error'), 
+            timestamp__gte=start_time
+        ).values('id', 'source__source_type'))
+        
+        mysql_count = len(mysql_logs)
+        
+        # For error metrics, use efficient bulk queries
+        # We fetch parsed logs with their relationships in a single query
+        parsed_logs = ParsedLog.objects.select_related('raw_log', 'raw_log__source').filter(
+            raw_log__timestamp__gte=start_time
+        )
+        
+        # Process parsed logs in Python to avoid multiple DB queries
+        apache_4xx = 0
+        apache_5xx = 0
+        mysql_slow = 0
+        auth_failures = 0
+        auth_success = 0
+        
+        # Process parsed logs in memory
+        for log in parsed_logs:
+            if log.raw_log and log.raw_log.source:
+                source_type = log.raw_log.source.source_type
+                if source_type in ('apache', 'apache_access'):
+                    if log.status_code and 400 <= log.status_code < 500:
+                        apache_4xx += 1
+                    elif log.status_code and log.status_code >= 500:
+                        apache_5xx += 1
+                elif source_type in ('mysql', 'mysql_error'):
+                    if log.execution_time and log.execution_time >= 1.0:
+                        mysql_slow += 1
+            
+            # Track authentication metrics
+            if log.status == 'failure':
+                auth_failures += 1
+            elif log.status == 'success':
+                auth_success += 1
+        
+        # Calculate percentages
+        if apache_count > 0:
+            apache_success_percentage = ((apache_count - apache_4xx - apache_5xx) / apache_count) * 100
+            apache_4xx_percentage = (apache_4xx / apache_count) * 100
+            apache_5xx_percentage = (apache_5xx / apache_count) * 100
+        else:
+            apache_success_percentage = 0
+            apache_4xx_percentage = 0
+            apache_5xx_percentage = 0
+        
+        if mysql_count > 0:
+            mysql_fast_percentage = ((mysql_count - mysql_slow) / mysql_count) * 100
+            mysql_slow_percentage = (mysql_slow / mysql_count) * 100
+        else:
+            mysql_fast_percentage = 0
+            mysql_slow_percentage = 0
+        
+        # Get security alerts count - this is important so we do a direct query
+        high_level_alerts = Threat.objects.filter(
+            created_at__gte=start_time,
+            severity__in=['high', 'critical']
+        ).count()
+        
+        # Get recent security alerts - this needs to be fresh
+        security_alerts = Threat.objects.filter(
+            created_at__gte=start_time
+        ).order_by('-created_at')[:10]
+        
+        # Generate chart data
+        chart_labels, alerts_data = generate_alerts_chart_data(start_time, now)
+        mitre_labels, mitre_data = generate_mitre_chart_data(start_time)
+        
+        # Build the context dict
+        context = {
+            'period_name': period_name,
+            'timeframe': timeframe,
+            'total_logs': total_logs,
+            'high_level_alerts': high_level_alerts,
+            'auth_failures': auth_failures,
+            'auth_success': auth_success,
+            'apache_count': apache_count,
+            'apache_4xx': apache_4xx,
+            'apache_5xx': apache_5xx,
+            'mysql_count': mysql_count,
+            'mysql_slow': mysql_slow,
+            'chart_labels': json.dumps(chart_labels),
+            'alerts_data': json.dumps(alerts_data),
+            'mitre_labels': json.dumps(mitre_labels),
+            'mitre_data': json.dumps(mitre_data),
+            'apache_success_percentage': apache_success_percentage,
+            'apache_4xx_percentage': apache_4xx_percentage,
+            'apache_5xx_percentage': apache_5xx_percentage,
+            'mysql_fast_percentage': mysql_fast_percentage,
+            'mysql_slow_percentage': mysql_slow_percentage,
+            'ai_reports_url': reverse('ai_analytics:reports_dashboard'),
+            'cache_timestamp': timezone.now(),
+            'features': [
+                {
+                    'title': 'AI-Powered Reports',
+                    'icon': 'fas fa-robot',
+                    'description': 'Generate intelligent security analysis with AI',
+                    'url': reverse('ai_analytics:reports_dashboard'),
+                    'color': 'primary'
+                }
+            ]
+        }
+        
+        # Store security_alerts separately (won't be cached)
+        alerts_list = list(security_alerts)
+        
+        # Cache the metrics for future requests (excluding the alerts which need to be fresh)
+        # This is the key optimization - storing computed metrics in cache
+        from django.core.cache import cache
+        context_to_cache = context.copy()
+        context_to_cache.pop('security_alerts', None)
+        
+        # Cache timeout depends on timeframe - longer timeframes can be cached longer
+        if timeframe in ['7d', '30d']:
+            cache_timeout = 300  # 5 minutes for longer timeframes
+        else:
+            cache_timeout = 60   # 1 minute for shorter timeframes
+            
+        cache.set(cache_key, context_to_cache, cache_timeout)
+        
+        # Add the fresh security alerts back to the context for rendering
+        context['security_alerts'] = alerts_list
     else:
-        apache_success_percentage = 0
-        apache_4xx_percentage = 0
-        apache_5xx_percentage = 0
-    
-    # Calculate MySQL percentages instead of using template filters
-    if mysql_count > 0:
-        mysql_fast_percentage = ((mysql_count - mysql_slow) / mysql_count) * 100
-        mysql_slow_percentage = (mysql_slow / mysql_count) * 100
-    else:
-        mysql_fast_percentage = 0
-        mysql_slow_percentage = 0
-    
-    # Get security alerts count
-    high_level_alerts = Threat.objects.filter(
-        created_at__gte=start_time,
-        severity__in=['high', 'critical']
-    ).count()
-    
-    # Get authentication metrics - CORRECTED FIELD ACCESS
-    auth_failures = ParsedLog.objects.filter(
-        raw_log__timestamp__gte=start_time,
-        status='failure'  # Assuming this is the correct field name
-    ).count()
-    
-    auth_success = ParsedLog.objects.filter(
-        raw_log__timestamp__gte=start_time,
-        status='success'  # Assuming this is the correct field name
-    ).count()
-    
-    # Get recent security alerts
-    security_alerts = Threat.objects.filter(
-        created_at__gte=start_time
-    ).order_by('-created_at')[:10]  # Latest 10 alerts
-    
-    # Generate chart data
-    chart_labels, alerts_data = generate_alerts_chart_data(start_time, now)
-    mitre_labels, mitre_data = generate_mitre_chart_data(start_time)
-    
-    context = {
-        'period_name': period_name,
-        'timeframe': timeframe,
-        'total_logs': total_logs,
-        'high_level_alerts': high_level_alerts,
-        'auth_failures': auth_failures,
-        'auth_success': auth_success,
-        'apache_count': apache_count,
-        'apache_4xx': apache_4xx,
-        'apache_5xx': apache_5xx,
-        'mysql_count': mysql_count,
-        'mysql_slow': mysql_slow,
-        'security_alerts': security_alerts,
-        'chart_labels': json.dumps(chart_labels),
-        'alerts_data': json.dumps(alerts_data),
-        'mitre_labels': json.dumps(mitre_labels),
-        'mitre_data': json.dumps(mitre_data),
-        'apache_success_percentage': apache_success_percentage,
-        'apache_4xx_percentage': apache_4xx_percentage,
-        'apache_5xx_percentage': apache_5xx_percentage,
-        'mysql_fast_percentage': mysql_fast_percentage,
-        'mysql_slow_percentage': mysql_slow_percentage,
-        'ai_reports_url': reverse('ai_analytics:reports_dashboard'),
-        'features': [
-            {
-                'title': 'AI-Powered Reports',
-                'icon': 'fas fa-robot',
-                'description': 'Generate intelligent security analysis with AI',
-                'url': reverse('ai_analytics:reports_dashboard'),
-                'color': 'primary'
-            }
-        ]
-    }
-    
+        # If we got context from cache, we still need fresh security alerts
+        security_alerts = Threat.objects.filter(
+            created_at__gte=start_time
+        ).order_by('-created_at')[:10]
+        context['security_alerts'] = security_alerts
+        
+        # Log cache hit
+        logger.debug(f"Dashboard cache hit for timeframe {timeframe}")
     
     return render(request, 'authentication/dashboard.html', context)
 
@@ -2430,6 +2480,24 @@ def dashboard_counts_api(request):
     # Get the timeframe parameter from the request or use the default
     timeframe = request.GET.get('timeframe', '1d')
     
+    # First try to get metrics from standardized cache format used by force_refresh_dashboard
+    cache_key = f"dashboard_metrics:{timeframe}"
+    dashboard_metrics = cache.get(cache_key)
+    
+    # If standardized cache hit, return the metrics in the expected format
+    if dashboard_metrics is not None:
+        return JsonResponse({
+            'raw_count': dashboard_metrics.get('total_logs', 0),
+            'parsed_count': dashboard_metrics.get('parsed_count', 0),
+            'threat_count': dashboard_metrics.get('threat_count', 0),
+            'high_level_alerts': dashboard_metrics.get('high_level_alerts', 0),
+            'auth_failures': dashboard_metrics.get('auth_failures', 0),
+            'auth_success': dashboard_metrics.get('auth_success', 0),
+            'timeframe': timeframe,
+            'last_updated': dashboard_metrics.get('last_updated', timezone.now().isoformat())
+        })
+    
+    # If not in standardized cache, fall back to original implementation
     # Determine the time range based on timeframe parameter
     now = timezone.now()
     if timeframe == '1h':
@@ -2455,6 +2523,7 @@ def dashboard_counts_api(request):
     raw_count = cache.get(f'log_count_raw{cache_key_suffix}')
     parsed_count = cache.get(f'log_count_parsed{cache_key_suffix}')
     threat_count = cache.get(f'log_count_threats{cache_key_suffix}')
+    high_level_alerts = cache.get(f'high_level_alerts{cache_key_suffix}')
     
     # If not in cache, query the database with time filter
     if raw_count is None:
@@ -2484,10 +2553,31 @@ def dashboard_counts_api(request):
             logger.error(f"Error counting threats: {e}")
             threat_count = 0
     
+    # ADDED: Query for high level alerts if not in cache
+    if high_level_alerts is None:
+        try:
+            high_level_alerts = Threat.objects.filter(
+                created_at__gte=start_time,
+                severity__in=['high', 'critical']
+            ).count()
+            cache.set(f'high_level_alerts{cache_key_suffix}', high_level_alerts, 60)
+        except Exception as e:
+            logger.error(f"Error counting high level alerts: {e}")
+            high_level_alerts = 0
+    
+    # Trigger a background refresh of the standardized cache for next time
+    try:
+        from log_ingestion.realtime_processor import RealtimeLogProcessor
+        processor = RealtimeLogProcessor.get_instance()
+        processor.force_refresh_dashboard()
+    except Exception as e:
+        logger.warning(f"Could not trigger dashboard refresh: {str(e)}")
+    
     return JsonResponse({
         'raw_count': raw_count,
         'parsed_count': parsed_count,
         'threat_count': threat_count,
+        'high_level_alerts': high_level_alerts,  # ADDED: Include high_level_alerts in the response
         'timeframe': timeframe,
         'last_updated': timezone.now().isoformat()
     })
