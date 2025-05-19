@@ -1268,14 +1268,17 @@
             // Sidebar toggle functionality
             const sidebarToggle = document.getElementById('sidebar-toggle');
             const sidebar = document.querySelector('.sidebar');
-            
+            const content = document.querySelector('.content');
+
             if (sidebarToggle) {
-                sidebarToggle.addEventListener('click', function() {
-                    sidebar.classList.toggle('collapsed');
-                    
-                    // Handle mobile view
+                sidebarToggle.addEventListener('click', function () {
                     if (window.innerWidth <= 768) {
+                        // Mobile view - toggle open class
                         sidebar.classList.toggle('open');
+                    } else {
+                        // Desktop view - fully hide instead of collapse
+                        sidebar.classList.toggle('hidden');
+                        content.classList.toggle('full-width');
                     }
                 });
             }
