@@ -176,8 +176,8 @@ def admin_home(request):
     """
     # Find the correct template path
     template_paths = [
-        'frontend/admin/ahome.html',
-        'admin/ahome.html'
+        'frontend/admin/usermanagement.html',
+        'admin/usermanagement.html'
     ]
     
     # Try each path until one works
@@ -205,7 +205,7 @@ def admin_home(request):
     """
     if request.user.is_superuser:
         # User has admin privileges, render admin panel
-        return render(request, 'admin/ahome.html')
+        return render(request, 'admin/usermanagement.html')
     else:
         # User doesn't have admin privileges, redirect to regular home
         return redirect('/')
