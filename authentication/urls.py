@@ -72,7 +72,7 @@ urlpatterns = [
 
     # Admin user support URLs
     path('admin-panel/user-support/', views_admin_contact.admin_user_support, name='admin_user_support'),
-    path('api/admin/messages/<int:message_id>/', views_admin_contact.message_detail, name='message_detail_api'),
+    path('api/admin/messages/<int:message_id>/', views_admin_contact.message_api_detail, name='message_api_detail'),
     path('api/admin/messages/<int:message_id>/reply/', views_admin_contact.reply_to_message, name='reply_to_message'),
     path('api/admin/messages/<int:message_id>/mark-read/', views_admin_contact.mark_message_read, name='mark_message_read'),
     path('api/admin/messages/<int:message_id>/mark-unread/', views_admin_contact.mark_message_unread, name='mark_message_unread'),

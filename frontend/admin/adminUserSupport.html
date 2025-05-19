@@ -770,10 +770,9 @@
             }
             
             // Function to send a reply
-            function sendReply(messageId, replyText) {
-                const sendBtn = document.getElementById('send-reply-btn');
-                sendBtn.disabled = true;
-                sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Sending...';
+            function sendReply(messageId) {
+                const replyText = document.getElementById('reply-text').value;
+                const sendEmail = document.getElementById('send-email').checked;
                 
                 fetch(`/api/admin/messages/${messageId}/reply/`, {
                     method: 'POST',
@@ -782,7 +781,8 @@
                         'X-CSRFToken': getCsrfToken()
                     },
                     body: JSON.stringify({
-                        reply_text: replyText
+                        reply_text: replyText,
+                        send_email: sendEmail  // Add this to send the checkbox state
                     })
                 })
                 .then(response => {

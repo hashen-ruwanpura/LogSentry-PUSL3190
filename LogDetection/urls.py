@@ -40,6 +40,7 @@ from authentication.views_apache_logs import apache_logs_view  # Add this import
 from authentication.views_mysql_logs import mysql_logs_view  # Add this new import
 from authentication import views_explore_agent  # Add this import
 from authentication import views_admin_auditlogs  # Add this import
+from authentication import views_admin_contact  # Add this import
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -173,6 +174,9 @@ urlpatterns = [
     # Add these to URL patterns
     path('api/admin/audit-logs/<int:log_id>/revert/', views_admin_auditlogs.revert_config_change, name='api_revert_config'),
     path('api/admin/audit-logs/export/', views_admin_auditlogs.export_audit_logs, name='api_export_audit_logs'),
+
+    # Add this line for message API detail
+    path('api/admin/messages/<int:message_id>/', views_admin_contact.message_api_detail, name='message_api_detail'),
 ]
 
 # AI ANALYTICS

@@ -136,6 +136,7 @@ def reply_to_message(request, message_id):
     try:
         data = json.loads(request.body)
         reply_text = data.get('reply_text', '').strip()
+        send_email = data.get('send_email', True)  # Get the checkbox state
         
         if not reply_text:
             return JsonResponse({'success': False, 'error': 'Reply text cannot be empty'}, status=400)
@@ -152,19 +153,20 @@ def reply_to_message(request, message_id):
         contact_message.is_replied = True
         contact_message.save()
         
-        # Send email to user with the reply
-        try:
-            send_mail(
-                f'Re: {contact_message.subject}',
-                f"Dear {contact_message.name},\n\n{reply_text}\n\nThank you,\nThe LogSentry Team",
-                settings.DEFAULT_FROM_EMAIL,
-                [contact_message.email],
-                fail_silently=False,
-            )
-            email_sent = True
-        except Exception as e:
-            logger.error(f"Failed to send email reply: {str(e)}")
-            email_sent = False
+        # Send email to user with the reply only if requested
+        email_sent = False
+        if send_email:  # Only send if checkbox is checked
+            try:
+                send_mail(
+                    f'Re: {contact_message.subject}',
+                    f"Dear {contact_message.name},\n\n{reply_text}\n\nThank you,\nThe LogSentry Team",
+                    settings.DEFAULT_FROM_EMAIL,
+                    [contact_message.email],
+                    fail_silently=False,
+                )
+                email_sent = True
+            except Exception as e:
+                logger.error(f"Failed to send email reply: {str(e)}")
         
         return JsonResponse({
             'success': True, 
@@ -267,3 +269,47 @@ def contact_message_stats(request):
     except Exception as e:
         logger.error(f"Error getting contact message stats: {str(e)}")
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+@login_required
+@user_passes_test(is_superuser)
+def message_api_detail(request, message_id):
+    """API endpoint to get message details in JSON format"""
+    try:
+        message = get_object_or_404(ContactMessage, id=message_id)
+        
+        # Mark as read if previously unread
+        if not message.is_read:
+            message.is_read = True
+            message.save()
+        
+        # Get all replies - FIXED to use direct query instead of reverse relation
+        replies = []
+        for reply in AdminReply.objects.filter(contact_message=message).order_by('created_at'):
+            replies.append({
+                'id': reply.id,
+                'reply_text': reply.reply_text,
+                'created_at': reply.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'admin_user': reply.admin_user.username if reply.admin_user else 'System'
+            })
+        
+        # Return message details and replies as JSON
+        return JsonResponse({
+            'success': True,
+            'message': {
+                'id': message.id,
+                'name': message.name,
+                'email': message.email,
+                'subject': message.subject,
+                'message': message.message,
+                'created_at': message.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'is_read': message.is_read,
+                'is_replied': message.is_replied
+            },
+            'replies': replies
+        })
+    except Exception as e:
+        logger.error(f"Error fetching message details: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': f"Failed to load message details: {str(e)}"
+        }, status=500)
