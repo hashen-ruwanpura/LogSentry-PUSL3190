@@ -111,4 +111,12 @@ urlpatterns = [
     # Security alerts API endpoint
     path('api/security-alerts/', views.security_alerts_api, name='security_alerts_api'),
 
+    # Event detail API endpoint
+    path('api/events/detail/<int:event_id>/', views.api_event_detail, name='api_event_detail'),
+    
+    # Alternative path that matches what the frontend might be using
+    path('api/event/<int:event_id>/', views.api_event_detail, name='api_event_detail_alt'),
+    
+    # Event resolve API endpoint
+    path('api/resolve_event/<int:event_id>/', views.api_resolve_event, name='api_resolve_event'),
 ]

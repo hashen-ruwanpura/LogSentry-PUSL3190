@@ -1133,7 +1133,7 @@ def events_view(request):
     
     # Apply MITRE tactic filter
     if mitre_tactic != 'all':
-        events = events.filter(mitre_tactic=mitre_tactic)
+        events = events.filter(mitre_tactic__iexact=mitre_tactic)
     
     # Apply status filter
     if status != 'all':
