@@ -529,15 +529,7 @@
                                 <i class="fas fa-edit"></i> Update Status
                             </button>
                             {% if threat.source_ip %}
-                                {% if is_blacklisted %}
-                                <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#unblockIPModal">
-                                    <i class="fas fa-check-circle"></i> Unblock IP
-                                </button>
-                                {% else %}
-                                <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#blockIPModal">
-                                    <i class="fas fa-ban"></i> Block IP
-                                </button>
-                                {% endif %}
+                                
                             {% endif %}
                             {% if threat.mitre_tactic %}
                             <a href="{% url 'mitre_details' %}?tactic={{ threat.mitre_tactic|urlencode }}" class="btn btn-info">

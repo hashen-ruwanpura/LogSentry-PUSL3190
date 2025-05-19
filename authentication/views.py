@@ -962,8 +962,53 @@ def alert_detail(request, alert_id):
         
         # Handle form submissions
         if request.method == 'POST':
-            # Form handling code...
-            pass
+            action = request.POST.get('action')
+            
+            # Handle status update form
+            if action == 'update_status':
+                new_status = request.POST.get('status')
+                comment = request.POST.get('comment', '')
+                
+                if new_status in ['new', 'investigating', 'resolved', 'false_positive']:
+                    # Update the threat status
+                    threat.status = new_status
+                    threat.updated_at = timezone.now()
+                    
+                    # Update analysis data with comment if provided
+                    if comment:
+                        if not hasattr(threat, 'analysis_data') or not threat.analysis_data:
+                            threat.analysis_data = {}
+                        
+                        # Add status update history if it doesn't exist
+                        if 'status_history' not in threat.analysis_data:
+                            threat.analysis_data['status_history'] = []
+                            
+                        # Add new status update entry
+                        threat.analysis_data['status_history'].append({
+                            'status': new_status,
+                            'comment': comment,
+                            'updated_by': request.user.username,
+                            'timestamp': timezone.now().isoformat()
+                        })
+                    
+                    # Save the updated threat
+                    threat.save()
+                    
+                    # Show success message to user
+                    messages.success(request, f"Alert status successfully updated to '{new_status}'")
+                else:
+                    # Invalid status value
+                    messages.error(request, "Invalid status value provided")
+            
+            # Handle block IP form
+            elif action == 'block_ip':
+                # Add IP blocking code here if needed
+                pass
+                
+            # Handle unblock IP form
+            elif action == 'unblock_ip':
+                # Add IP unblocking code here if needed
+                pass
 
         # Get related parsed log if available
         related_log = None
@@ -1871,6 +1916,7 @@ def mitre_details_view(request):
         # First page / Cover
         elements.append(Spacer(1, 50))
         
+               
         # Title
         elements.append(Paragraph(f"MITRE ATT&CK Framework Analysis", styles['LogSentryTitle']))
         elements.append(Spacer(1, 10))

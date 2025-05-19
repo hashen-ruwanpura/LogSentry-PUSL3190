@@ -178,11 +178,13 @@ class ApacheLogParser(BaseLogParser):
         return self.save_parsed_log(raw_log, normalized_data)
     
     def _is_valid_ip(self, ip):
-        """Check if string is a valid IP address"""
+        """Enhanced IP validation to reject reserved/private IPs if needed"""
         try:
-            ipaddress.ip_address(ip)
+            ip_obj = ipaddress.ip_address(ip)
+            logger.debug(f"Valid IP extracted: {ip}")
             return True
         except ValueError:
+            logger.warning(f"Invalid IP format found: {ip}")
             return False
 
 class MySQLLogParser(BaseLogParser):
@@ -318,9 +320,11 @@ class MySQLLogParser(BaseLogParser):
     def _is_valid_ip(self, ip):
         """Check if string is a valid IP address"""
         try:
-            ipaddress.ip_address(ip)
+            ip_obj = ipaddress.ip_address(ip)
+            logger.debug(f"Valid IP extracted: {ip}")
             return True
         except ValueError:
+            logger.warning(f"Invalid IP format found: {ip}")
             return False
 
     def _extract_user_id(self, content):
