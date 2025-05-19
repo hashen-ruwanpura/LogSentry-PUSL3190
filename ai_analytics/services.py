@@ -121,7 +121,7 @@ class OpenRouterReportGenerator:
             }
     
     def _create_prompt(self, report_type: str, context_data: Dict[str, Any]) -> str:
-        """Create an effective prompt for OpenRouter"""
+        """Create an effective prompt for AI report generation"""
         
         # Basic intro that clearly defines the task
         intro = "As a cybersecurity analyst, create a comprehensive security report based on the following log data and events."
@@ -213,6 +213,81 @@ TASK: {specific_instructions}
 {output_format}
 """
         
+        # ONLY modify the prediction report type case, leaving everything else intact
+        if report_type == 'prediction':
+            # Check if system metrics are available in the context data
+            system_metrics = context_data.get('system_metrics', {})
+            if system_metrics:
+                # Add system metrics section only for prediction reports and only if data exists
+                prompt += f"""
+
+## System Resource Metrics Analysis
+
+Please include a detailed analysis of the following system metrics in your report, correlating them with security events where possible:
+"""
+
+                # Add CPU metrics if available
+                if 'cpu' in system_metrics:
+                    cpu = system_metrics['cpu']
+                    prompt += f"""
+### CPU Usage:
+- Current: {cpu.get('usage', 'N/A')}%
+- Trend: {cpu.get('trend', 'Unknown')} ({cpu.get('trend_value', 0):.2f}% per day)
+- Prediction: {cpu.get('message', 'No prediction available')}
+- Confidence: {cpu.get('confidence', 'N/A')}%
+"""
+
+                # Add Memory metrics if available
+                if 'memory' in system_metrics:
+                    memory = system_metrics['memory']
+                    prompt += f"""
+### Memory Usage:
+- Current: {memory.get('usage', 'N/A')}% ({memory.get('used', 'N/A')} GB of {memory.get('total', 'N/A')} GB)
+- Trend: {memory.get('trend', 'Unknown')} ({memory.get('trend_value', 0):.2f}% per day)
+- Prediction: {memory.get('message', 'No prediction available')}
+- Confidence: {memory.get('confidence', 'N/A')}%
+"""
+
+                # Add Disk metrics if available
+                if 'disk' in system_metrics:
+                    disk = system_metrics['disk']
+                    prompt += f"""
+### Disk Usage:
+- Current: {disk.get('usage', 'N/A')}% ({disk.get('used', 'N/A')} GB of {disk.get('total', 'N/A')} GB)
+- Trend: {disk.get('trend', 'Unknown')} ({disk.get('trend_value', 0):.2f}% per day)
+- Prediction: {disk.get('message', 'No prediction available')}
+- Confidence: {disk.get('confidence', 'N/A')}%
+"""
+
+                # Add Log Volume metrics if available
+                if 'log_volume' in system_metrics:
+                    log_vol = system_metrics['log_volume']
+                    prompt += f"""
+### Log Volume:
+- Current: {log_vol.get('usage', 'N/A')}% ({log_vol.get('used', 'N/A')} GB of allocated space)
+- Apache Logs: {log_vol.get('apache_size', 'N/A')} GB (growing {log_vol.get('apache_growth', 0):.2f} GB/week)
+- MySQL Logs: {log_vol.get('mysql_size', 'N/A')} GB (growing {log_vol.get('mysql_growth', 0):.2f} GB/week)
+- System Logs: {log_vol.get('system_size', 'N/A')} GB (growing {log_vol.get('system_growth', 0):.2f} GB/week)
+- Prediction: {log_vol.get('message', 'No prediction available')}
+- Confidence: {log_vol.get('confidence', 'N/A')}%
+"""
+
+                # Add correlation analysis instructions
+                prompt += """
+
+Please analyze correlations between system metrics and security events. For example:
+1. Do CPU/memory spikes correspond with increased security incidents?
+2. Is log volume growth correlated with specific types of attacks?
+3. Are there resource patterns that precede certain categories of security events?
+
+Your analysis should include:
+1. Integrated security and performance risk assessment
+2. Predictions for both security threats and resource constraints
+3. Prioritized recommendations that address both security vulnerabilities and system performance issues
+4. Timeline predictions for when critical thresholds might be reached if current trends continue
+"""
+
+        # Return the prompt (unmodified or with our additions for prediction reports)
         return prompt
 
 
@@ -259,7 +334,7 @@ class AIReportGenerator:
                 'end_time': data['time_range']['end'],
                 'source_filter': source_filter or 'all',
                 'severity_filter': severity_filter or 'all',
-                'total_logs': data['stats'].get('total_apache_logs', 0) + data['stats'].get('total_mysql_logs', 0),
+                'total_logs': data['stats'].get('total_logs', 0),  # Use the direct count from RawLog
                 'high_alerts': data['stats'].get('high_severity', 0),
                 'auth_failures': data['stats'].get('auth_failures', 0),
                 'total_threats': data['stats'].get('total_threats', 0),
@@ -268,6 +343,19 @@ class AIReportGenerator:
                 'apache_logs': data.get('apache_logs', []),
                 'mysql_logs': data.get('mysql_logs', [])
             }
+            
+            # In the method where you prepare data for AI reports
+            if report_type == 'prediction':
+                # Import the function from views_predictive
+                from authentication.views_predictive import get_system_metrics
+                
+                # Get system metrics and add to context data
+                try:
+                    system_metrics = get_system_metrics()
+                    context_data['system_metrics'] = system_metrics
+                except Exception as e:
+                    logger.error(f"Error getting system metrics: {e}")
+                    # Proceed without system metrics if they can't be obtained
             
             result = openrouter.generate_report(report_type, context_data)
             
@@ -326,7 +414,6 @@ class AIReportGenerator:
     def _extract_data_for_time_period(self, start_time, end_time, source_filter=None, severity_filter=None):
         """Extract relevant data for the specified time period and filters"""
         try:
-            # Initialize data structure
             data = {
                 'time_range': {
                     'start': start_time.strftime('%Y-%m-%d %H:%M:%S'),
@@ -338,6 +425,13 @@ class AIReportGenerator:
                 'threats': [],
                 'incidents': []
             }
+            
+            # IMPORTANT FIX: Get total logs from RawLog table directly, consistent with dashboard
+            from log_ingestion.models import RawLog
+            data['stats']['total_logs'] = RawLog.objects.filter(
+                timestamp__gte=start_time, 
+                timestamp__lte=end_time
+            ).count()
             
             # Apply source filter
             apache_filter = Q(timestamp__gte=start_time) & Q(timestamp__lte=end_time)
