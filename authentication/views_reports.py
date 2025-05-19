@@ -12,7 +12,10 @@ import pandas as pd
 import logging
 from log_ingestion.models import ParsedLog
 from analytics.models import LogReport
+from threat_detection.models import Threat  # Add this import
 import geoip2.database
+import os
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -43,34 +46,91 @@ def reports_view(request):
         now = timezone.now()
         week_ago = now - timedelta(days=7)
         
-        # Total threats
-        stats['total_threats'] = LogReport.objects.count()
+        # Ensure data consistency between LogReport and Threat models
+        report_ids = set(LogReport.objects.values_list('id', flat=True))
+        threat_ids = set(Threat.objects.values_list('id', flat=True))
         
+        # Find threats that aren't in reports (new threats)
+        missing_threats = threat_ids - report_ids
+        if missing_threats:
+            # Log the discrepancy for debugging
+            logger.info(f"Found {len(missing_threats)} threats not in LogReport")
+            
+            # Option 1: Create LogReport entries for missing threats
+            # This would be done by a background task, but we can count them now
+            missing_threats_count = len(missing_threats)
+        else:
+            missing_threats_count = 0
+        
+        # Total threats - include both LogReport and any missing Threats
+        logreport_count = LogReport.objects.count()
+        stats['total_threats'] = logreport_count + missing_threats_count
+        
+        # Continue with existing code for other statistics...
         # Intrusion attempts
         stats['intrusion_attempts'] = LogReport.objects.filter(
             threat_type__icontains='intrusion'
         ).count()
+        
+        # Add intrusion attempts from Threat model that might be missing
+        if missing_threats:
+            missing_intrusions = Threat.objects.filter(
+                id__in=missing_threats,
+                type__icontains='intrusion'
+            ).count()
+            stats['intrusion_attempts'] += missing_intrusions
         
         # System errors
         stats['system_errors'] = LogReport.objects.filter(
             threat_type__icontains='error'
         ).count()
         
+        # Add system errors from Threat model that might be missing
+        if missing_threats:
+            missing_errors = Threat.objects.filter(
+                id__in=missing_threats,
+                type__icontains='error'
+            ).count()
+            stats['system_errors'] += missing_errors
+        
         # Blocked attacks
         stats['blocked_attacks'] = LogReport.objects.filter(
             status='Resolved'
         ).count()
         
-        # Get severity counts
+        # Add blocked attacks from Threat model that might be missing
+        if missing_threats:
+            missing_blocked = Threat.objects.filter(
+                id__in=missing_threats,
+                status='Resolved'
+            ).count()
+            stats['blocked_attacks'] += missing_blocked
+        
+        # Get severity counts - combine data from both models
         severity['high'] = LogReport.objects.filter(severity='high').count()
         severity['medium'] = LogReport.objects.filter(severity='medium').count()
         severity['low'] = LogReport.objects.filter(severity='low').count()
         
+        # Add severity counts from Threat model that might be missing
+        if missing_threats:
+            severity['high'] += Threat.objects.filter(id__in=missing_threats, severity='high').count()
+            severity['medium'] += Threat.objects.filter(id__in=missing_threats, severity='medium').count()
+            severity['low'] += Threat.objects.filter(id__in=missing_threats, severity='low').count()
+        
         # Calculate changes compared to previous period
         prev_week_start = week_ago - timedelta(days=7)
         
-        # Previous period counts
+        # Previous period counts - including missing threats
         prev_threats = LogReport.objects.filter(timestamp__gte=prev_week_start, timestamp__lt=week_ago).count()
+        
+        # Add missing threats from previous period
+        if missing_threats:
+            prev_missing_threats = Threat.objects.filter(
+                created_at__gte=prev_week_start, 
+                created_at__lt=week_ago
+            ).filter(id__in=missing_threats).count()
+            prev_threats += prev_missing_threats
+            
         prev_intrusions = LogReport.objects.filter(
             timestamp__gte=prev_week_start, 
             timestamp__lt=week_ago,
@@ -116,9 +176,33 @@ def reports_view(request):
     except Exception as e:
         logger.error(f"Error fetching reports data: {e}")
         
-    # Get recent threats for the table
+    # Get recent threats for the table - combining both sources
     try:
-        recent_threats = LogReport.objects.order_by('-timestamp')[:10]
+        # Get recent threats from LogReport
+        recent_threats = list(LogReport.objects.order_by('-timestamp')[:10])
+        
+        # Add recent threats from Threat model not in LogReport
+        if missing_threats:
+            missing_recent_threats = Threat.objects.filter(
+                id__in=missing_threats
+            ).order_by('-created_at')[:5]
+            
+            # Convert Threat objects to LogReport-like objects for template compatibility
+            for threat in missing_recent_threats:
+                # Create a dict-like object with the same properties as LogReport
+                threat_dict = type('ThreatDict', (), {
+                    'id': threat.id,
+                    'timestamp': threat.created_at,
+                    'source_ip': threat.source_ip or 'Unknown',
+                    'log_type': getattr(threat, 'type', 'Unknown'),
+                    'threat_type': threat.description or 'Unknown',
+                    'severity': threat.severity or 'medium',
+                    'status': threat.status or 'New'
+                })
+                recent_threats.append(threat_dict)
+                
+            # Sort the combined list by timestamp
+            recent_threats = sorted(recent_threats, key=lambda x: x.timestamp, reverse=True)[:10]
     except Exception:
         recent_threats = []
         
@@ -419,9 +503,15 @@ def export_report(request):
             severity = request.POST.get('severity', 'all')
             report_format = request.POST.get('format', 'pdf')
             
-            # Convert dates to datetime objects
+            # Convert dates to timezone-aware datetime objects
             start_date = datetime.strptime(start_date, '%Y-%m-%d')
             end_date = datetime.strptime(end_date, '%Y-%m-%d')
+            
+            # Make dates timezone aware BEFORE setting hour/minute/second
+            start_date = timezone.make_aware(start_date)
+            end_date = timezone.make_aware(end_date)
+            
+            # Now set the end of day time
             end_date = end_date.replace(hour=23, minute=59, second=59)
             
             # Apply filters
@@ -457,18 +547,59 @@ def prepare_export_data(query, start_date, end_date):
     # Get current date and time
     now = timezone.now()
     
-    # Calculate stats
-    total_alerts = query.count()
-    recent_alerts = query.filter(timestamp__gte=now-timedelta(days=7)).count()
+    # Make dates timezone aware if they aren't already
+    if timezone.is_naive(start_date):
+        start_date = timezone.make_aware(start_date)
+    if timezone.is_naive(end_date):
+        end_date = timezone.make_aware(end_date)
+    
+    # Get any missing threats from the Threat model - with correct field mapping
+    threat_filter = Q(created_at__gte=start_date, created_at__lte=end_date)
+    if hasattr(query, 'query'):
+        # Map LogReport fields to Threat model fields
+        field_mappings = {
+            'log_type': 'type',
+            'severity': 'severity',
+            'threat_type': 'description',
+            'status': 'status'
+        }
+        
+        # If we have a queryset with filters, try to apply similar filters to Threat model
+        for child in query.query.where.children:
+            if isinstance(child, Q):
+                # Extract field and value from queryset filter
+                for field_name in field_mappings:
+                    if field_name in str(child):
+                        # Get the value from the filter expression
+                        value = str(child).split('=')[1].strip("'")
+                        # Apply filter using the mapped field name
+                        threat_filter &= Q(**{f"{field_mappings[field_name]}__iexact": value})
+    
+    # Get threats that might not be in LogReport
+    additional_threats = Threat.objects.filter(threat_filter)
+    
+    # Calculate stats including both sources
+    total_alerts = query.count() + additional_threats.count()
+    recent_alerts = (
+        query.filter(timestamp__gte=now-timedelta(days=7)).count() +
+        additional_threats.filter(created_at__gte=now-timedelta(days=7)).count()
+    )
+    
+    # Calculate stats for the existing query (LogReport)
     critical_alerts = query.filter(severity__iexact='high').count()
     medium_alerts = query.filter(severity__iexact='medium').count()
     low_alerts = query.filter(severity__iexact='low').count()
+    
+    # Add severity counts from Threat model
+    critical_alerts += additional_threats.filter(severity__iexact='high').count()
+    medium_alerts += additional_threats.filter(severity__iexact='medium').count()
+    low_alerts += additional_threats.filter(severity__iexact='low').count()
     
     # Get source distribution
     sources = query.values('source_ip').annotate(count=Count('source_ip')).order_by('-count')
     source_distribution = {item['source_ip']: item['count'] for item in sources}
     
-    # Get recent alerts
+    # Get recent alerts from LogReport
     alert_list = []
     for alert in query.order_by('-timestamp')[:50]:
         alert_list.append({
@@ -478,6 +609,23 @@ def prepare_export_data(query, start_date, end_date):
             'severity': alert.severity.capitalize(),
             'status': alert.status
         })
+    
+    # Add alerts from Threat model - mapping fields correctly
+    for threat in additional_threats.order_by('-created_at')[:25]:  # Limiting to 25 for balance
+        alert_list.append({
+            'timestamp': threat.created_at.strftime('%Y-%m-%d %H:%M') if threat.created_at else '',
+            'source': threat.source_ip or 'Unknown',
+            'type': threat.description or threat.mitre_technique or 'N/A',  # Use description as threat type
+            'severity': threat.severity.capitalize() if threat.severity else 'N/A',
+            'status': threat.status or 'N/A'
+        })
+    
+    # Sort combined alerts by timestamp
+    alert_list = sorted(
+        alert_list, 
+        key=lambda x: datetime.strptime(x['timestamp'], '%Y-%m-%d %H:%M') if x['timestamp'] else datetime.min,
+        reverse=True
+    )[:50]  # Limit to 50 most recent
     
     return {
         'generated_at': now.strftime('%Y-%m-%d %H:%M:%S'),
@@ -575,121 +723,322 @@ def export_excel_report(data):
     return response
 
 def export_pdf_report(data):
-    """Export report as PDF"""
+    """Export report as PDF with enhanced styling"""
     try:
-        # This requires additional libraries like ReportLab
-        from reportlab.lib.pagesizes import letter
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.pagesizes import letter, landscape
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib import colors
+        from reportlab.lib.units import inch
+        from reportlab.graphics.shapes import Drawing, Rect
+        from io import BytesIO
         
         # Create a BytesIO buffer for the PDF
         buffer = BytesIO()
         
+        # Define brand colors for consistent styling
+        brand_primary = colors.HexColor('#3f51b5')  # Primary blue
+        brand_secondary = colors.HexColor('#6c757d')
+        brand_light = colors.HexColor('#f5f7fa')
+        brand_dark = colors.HexColor('#212529')
+        
         # Create the PDF document
-        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter),
+                               rightMargin=36, leftMargin=36,
+                               topMargin=36, bottomMargin=36)
+        
         styles = getSampleStyleSheet()
+        
+        # Create custom styles for better appearance
+        # Custom title style
+        styles.add(ParagraphStyle(
+            name='LogSentryTitle',
+            parent=styles['Title'],
+            fontName='Helvetica-Bold',
+            fontSize=24,
+            textColor=brand_primary,
+            spaceAfter=12,
+            alignment=1  # Center alignment
+        ))
+        
+        # Custom heading styles
+        styles.add(ParagraphStyle(
+            name='LogSentryHeading1',
+            parent=styles['Heading1'],
+            fontName='Helvetica-Bold',
+            fontSize=18,
+            textColor=brand_primary,
+            spaceAfter=12,
+        ))
+        
+        styles.add(ParagraphStyle(
+            name='LogSentryHeading2',
+            parent=styles['Heading2'],
+            fontName='Helvetica-Bold',
+            fontSize=14,
+            textColor=brand_primary,
+            spaceAfter=10,
+        ))
+        
+        # Normal text style
+        styles.add(ParagraphStyle(
+            name='LogSentryNormal',
+            parent=styles['Normal'],
+            fontSize=10,
+            leading=14,
+            spaceAfter=8,
+        ))
+        
+        # Initialize elements list
         elements = []
         
-        # Add title
-        title = Paragraph("Threat Detection Report", styles['Title'])
-        elements.append(title)
-        elements.append(Spacer(1, 12))
+        # Helper function to add page elements (header/footer)
+        def add_page_elements(canvas, doc):
+            # Save canvas state
+            canvas.saveState()
+            
+            # Header with title bar
+            canvas.setFillColor(brand_primary)
+            canvas.rect(36, doc.height + 36, doc.width, 24, fill=True, stroke=False)
+            
+            # Header text (LogSentry)
+            canvas.setFont('Helvetica-Bold', 14)
+            canvas.setFillColor(colors.white)
+            canvas.drawString(46, doc.height + doc.topMargin + 6, "LogSentry")
+            
+            # Add subtitle
+            canvas.setFont('Helvetica', 10)
+            canvas.drawString(140, doc.height + doc.topMargin + 6, "Threat Detection Report")
+            
+            # Add page number to header
+            canvas.drawRightString(doc.width + 20, doc.height + doc.topMargin + 6, f"Page {doc.page}")
+            
+            # Add footer
+            canvas.setFont('Helvetica', 8)
+            canvas.setFillColor(brand_secondary)
+            
+            # Left side: generated date
+            generation_text = f"Generated on {data['generated_at']}"
+            canvas.drawString(doc.leftMargin, 20, generation_text)
+            
+            # Right side: powered by
+            canvas.drawRightString(doc.width + 30, 20, "Powered by LogSentry")
+            
+            # Restore canvas state
+            canvas.restoreState()
         
-        # Add generation timestamp
-        date_text = Paragraph(f"Generated at: {data['generated_at']}", styles['Normal'])
-        elements.append(date_text)
-        elements.append(Spacer(1, 6))
+        # Add a decorative line function
+        def add_separator():
+            elements.append(Spacer(1, 6))
+            line = Drawing(500, 2)
+            line.add(Rect(0, 0, 500, 1, fillColor=brand_primary, strokeColor=None))
+            elements.append(line)
+            elements.append(Spacer(1, 15))
         
-        # Add date range
-        date_range = Paragraph(f"Date Range: {data['summary']['date_range']}", styles['Normal'])
-        elements.append(date_range)
+        # First page / Cover
+        elements.append(Spacer(1, 30))
+        
+        # Title
+        elements.append(Paragraph("Security Threat Report", styles['LogSentryTitle']))
+        elements.append(Spacer(1, 10))
+        
+        # Period subtitle
+        report_subtitle = f"Date Range: {data['summary']['date_range']}"
+        elements.append(Paragraph(report_subtitle, styles['LogSentryHeading2']))
+        elements.append(Spacer(1, 30))
+        
+        # Executive Summary Section
+        elements.append(Paragraph("Executive Summary", styles['LogSentryHeading1']))
+        add_separator()
+        
+        elements.append(Paragraph(
+            "This report provides an analysis of security threats detected by LogSentry. "
+            "It summarizes threat patterns, severity distribution, and source IPs across systems "
+            "monitored during the selected time period.",
+            styles['LogSentryNormal']
+        ))
         elements.append(Spacer(1, 20))
         
-        # Add summary section
-        summary_title = Paragraph("Summary", styles['Heading2'])
-        elements.append(summary_title)
-        elements.append(Spacer(1, 6))
+        # Key Metrics Section
+        elements.append(Paragraph("Key Metrics", styles['LogSentryHeading2']))
         
+        # Summary statistics in a better-looking table
         summary_data = [
-            ['Metric', 'Count'],
-            ['Total Alerts', str(data['summary']['total_alerts'])],
-            ['Recent Alerts (7 days)', str(data['summary']['recent_alerts'])],
-            ['Critical Alerts', str(data['summary']['critical_alerts'])],
-            ['Medium Alerts', str(data['summary']['medium_alerts'])],
-            ['Low Alerts', str(data['summary']['low_alerts'])],
+            ['Metric', 'Value', 'Details'],
+            ['Total Security Alerts', str(data['summary']['total_alerts']), data['summary']['date_range']],
+            ['Critical Alerts', str(data['summary']['critical_alerts']), 
+             f"{(data['summary']['critical_alerts'] / max(data['summary']['total_alerts'], 1) * 100):.1f}% of total"],
+            ['Medium Alerts', str(data['summary']['medium_alerts']), 
+             f"{(data['summary']['medium_alerts'] / max(data['summary']['total_alerts'], 1) * 100):.1f}% of total"],
+            ['Low Alerts', str(data['summary']['low_alerts']), 
+             f"{(data['summary']['low_alerts'] / max(data['summary']['total_alerts'], 1) * 100):.1f}% of total"],
+            ['Recent Alerts (7 days)', str(data['summary']['recent_alerts']), 
+             f"{(data['summary']['recent_alerts'] / max(data['summary']['total_alerts'], 1) * 100):.1f}% of total"],
         ]
         
-        summary_table = Table(summary_data, colWidths=[300, 100])
+        # Create and style the summary table
+        summary_table = Table(summary_data, colWidths=[180, 120, 220])
         summary_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            # Header styling
+            ('BACKGROUND', (0, 0), (-1, 0), brand_primary),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('TOPPADDING', (0, 0), (-1, 0), 8),
+            
+            # Data rows styling
+            ('BACKGROUND', (0, 1), (0, -1), colors.HexColor('#f5f7fa')),
+            ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+            ('ALIGN', (1, 1), (1, -1), 'CENTER'),
+            
+            # Grid styling
+            ('GRID', (0, 0), (-1, -1), 0.5, brand_secondary),
+            ('BOX', (0, 0), (-1, -1), 1, brand_primary),
+            
+            # Alternating row colors
+            ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#f8f9fa')),
+            ('BACKGROUND', (0, 3), (-1, 3), colors.HexColor('#f8f9fa')),
+            ('BACKGROUND', (0, 5), (-1, 5), colors.HexColor('#f8f9fa')),
         ]))
         
         elements.append(summary_table)
         elements.append(Spacer(1, 20))
+        elements.append(PageBreak())
         
-        # Add source distribution
-        sources_title = Paragraph("Source Distribution", styles['Heading2'])
-        elements.append(sources_title)
-        elements.append(Spacer(1, 6))
+        # Source Distribution Section
+        elements.append(Paragraph("Threat Sources", styles['LogSentryHeading1']))
+        add_separator()
         
-        source_data = [['Source IP', 'Count']]
-        for source, count in data['source_distribution'].items():
-            source_data.append([source, str(count)])
+        elements.append(Paragraph(
+            "The following sources have been identified as origins of security threats:",
+            styles['LogSentryNormal']
+        ))
+        elements.append(Spacer(1, 15))
         
-        if len(source_data) > 1:
-            source_table = Table(source_data, colWidths=[300, 100])
+        if data['source_distribution']:
+            # Create table data for source distribution
+            source_data = [['Source IP', 'Count', 'Percentage']]
+            
+            # Calculate percentages
+            total_sources = sum(data['source_distribution'].values())
+            
+            # Add data rows
+            for source, count in data['source_distribution'].items():
+                percentage = (count / total_sources * 100) if total_sources > 0 else 0
+                source_data.append([
+                    source or 'Unknown',
+                    str(count),
+                    f"{percentage:.1f}%"
+                ])
+            
+            # Create and style source table
+            source_table = Table(source_data, colWidths=[200, 150, 150])
             source_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('BACKGROUND', (0, 0), (-1, 0), brand_primary),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('ALIGN', (1, 1), (1, -1), 'CENTER'),
+                ('ALIGN', (2, 1), (2, -1), 'CENTER'),
+                
+                # Alternating row colors
+                *[('BACKGROUND', (0, i), (-1, i), colors.HexColor('#f8f9fa')) 
+                  for i in range(1, len(source_data)) if i % 2 == 0]
             ]))
+            
             elements.append(source_table)
         else:
-            elements.append(Paragraph("No source distribution data available", styles['Normal']))
+            elements.append(Paragraph("No source distribution data available", styles['LogSentryNormal']))
         
-        elements.append(Spacer(1, 20))
+        elements.append(Spacer(1, 30))
         
-        # Add recent alerts
-        alerts_title = Paragraph("Recent Alerts", styles['Heading2'])
-        elements.append(alerts_title)
-        elements.append(Spacer(1, 6))
+        # Recent Alerts Section
+        elements.append(Paragraph("Recent Security Events", styles['LogSentryHeading2']))
+        elements.append(Spacer(1, 10))
         
         if data['recent_alerts']:
+            # Limit to a reasonable number for the PDF
+            display_alerts = data['recent_alerts'][:25]
             alerts_data = [['Timestamp', 'Source', 'Type', 'Severity', 'Status']]
-            for alert in data['recent_alerts']:
+            
+            for alert in display_alerts:
                 alerts_data.append([
                     alert['timestamp'],
-                    alert['source'],
-                    alert['type'],
+                    alert['source'] or 'Unknown',
+                    alert['type'][:30] + ('...' if len(alert['type']) > 30 else ''),
                     alert['severity'],
                     alert['status']
                 ])
             
-            alerts_table = Table(alerts_data, colWidths=[80, 100, 120, 70, 80])
+            # Create and style alerts table
+            alerts_table = Table(alerts_data, colWidths=[100, 120, 200, 80, 80])
             alerts_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('BACKGROUND', (0, 0), (-1, 0), brand_primary),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black),
-                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),  # Smaller font for better fit
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                
+                # Alternating row colors
+                *[('BACKGROUND', (0, i), (-1, i), colors.HexColor('#f8f9fa')) 
+                  for i in range(1, len(alerts_data)) if i % 2 == 0]
             ]))
+            
             elements.append(alerts_table)
+            
+            # Add note if we truncated the alerts
+            if len(data['recent_alerts']) > 25:
+                elements.append(Spacer(1, 10))
+                elements.append(Paragraph(
+                    f"Note: Showing 25 of {len(data['recent_alerts'])} recent alerts.",
+                    styles['LogSentryNormal']
+                ))
         else:
-            elements.append(Paragraph("No recent alerts data available", styles['Normal']))
+            elements.append(Paragraph("No recent alerts data available", styles['LogSentryNormal']))
         
-        # Build the PDF
-        doc.build(elements)
+        elements.append(Spacer(1, 30))
+        
+        # Security Recommendations Section
+        elements.append(Paragraph("Security Recommendations", styles['LogSentryHeading2']))
+        elements.append(Spacer(1, 5))
+        
+        # Generate recommendations based on the data
+        high_alerts_percentage = (data['summary']['critical_alerts'] / 
+                                  max(data['summary']['total_alerts'], 1) * 100)
+        
+        recommendations = []
+        
+        if high_alerts_percentage > 15:
+            recommendations.append(
+                "• <b>High Volume of Critical Alerts:</b> Immediate security audit recommended for all systems."
+            )
+        elif high_alerts_percentage > 5:
+            recommendations.append(
+                "• <b>Moderate Critical Alerts:</b> Review security policies and update intrusion detection rules."
+            )
+            
+        # Add general recommendations
+        recommendations.extend([
+            "• Regularly update firewall rules and security patches",
+            "• Implement network segmentation to contain potential breaches",
+            "• Enforce strong password policies and multi-factor authentication",
+            "• Review user access privileges and implement least privilege principle",
+            "• Schedule regular security awareness training for all staff"
+        ])
+        
+        for rec in recommendations:
+            elements.append(Paragraph(rec, styles['LogSentryNormal']))
+        
+        # Build PDF document with custom page templates
+        doc.build(elements, onFirstPage=add_page_elements, onLaterPages=add_page_elements)
         
         # Get the value from the BytesIO buffer
         pdf = buffer.getvalue()
@@ -705,7 +1054,7 @@ def export_pdf_report(data):
     except ImportError:
         # If ReportLab is not installed, return a simple text response
         return HttpResponse("PDF generation requires ReportLab library. Please export as CSV or Excel instead.", 
-                           content_type='text/plain')
+                          content_type='text/plain')
 
 @login_required
 def export_table_data(request):
@@ -778,14 +1127,27 @@ def geo_attacks_data(request):
         end_date = datetime.strptime(end_date, '%Y-%m-%d') if end_date else timezone.now()
         end_date = end_date.replace(hour=23, minute=59, second=59)  # Include the entire end day
         
+        # Make dates timezone aware
+        if timezone.is_naive(start_date):
+            start_date = timezone.make_aware(start_date)
+        if timezone.is_naive(end_date):
+            end_date = timezone.make_aware(end_date)
+        
         # Base query - using LogReport model
         query = LogReport.objects.filter(timestamp__gte=start_date, timestamp__lte=end_date)
         
-        # Apply filters
+        # Also get data from Threat model
+        threat_query = Threat.objects.filter(created_at__gte=start_date, created_at__lte=end_date)
+        
+        # Apply filters to both models (mapping fields as needed)
         if log_type != 'all':
             query = query.filter(log_type__iexact=log_type)
+            # Map to correct field in Threat model
+            threat_query = threat_query.filter(type__iexact=log_type)
+            
         if severity != 'all':
             query = query.filter(severity__iexact=severity)
+            threat_query = threat_query.filter(severity__iexact=severity)
         
         # Get country data from threats
         country_data = {}
@@ -886,8 +1248,8 @@ def get_country_from_ip(ip_address):
             
         # Try GeoIP database if available
         try:
-            # Path to the GeoIP database file - UPDATE THIS PATH to your actual database location
-            db_path = './GeoLite2-Country.mmdb'
+            # Path to the GeoIP database file
+            db_path = os.path.join(settings.BASE_DIR, 'data', 'GeoLite2-Country.mmdb')
             
             with geoip2.database.Reader(db_path) as reader:
                 response = reader.country(ip_address)
