@@ -3,77 +3,315 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Log Detection Platform - Logged Out</title>
+    <title>LogSentry - Logged Out</title>
     
     {% load static %}
-    <link rel="stylesheet" href="{% static 'css/login.css' %}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
+        :root {
+            --primary-color: #3f51b5;
+            --primary-dark: #303f9f;
+            --primary-light: #c5cae9;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --white: #ffffff;
+            --light-color: #f8f9fa;
+            --dark-color: #343a40;
+        }
+        
         body {
-            background-image: url("/static/images/background.jpg");
-            background-size: cover;
-            background-position: center;
-            background-repeat: no-repeat;
-            background-attachment: fixed;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e6ecf8 100%);
+            padding: 20px;
+            position: relative;
+            overflow-x: hidden;
+        }
+        
+        .pattern-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%233f51b5' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            opacity: 0.8;
+            z-index: -1;
+        }
+        
+        .shape-1, .shape-2 {
+            position: absolute;
+            z-index: -1;
+            opacity: 0.7;
+        }
+        
+        .shape-1 {
+            top: 10%;
+            right: 10%;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(197,202,233,0.5) 0%, rgba(197,202,233,0) 70%);
+            border-radius: 50%;
+        }
+        
+        .shape-2 {
+            bottom: 10%;
+            left: 5%;
+            width: 250px;
+            height: 250px;
+            background: radial-gradient(circle, rgba(63,81,181,0.2) 0%, rgba(63,81,181,0) 70%);
+            border-radius: 50%;
+        }
+        
+        .logout-container {
+            width: 100%;
+            max-width: 420px;
+            z-index: 1;
+        }
+        
+        .brand-section {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .brand-logo {
+            width: 70px;
+            height: 70px;
+            background-color: var(--primary-color);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            margin: 0 auto 15px;
+            box-shadow: 0 4px 12px rgba(63, 81, 181, 0.2);
+        }
+        
+        .brand-name {
+            font-size: 26px;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 5px;
+        }
+        
+        .brand-slogan {
+            color: var(--secondary-color);
+            font-size: 14px;
+        }
+        
+        .logout-card {
+            background-color: white;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            text-align: center;
+        }
+        
+        .logout-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.12);
+        }
+        
+        .logout-header {
+            background-color: var(--success-color);
+            color: white;
+            padding: 20px 30px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .logout-header h2 {
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 5px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .logout-header p {
+            opacity: 0.9;
+            margin-bottom: 0;
+            font-size: 14px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .logout-header::after {
+            content: '';
+            position: absolute;
+            top: -10px;
+            right: -10px;
+            width: 100px;
+            height: 100px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+        }
+        
+        .logout-header::before {
+            content: '';
+            position: absolute;
+            bottom: -50px;
+            left: -50px;
+            width: 150px;
+            height: 150px;
+            background-color: rgba(255, 255, 255, 0.05);
+            border-radius: 50%;
+        }
+        
+        .logout-body {
+            padding: 30px;
         }
         
         .logout-icon {
-            font-size: 3.5rem;
-            color: var(--primary-color);
-            margin-bottom: 1rem;
+            font-size: 4rem;
+            color: var(--success-color);
+            margin-bottom: 1.5rem;
+            display: inline-block;
+        }
+        
+        .logout-message {
+            font-size: 1.2rem;
+            color: var(--dark-color);
+            margin-bottom: 2rem;
         }
         
         .action-links {
-            margin-top: 2rem;
             display: flex;
             justify-content: center;
             gap: 1rem;
+            margin-top: 1.5rem;
         }
         
-        .action-button {
+        .btn-action {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+        }
+        
+        .btn-primary {
             background-color: var(--primary-color);
             color: white;
-            padding: 0.8rem 1.5rem;
-            text-decoration: none;
-            border-radius: 5px;
-            font-weight: bold;
-            transition: background-color 0.3s;
+            border: none;
         }
         
-        .action-button:hover {
+        .btn-primary:hover {
             background-color: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(63, 81, 181, 0.3);
+            color: white;
         }
         
-        .action-button.secondary {
-            background-color: #6c757d;
+        .btn-secondary {
+            background-color: var(--secondary-color);
+            color: white;
+            border: none;
         }
         
-        .action-button.secondary:hover {
+        .btn-secondary:hover {
             background-color: #5a6268;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(108, 117, 125, 0.3);
+            color: white;
         }
         
-        .login-header {
+        .btn-icon {
+            margin-right: 8px;
+        }
+        
+        .logout-footer {
             text-align: center;
-            margin-bottom: 2rem;
+            padding-top: 30px;
+            color: var(--secondary-color);
+            font-size: 14px;
+        }
+        
+        @media (max-width: 480px) {
+            .logout-body {
+                padding: 25px 20px;
+            }
+            
+            .logout-header {
+                padding: 15px 20px;
+            }
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(40, 167, 69, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0); }
+        }
+        
+        .pulse-animation {
+            animation: pulse 2s infinite;
         }
     </style>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body>
-    <div class="login-container">
-        <div class="login-box">
-            <div class="login-header">
-                <div class="logout-icon">
+    <!-- Background pattern and shapes -->
+    <div class="pattern-overlay"></div>
+    <div class="shape-1"></div>
+    <div class="shape-2"></div>
+    
+    <div class="logout-container">
+        <!-- Brand section -->
+        <div class="brand-section">
+            <div class="brand-logo">
+                <i class="fas fa-shield-alt"></i>
+            </div>
+            <div class="brand-name">LogSentry</div>
+            <div class="brand-slogan">Vigilant log analysis for enterprise security</div>
+        </div>
+        
+        <!-- Logout card -->
+        <div class="logout-card">
+            <div class="logout-header">
+                <h2>Successfully Logged Out</h2>
+                <p>Thank you for using LogSentry</p>
+            </div>
+            
+            <div class="logout-body">
+                <div class="logout-icon pulse-animation">
                     <i class="fas fa-check-circle"></i>
                 </div>
-                <h2>Successfully Logged Out</h2>
-                <p>You have been logged out securely from Log Analyzer</p>
-            </div>
-            <div class="action-links">
-                <a href="{% url 'signup' %}" class="action-button">Sign In</a>
-                <a href="/" class="action-button secondary">Back</a>
                 
+                <div class="logout-message">
+                    You have been securely logged out from your session
+                </div>
+                
+                <div class="action-links">
+                    <a href="{% url 'login' %}" class="btn-action btn-primary">
+                        <i class="fas fa-sign-in-alt btn-icon"></i>
+                        Log In Again
+                    </a>
+                    <a href="/" class="btn-action btn-secondary">
+                        <i class="fas fa-home btn-icon"></i>
+                        Homepage
+                    </a>
+                </div>
             </div>
         </div>
+        
+        <!-- Footer -->
+        <div class="logout-footer">
+            <p>&copy; 2025 LogSentry. All rights reserved.</p>
+        </div>
     </div>
+    
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
