@@ -2418,8 +2418,6 @@ def profile_stats_api(request):
     try:
         user = request.user
         
-
-        
         # Calculate statistics for the user
         # Time range for recent activities - last 30 days
         start_date = timezone.now() - timedelta(days=30)
@@ -2429,12 +2427,12 @@ def profile_stats_api(request):
             created_at__gte=start_date
         ).count()
         
-        # Count analyzed logs
-        logs_analyzed = ParsedLog.objects.filter(
-            raw_log__timestamp__gte=start_date
+        # Count analyzed logs - CHANGED to use RawLog instead of ParsedLog
+        logs_analyzed = RawLog.objects.filter(
+            timestamp__gte=start_date
         ).count()
         
-        # Calculate detection rate (threats per 100 logs)
+        # Calculate detection rate (threats per 100 logs) - FIXED calculation
         detection_rate = "0%"
         if logs_analyzed > 0:
             rate = (threats_detected / logs_analyzed) * 100
@@ -2473,8 +2471,6 @@ def profile_stats_api(request):
                 'timestamp': log.analysis_time.strftime('%Y-%m-%d %H:%M:%S'),
                 'icon': "fas fa-search"
             })
-        
-       
         
         # Sort by timestamp
         recent_activities.sort(key=lambda x: x['timestamp'], reverse=True)
