@@ -506,6 +506,13 @@
                                 <h5 class="mb-0">Notification Settings</h5>
                             </div>
                             <div class="settings-body">
+                                <!-- Add this button at the top, before the form -->
+                                <div class="d-flex justify-content-end mb-4">
+                                    <a href="{% url 'notifications' %}" class="btn btn-outline-primary">
+                                        <i class="fas fa-bell me-2"></i>View All Notifications
+                                    </a>
+                                </div>
+                                
                                 <form method="post" action="{% url 'save_notification_settings' %}">
                                     {% csrf_token %}
                                     <div class="form-group mb-4">
