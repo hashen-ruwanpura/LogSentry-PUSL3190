@@ -1343,88 +1343,70 @@ def generate_alerts_chart_data(start_time, end_time):
         created_at__lte=end_time
     ).order_by('created_at')
     
-    # Process data in Python instead of at database level
-    alerts_dict = {}
+    # Get current timezone from settings
+    current_tz = timezone.get_current_timezone()
     
+    # Process data based on time period
     if time_diff.total_seconds() <= 60 * 60 * 24:  # 24 hours or less
-        # For 24h view, use hour format but ensure uniqueness with full datetime keys
-        date_format = '%H:%M'  # Display format (hour:minute)
-        internal_format = '%Y-%m-%d %H:%M'  # Internal format with date for uniqueness
+        # Group by hour for 24 hour view
+        hours_dict = {}
         
-        # Generate all hours in the time range
-        all_periods = []
-        period_keys = {}  # Map display keys to internal keys
+        # Generate all hours in the range
+        current = start_time.astimezone(current_tz)
+        current = current.replace(minute=0, second=0, microsecond=0)
         
-        # Round to nearest hour
-        current = start_time.replace(minute=0, second=0, microsecond=0)
+        while current <= end_time.astimezone(current_tz):
+            # Use timezone-aware datetime for key
+            key = current.strftime('%H:%M')
+            hours_dict[key] = 0
+            current = current + timedelta(hours=1)
         
-        while current <= end_time:
-            display_key = current.strftime(date_format)
-            internal_key = current.strftime(internal_format)
-            
-            # Store the mapping between display and internal keys
-            if display_key not in period_keys:
-                period_keys[display_key] = []
-            period_keys[display_key].append(internal_key)
-            
-            # Use the internal key for data storage
-            all_periods.append(display_key)
-            alerts_dict[internal_key] = 0
-            
-            # Move to next hour
-            current += timedelta(hours=1)
-        
-        # Count threats for each hour using the internal keys
+        # Count threats in each hour
         for threat in threats:
-            # Format to internal key
-            threat_key = threat.created_at.strftime(internal_format)
-            # Find the closest hour
-            hour_key = threat.created_at.replace(minute=0, second=0, microsecond=0).strftime(internal_format)
+            # Make sure to convert to the current timezone
+            threat_time = threat.created_at.astimezone(current_tz)
+            hour_key = threat_time.strftime('%H:%M')
             
-            if hour_key in alerts_dict:
-                alerts_dict[hour_key] += 1
+            # Find the closest hour bucket
+            if hour_key in hours_dict:
+                hours_dict[hour_key] += 1
+            else:
+                # If the exact hour key isn't found, use the previous hour
+                prev_hour = threat_time.replace(minute=0, second=0, microsecond=0)
+                prev_key = prev_hour.strftime('%H:%M')
+                if prev_key in hours_dict:
+                    hours_dict[prev_key] += 1
         
-        # Consolidate data for display using display keys
-        display_data = {}
-        for display_key in all_periods:
-            # Sum counts from all internal keys that map to this display key
-            display_data[display_key] = sum(alerts_dict.get(internal_key, 0) 
-                                           for internal_key in period_keys.get(display_key, []))
+        # Convert to lists for chart.js
+        chart_labels = list(hours_dict.keys())
+        alerts_data = list(hours_dict.values())
+    
+    else:  # More than 24 hours
+        # Group by day for longer views
+        days_dict = {}
         
-        # Remove duplicates from all_periods while preserving order
-        unique_periods = []
-        seen = set()
-        for period in all_periods:
-            if period not in seen:
-                seen.add(period)
-                unique_periods.append(period)
-                
-        # Prepare final data
-        chart_labels = unique_periods
-        alerts_data = [display_data.get(period, 0) for period in unique_periods]
+        # Generate all days in the range
+        current = start_time.astimezone(current_tz)
+        current = current.replace(hour=0, minute=0, second=0, microsecond=0)
         
-    else:  # More than 24 hours - group by day
-        date_format = '%b %d'  # Month Day format
+        while current <= end_time.astimezone(current_tz):
+            # Use timezone-aware datetime for key
+            key = current.strftime('%b %d')
+            days_dict[key] = 0
+            current = current + timedelta(days=1)
         
-        # Generate all days in the time range
-        all_periods = []
-        current = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
-        
-        while current <= end_time:
-            period_key = current.strftime(date_format)
-            all_periods.append(period_key)
-            alerts_dict[period_key] = 0  # Initialize with zero
-            current += timedelta(days=1)
-        
-        # Count threats for each day
+        # Count threats in each day
         for threat in threats:
-            day_key = threat.created_at.strftime(date_format)
-            if day_key in alerts_dict:
-                alerts_dict[day_key] += 1
+            # Convert to current timezone for consistent day boundary
+            threat_time = threat.created_at.astimezone(current_tz)
+            day_key = threat_time.strftime('%b %d')
+            
+            if day_key in days_dict:
+                days_dict[day_key] += 1
         
-        # Prepare final data
-        chart_labels = all_periods
-        alerts_data = [alerts_dict.get(period, 0) for period in all_periods]
+        # Convert to lists for chart.js
+        chart_labels = list(days_dict.keys())
+        alerts_data = list(days_dict.values())
     
     return chart_labels, alerts_data
 
@@ -2412,82 +2394,98 @@ def alert_detail_api(request, alert_id):
             'error': f"An error occurred: {str(e)}"
         }, status=500)
 
+import logging
+from django.http import JsonResponse
+from django.contrib.auth.decorators import login_required
+from django.utils import timezone
+from datetime import timedelta
+from threat_detection.models import Threat
+from log_ingestion.models import ParsedLog
+
+logger = logging.getLogger(__name__)
+
 @login_required
 def profile_stats_api(request):
-    """API endpoint for profile statistics"""
+    """API endpoint for profile statistics - synchronized with dashboard metrics"""
     try:
-        user = request.user
+        # Use the same timeframe as dashboard (24h by default)
+        start_time = timezone.now() - timedelta(days=1)
         
-        # Calculate statistics for the user
-        # Time range for recent activities - last 30 days
-        start_date = timezone.now() - timedelta(days=30)
+        # GET EXACT SAME METRICS AS DASHBOARD
+        # 1. Total Logs - matches the TOTAL LOGS metric on dashboard
+        total_logs = RawLog.objects.filter(timestamp__gte=start_time).count()
         
-        # Count detected threats
-        threats_detected = Threat.objects.filter(
-            created_at__gte=start_date
+        # 2. High Alerts - matches the HIGH ALERTS metric on dashboard
+        high_alerts = Threat.objects.filter(
+            created_at__gte=start_time,
+            severity__in=['high', 'critical']
         ).count()
         
-        # Count analyzed logs - CHANGED to use RawLog instead of ParsedLog
-        logs_analyzed = RawLog.objects.filter(
-            timestamp__gte=start_date
+        # 3. Auth metrics - match the AUTH FAILURES and AUTH SUCCESS on dashboard
+        auth_failures = ParsedLog.objects.filter(
+            raw_log__timestamp__gte=start_time,
+            status='failure'
         ).count()
         
-        # Calculate detection rate (threats per 100 logs) - FIXED calculation
-        detection_rate = "0%"
-        if logs_analyzed > 0:
-            rate = (threats_detected / logs_analyzed) * 100
-            detection_rate = f"{rate:.1f}%"
+        auth_success = ParsedLog.objects.filter(
+            raw_log__timestamp__gte=start_time,
+            status='success'
+        ).count()
         
-        # Get recent activities
+        # Get recent activities - use exactly the same Threat objects shown on dashboard
         recent_activities = []
-        
-        # First add threat detections
         recent_threats = Threat.objects.filter(
-            created_at__gte=start_date
+            created_at__gte=start_time,
+            severity__in=['high', 'critical']  # Only high/critical to match dashboard
         ).order_by('-created_at')[:5]
         
         for threat in recent_threats:
-            icon = "fas fa-shield-alt"
-            if threat.severity == "critical":
-                icon = "fas fa-radiation"
-            elif threat.severity == "high":
-                icon = "fas fa-exclamation-circle"
+            icon = 'fas fa-exclamation-triangle'
+            if threat.severity == 'critical':
+                icon = 'fas fa-exclamation-circle'
                 
             recent_activities.append({
-                'title': f"{threat.severity.title()} severity threat detected",
-                'timestamp': threat.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'title': threat.description[:100] + ('...' if len(threat.description) > 100 else ''),
+                'timestamp': threat.created_at.strftime("%Y-%m-%d %H:%M"),
                 'icon': icon
             })
-        
-        # Add log analysis activities
-        recent_logs = ParsedLog.objects.filter(
-            analysis_time__isnull=False,
-            raw_log__timestamp__gte=start_date
-        ).order_by('-analysis_time')[:3]
-        
-        for log in recent_logs:
+            
+        # Add system status activities - similar to dashboard health metrics
+        try:
+            import psutil
+            cpu_usage = psutil.cpu_percent(interval=0.1)
+            memory_usage = psutil.virtual_memory().percent
+            
             recent_activities.append({
-                'title': f"Log from {log.source_type} analyzed",
-                'timestamp': log.analysis_time.strftime('%Y-%m-%d %H:%M:%S'),
-                'icon': "fas fa-search"
+                'title': f"System monitoring: CPU {cpu_usage}%, Memory {memory_usage}%",
+                'timestamp': timezone.now().strftime("%Y-%m-%d %H:%M"),
+                'icon': 'fas fa-server'
             })
-        
-        # Sort by timestamp
-        recent_activities.sort(key=lambda x: x['timestamp'], reverse=True)
+        except:
+            pass
+            
+        logger.info(f"Profile stats API: Returning total_logs={total_logs}, high_alerts={high_alerts}")
         
         return JsonResponse({
-            'success': True,
-            'threats_detected': threats_detected,
-            'logs_analyzed': logs_analyzed,
-            'detection_rate': detection_rate,
-            'recent_activities': recent_activities[:5]  # Limit to 5 most recent
+            # Use same naming as the dashboard HTML elements expect
+            'threats_detected': high_alerts,      # Match dashboard "HIGH ALERTS"
+            'logs_analyzed': total_logs,          # Match dashboard "TOTAL LOGS" 
+            'auth_failures': auth_failures,       # Match dashboard "AUTH FAILURES"
+            'auth_success': auth_success,         # Match dashboard "AUTH SUCCESS"
+            'detection_rate': f"{(high_alerts / max(total_logs, 1) * 100):.1f}%",
+            'recent_activities': recent_activities
         })
     except Exception as e:
-        logger.exception(f"Error in profile_stats_api: {str(e)}")
+        logger.error(f"Error in profile stats API: {str(e)}", exc_info=True)
         return JsonResponse({
-            'success': False,
+            'threats_detected': 0,
+            'logs_analyzed': 0,
+            'detection_rate': '0%',
+            'auth_failures': 0,
+            'auth_success': 0,
+            'recent_activities': [],
             'error': str(e)
-        }, status=500)
+        })
 
 def validate_log_file(file_path, log_type):
     """
@@ -2713,7 +2711,7 @@ def api_event_detail(request, event_id):
             log_details = {
                 'id': event.parsed_log.id,
                 'timestamp': event.parsed_log.raw_log.timestamp.strftime('%Y-%m-%d %H:%M:%S') if hasattr(event.parsed_log, 'raw_log') else None,
-                'source_type': event.parsed_log.source_type or 'Unknown',
+                'source_type': event.parsed_log.source.source_type if hasattr(event.parsed_log, 'raw_log') and hasattr(event.parsed_log.raw_log, 'source') else None,
                 'source_ip': event.parsed_log.source_ip or 'Unknown',
                 'user_agent': event.parsed_log.user_agent or 'Not available',
                 'status_code': event.parsed_log.status_code,
@@ -2928,9 +2926,36 @@ def dashboard_counts_api(request):
     # Get the timeframe parameter from the request or use the default
     timeframe = request.GET.get('timeframe', '1d')
     
-    # First try to get metrics from standardized cache format used by force_refresh_dashboard
+    # Determine time period based on timeframe 
+    start_time = get_start_date_from_timeframe(timeframe)
+    
+    # Always check the actual count directly from database
+    actual_high_alerts = Threat.objects.filter(
+        created_at__gte=start_time,
+        severity__in=['high', 'critical']
+    ).count()
+    
+    # Clear old cache if it doesn't match actual count
     cache_key = f"dashboard_metrics:{timeframe}"
+    old_cache_key = f'high_level_alerts_{timeframe}'
     dashboard_metrics = cache.get(cache_key)
+    
+    if dashboard_metrics and dashboard_metrics.get('high_level_alerts') != actual_high_alerts:
+        cache.delete(cache_key)  # Clear the outdated cache
+        dashboard_metrics = None  # Force retrieval of fresh data
+        
+        # Get processor instance and force dashboard refresh
+        from log_ingestion.realtime_processor import RealtimeLogProcessor
+        processor = RealtimeLogProcessor.get_instance()
+        processor.force_refresh_dashboard()
+        
+        # Update dashboard_metrics to None to force re-fetch
+        dashboard_metrics = None
+
+    # First try to get metrics from standardized cache format used by force_refresh_dashboard
+    if dashboard_metrics is None:
+        cache_key = f"dashboard_metrics:{timeframe}"
+        dashboard_metrics = cache.get(cache_key)
     
     # If dashboard_metrics is not None, it means we have valid cached data
     if dashboard_metrics is not None:
@@ -3077,7 +3102,7 @@ def security_alerts_api(request):
             alerts_data.append({
                 'id': alert.id,
                 'created_at': alert.created_at.isoformat(),
-                'formatted_time': alert.created_at.strftime('%b %d, %H:%M'),
+                'formatted_time': alert.created_at.strftime('%b %d, %H:%M:%S'),  # Added seconds to match detail view
                 'source_ip': alert.source_ip or 'Unknown',
                 'severity': alert.severity,
                 'mitre_tactic': alert.mitre_tactic or 'Unclassified',
@@ -3099,3 +3124,57 @@ def security_alerts_api(request):
             'error': str(e),
             'alerts': []
         }, status=500)
+
+@login_required
+def profile(request):
+    """User profile view with monitoring statistics"""
+    # Calculate initial data for the template (same logic as the API)
+    start_time = timezone.now() - timedelta(days=30)
+    
+    # Get threats detected count
+    threats_detected = Threat.objects.filter(
+        created_at__gte=start_time
+    ).count()
+    
+    # Get logs analyzed count
+    logs_analyzed = ParsedLog.objects.filter(
+        timestamp__gte=start_time
+    ).count()
+    
+    # Calculate detection rate
+    detection_rate = '0%'
+    if logs_analyzed > 0:
+        rate = (threats_detected / logs_analyzed) * 100
+        detection_rate = f"{rate:.1f}%"
+    
+    # Get recent activities (simplified version - the API will load the complete data)
+    recent_activities = []
+    
+    # Add recent threats
+    recent_threats = Threat.objects.filter(
+        created_at__gte=start_time
+    ).order_by('-created_at')[:2]  # Just 2 for initial load
+    
+    for threat in recent_threats:
+        icon = 'fas fa-shield-alt'
+        if threat.severity == 'critical':
+            icon = 'fas fa-exclamation-circle'
+        elif threat.severity == 'high':
+            icon = 'fas fa-exclamation-triangle'
+            
+        recent_activities.append({
+            'title': f"{threat.severity.capitalize()} severity threat detected - {threat.description[:50]}...",
+            'timestamp': threat.created_at.strftime("%Y-%m-%d %H:%M"),
+            'icon': icon
+        })
+    
+    # Pass to template
+    context = {
+        'user': request.user,
+        'threats_detected': threats_detected,
+        'logs_analyzed': logs_analyzed,
+        'detection_rate': detection_rate,
+        'recent_activities': recent_activities,
+    }
+    
+    return render(request, 'profile.html', context)

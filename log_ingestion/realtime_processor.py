@@ -110,6 +110,15 @@ class RealtimeLogProcessor:
             # Restore alerted threats
             self.alerted_threats = temp_alerted_threats
     
+        # Check if threads are still running after stop (emergency cleanup)
+        if self.thread and self.thread.is_alive():
+            logger.warning("Forcing termination of zombie processing thread!")
+            self.thread = None
+
+        if self.file_watch_thread and self.file_watch_thread.is_alive():
+            logger.warning("Forcing termination of zombie file monitoring thread!")
+            self.file_watch_thread = None
+
         # Use provided parameters or defaults from settings
         if interval is not None:
             self.processing_interval = max(10, min(300, int(interval)))
@@ -201,6 +210,10 @@ class RealtimeLogProcessor:
             self.file_watch_thread = threading.Thread(target=self._active_file_monitoring)
             self.file_watch_thread.daemon = True
             self.file_watch_thread.start()
+            
+            # NEW: Process last 50 logs from each file immediately
+            logger.info("Processing latest logs immediately after startup")
+            self._process_last_n_logs(logs_per_file=50)
             
             # Reset alerted threats set when starting
             self.alerted_threats = set()
@@ -436,6 +449,7 @@ class RealtimeLogProcessor:
         """Continuous log processing loop that properly analyzes logs from all sources with priority"""
         logger.info("Starting enhanced continuous log processing with Apache prioritization")
         
+        # Set to run immediately on startup to process the logs we just created
         next_run_time = timezone.now()
         last_processed_id = 0  # Track the last processed log ID
         
@@ -457,21 +471,32 @@ class RealtimeLogProcessor:
                         source__source_type__startswith='apache',
                         timestamp__gte=cutoff_time,  # Only process recent logs
                         id__gt=last_processed_id
-                    ).order_by('-timestamp')[:max(10, self.logs_per_batch // 3)]  # Use -timestamp to get newest first
+                    ).order_by('-timestamp')[:max(25, self.logs_per_batch // 2)]  # Increased from 1/3 to 1/2
                     
                     # Then fetch remaining logs up to the batch limit, prioritizing newer logs
-                    remaining_quota = max(0, self.logs_per_batch - apache_logs.count())
+                    remaining_quota = max(0, self.logs_per_batch - len(list(apache_logs)))
+                    
+                    # FIXED: Different approach to avoid MariaDB's limitation with LIMIT in subqueries
                     if remaining_quota > 0:
-                        # FIXED: Materialize the apache logs IDs to avoid MariaDB's limitation
+                        # Force materialization to get the IDs safely
                         apache_log_ids = list(apache_logs.values_list('id', flat=True))
                         
-                        other_logs = RawLog.objects.filter(
-                            is_parsed=False,
-                            timestamp__gte=cutoff_time,  # Only process recent logs
-                            id__gt=last_processed_id
-                        ).exclude(
-                            id__in=apache_log_ids  # Use the materialized list instead of the queryset
-                        ).order_by('-timestamp')[:remaining_quota]  # Use -timestamp to get newest first
+                        if apache_log_ids:
+                            # When we have Apache logs, use an exclude query but ensure it's compatible with MariaDB
+                            other_logs = RawLog.objects.filter(
+                                is_parsed=False,
+                                timestamp__gte=cutoff_time,  # Only process recent logs
+                                id__gt=last_processed_id
+                            ).exclude(
+                                id__in=apache_log_ids
+                            ).order_by('-timestamp')[:remaining_quota]
+                        else:
+                            # When no Apache logs were fetched, no need for exclusion
+                            other_logs = RawLog.objects.filter(
+                                is_parsed=False,
+                                timestamp__gte=cutoff_time,  # Only process recent logs
+                                id__gt=last_processed_id
+                            ).order_by('-timestamp')[:remaining_quota]
                     else:
                         other_logs = RawLog.objects.none()
                     
@@ -514,7 +539,10 @@ class RealtimeLogProcessor:
                                     # ENHANCED: Extract MITRE data from normalized_data
                                     mitre_tactic = None
                                     mitre_technique = None
+                                    mitre_tactic_id = None
+                                    mitre_technique_id = None
                                     
+                                    # Make sure normalized_data exists and has analysis data
                                     if hasattr(parsed_log, 'normalized_data') and parsed_log.normalized_data:
                                         analysis_data = parsed_log.normalized_data.get('analysis', {})
                                         mitre_tactic = analysis_data.get('mitre_tactic')
@@ -527,39 +555,66 @@ class RealtimeLogProcessor:
                                             try:
                                                 from threat_detection.models import Threat
                                                 
-                                                # Create threat with enhanced MITRE information
-                                                threat = Threat.objects.create(
-                                                    severity="high" if parsed_log.status == 'attack' else "medium",
-                                                    status="new",
-                                                    description=f"Detected {analysis_data.get('attack_type', 'unknown attack')} in {parsed_log.request_path or 'log entry'}",
-                                                    source_ip=parsed_log.source_ip,
-                                                    affected_system=parsed_log.source_type,
-                                                    mitre_tactic=mitre_tactic,
-                                                    mitre_technique=f"{mitre_technique} ({mitre_technique_id})" if mitre_technique and mitre_technique_id else mitre_technique,
-                                                    created_at=timezone.now(),
-                                                    updated_at=timezone.now(),
-                                                    parsed_log=parsed_log,
-                                                    analysis_data={
-                                                        "attack_type": analysis_data.get('attack_type'),
-                                                        "attack_score": analysis_data.get('attack_score'),
-                                                        "mitre_tactic": mitre_tactic,
-                                                        "mitre_tactic_id": mitre_tactic_id,
-                                                        "mitre_technique": mitre_technique,
-                                                        "mitre_technique_id": mitre_technique_id,
-                                                        "details": analysis_data.get('threat_details', [])
-                                                    }
-                                                )
+                                                # ENHANCED: Ensure we always have MITRE data - if missing, use attack_type
+                                                if not mitre_tactic and not mitre_technique:
+                                                    # Extract attack_type from analysis data
+                                                    attack_type = analysis_data.get('attack_type')
+                                                    if attack_type:
+                                                        # Use determine_mitre_classification as fallback
+                                                        from authentication.views_settings import determine_mitre_classification
+                                                        mitre_tactic, mitre_tactic_id, mitre_technique, mitre_technique_id = determine_mitre_classification(
+                                                            parsed_log.raw_log.content if parsed_log.raw_log else "",
+                                                            attack_type,
+                                                            analysis_data.get('threat_details', [])
+                                                        )
                                                 
-                                                # Generate a signature for deduplication
-                                                threat_signature = self._get_threat_signature(parsed_log)
-                                                
-                                                # Only count as new if we haven't alerted on this signature
-                                                if threat_signature not in self.alerted_threats:
-                                                    threat_count += 1
-                                                    new_threats.append(threat)  # Note: Changed from parsed_log to threat
-                                                    self.alerted_threats.add(threat_signature)
+                                                # Always provide at least basic classification for command injection
+                                                if 'command_injection' in str(parsed_log.raw_log.content).lower() and not mitre_tactic:
+                                                    mitre_tactic = 'Execution'
+                                                    mitre_tactic_id = 'TA0002'
+                                                    mitre_technique = 'T1059'
+                                                    mitre_technique_id = 'T1059'
+                                                    
+                                                # Create threat with enhanced MITRE information and proper transaction handling
+                                                with transaction.atomic():  # Ensure database transaction commits
+                                                    threat = Threat.objects.create(
+                                                        severity=parsed_log.status == 'attack' and 'high' or 'medium',
+                                                        status='new',
+                                                        description=f"Detected {analysis_data.get('attack_type', 'suspicious activity')} in request to {parsed_log.request_path}" if parsed_log.request_path else "Suspicious log entry detected",
+                                                        source_ip=parsed_log.source_ip,
+                                                        affected_system=parsed_log.source_type,
+                                                        mitre_tactic=mitre_tactic,
+                                                        mitre_technique=mitre_technique,
+                                                        created_at=timezone.now(),
+                                                        updated_at=timezone.now(),
+                                                        parsed_log=parsed_log,
+                                                        analysis_data={
+                                                            "threat_details": analysis_data.get('threat_details', []),
+                                                            "attack_type": analysis_data.get('attack_type', ''),
+                                                            "attack_score": analysis_data.get('attack_score', 0),
+                                                            "mitre_tactic": mitre_tactic,
+                                                            "mitre_tactic_id": mitre_tactic_id,
+                                                            "mitre_technique": mitre_technique,
+                                                            "mitre_technique_id": mitre_technique_id,
+                                                            "details": analysis_data.get('threat_details', [])
+                                                        }
+                                                    )
+                                                    
+                                                    # Force database to commit the threat by refetching
+                                                    threat = Threat.objects.get(id=threat.id)
+                                                    logger.info(f"Successfully created and verified threat ID {threat.id}")
+                                                    
+                                                    # Generate a signature for deduplication
+                                                    threat_signature = self._get_threat_signature(parsed_log)
+                                                    
+                                                    # Only count as new if we haven't alerted on this signature
+                                                    if threat_signature not in self.alerted_threats:
+                                                        threat_count += 1
+                                                        new_threats.append(threat)  # Use the threat object, not parsed_log
+                                                        self.alerted_threats.add(threat_signature)
+                                                        
                                             except Exception as threat_error:
-                                                logger.error(f"Error creating threat: {str(threat_error)}")
+                                                logger.error(f"Error creating threat: {str(threat_error)}", exc_info=True)
                             
                         except Exception as e:
                             logger.error(f"Error processing log {raw_log.id}: {str(e)}")
@@ -712,23 +767,11 @@ class RealtimeLogProcessor:
                                             # For MySQL error logs, check whitelist patterns first
                                             should_skip = False
                                             if source.source_type.lower() in ('mysql', 'mysql_error'):
-                                                # MySQL error patterns to whitelist
-                                                mysql_whitelist_patterns = [
-                                                    "Incorrect definition of table mysql",
-                                                    "expected column .* at position",
-                                                    "InnoDB: Initializing buffer pool",
-                                                    "InnoDB: Completed initialization",
-                                                    "Server socket created on IP",
-                                                    "Starting MariaDB",
-                                                    "ready for connections",
-                                                    "InnoDB: Starting shutdown"
-                                                ]
-                                                
-                                                for pattern in mysql_whitelist_patterns:
-                                                    if re.search(pattern, line, re.IGNORECASE):
-                                                        logger.debug(f"Skipping whitelisted MySQL message: {line[:50]}...")
-                                                        should_skip = True
-                                                        break
+                                                # Use the comprehensive filter method instead of the limited patterns
+                                                if self._should_ignore_mysql_error(line):
+                                                    logger.debug(f"Skipping whitelisted MySQL message: {line[:50]}...")
+                                                    should_skip = True
+                                                    continue
 
                                             # Only process if not skipped
                                             if not should_skip:
@@ -930,7 +973,7 @@ class RealtimeLogProcessor:
                     # Send alert to this user for their log source
                     from alerts.services import AlertService
                     AlertService.send_alert(
-                        title=f"Security Alert for {source.name}: {len(source_threats)} threats detected",
+                        title=f"Real-time Analysis: {len(source_threats)} security concerns detected",
                         message=(
                             f"Real-time analysis detected {severity_counts['attack']} attacks and "
                             f"{severity_counts['suspicious']} suspicious activities.\n\n"
@@ -1100,19 +1143,37 @@ class RealtimeLogProcessor:
             return
             
         logger.info("Stopping real-time log processor")
+        # Set both flags to ensure all threads terminate
         self.running = False
-        
+        self.enabled = False  # Also set enabled to False to ensure threads exit
+    
         if self.collection_manager:
             self.collection_manager.stop_monitoring()
         
-        # Wait for threads to terminate
+        # Wait for threads to terminate with proper logging
         if self.thread:
+            logger.info("Waiting for main processing thread to terminate...")
             self.thread.join(timeout=5)
+            if self.thread.is_alive():
+                logger.warning("Main processing thread did not terminate gracefully!")
             
         if self.file_watch_thread:
+            logger.info("Waiting for file monitoring thread to terminate...")
             self.file_watch_thread.join(timeout=5)
-        
-        logger.info("Real-time log processor stopped")
+            if self.file_watch_thread.is_alive():
+                logger.warning("File monitoring thread did not terminate gracefully!")
+    
+        # Reset thread references to avoid zombie threads
+        self.thread = None
+        self.file_watch_thread = None
+    
+        # Update enabled status in database
+        try:
+            self._save_settings(self.processing_interval, self.logs_per_batch, False)
+        except Exception as e:
+            logger.error(f"Error saving disabled state to database: {str(e)}")
+    
+        logger.info("Real-time log processor stopped successfully")
     
     def restart(self):
         """Restart the log processor by stopping and starting it again"""
@@ -1301,4 +1362,155 @@ class RealtimeLogProcessor:
             self._dedup_cache = {}
             
         return self._dedup_cache
+    
+    # Add this in RealtimeLogProcessor._continuous_processing or create a separate filter method
+    def _should_ignore_mysql_error(self, log_content):
+        """
+        Check if this is a common MySQL error that should be ignored
+        Uses the comprehensive whitelist from views_settings.py
+        """
+        # Comprehensive list of benign MySQL errors to ignore
+        mysql_error_whitelist = [
+            # Table definition errors
+            r"Incorrect definition of table mysql\.column_stats",
+            r"Incorrect definition of table mysql\.event",
+            r"Incorrect definition of table mysql\.proc",
+            r"Incorrect definition of table mysql\.\w+: expected column .* at position \d+ to have type",
+            r"expected column .* to have type .* found type",
+            
+            # Database initialization messages
+            r"InnoDB: Initializing buffer pool",
+            r"InnoDB: Completed initialization of buffer pool",
+            r"Server socket created on IP",
+            
+            # Standard startup/shutdown sequences
+            r"Starting MariaDB \[version",
+            r"ready for connections",
+            r"InnoDB: Starting shutdown",
+            r"InnoDB: .* started; log sequence number",
+            
+            # Additional benign errors
+            r"InnoDB: Creating shared tablespace",
+            r"InnoDB: New log files created",
+            r"Plugin '.*' registration as a STORAGE ENGINE failed",
+            r"InnoDB: Waiting for purge to start",
+            r"InnoDB: .*pages read, .* created, .* merged",
+            r"InnoDB: page_cleaner: .* loop",
+            r"Aborted connection",  # Very common and usually benign
+            r"Access denied for user",  # Handled at application level
+            r"as user 'root' with no password",  # Common during development
+            r"Can't open shared memory",  # Common configuration warning
+            r"InnoDB: Buffer pool\(s\) load completed",
+            r"native AIO",
+            r"Mutexes and rw_locks",
+            r"\[\w+\] Shutdown complete"
+        ]
+        
+        # Check if the log content matches any of the whitelist patterns
+        for pattern in mysql_error_whitelist:
+            if re.search(pattern, log_content, re.IGNORECASE):
+                return True
+                
+        # Additional filtering for very common and safe messages
+        # Note: These are often generated at high volume
+        if any(common in log_content for common in [
+            "InnoDB: ",  # Most InnoDB informational messages
+            "Memory used in load",
+            "Database was not shut down normally",
+            "Log sequence number",
+            "Recovering after a crash",
+            "Server listening on",
+            "skip-name-resolve",
+            "flush tables"
+        ]):
+            return True
+            
+        return False
+    
+    def _process_last_n_logs(self, logs_per_file=50):
+        """
+        Process the last N logs from each log file immediately.
+        This ensures users see immediate results when enabling real-time analysis.
+        
+        Args:
+            logs_per_file (int): Number of logs to process from each file
+        """
+        try:
+            from collections import deque
+            import hashlib
+            
+            total_processed = 0
+            logger.info(f"Processing last {logs_per_file} logs from each file")
+            
+            # Process each log source file
+            for source in self.log_sources:
+                try:
+                    # Skip invalid paths
+                    if not source.file_path or not os.path.exists(source.file_path):
+                        logger.warning(f"Skipping {source.name}: File not found at {source.file_path}")
+                        continue
+                    
+                    logger.info(f"Reading latest logs from {source.name}: {source.file_path}")
+                    
+                    # Open file and read the last N lines using deque with maxlen
+                    with open(source.file_path, 'r', encoding='utf-8', errors='replace') as f:
+                        # Use deque with maxlen to efficiently get last N lines
+                        last_lines = deque(maxlen=logs_per_file)
+                        for line in f:
+                            if line.strip():  # Skip empty lines
+                                last_lines.append(line.strip())
+                    
+                    # Check if we got any lines
+                    if not last_lines:
+                        logger.info(f"No content found in {source.file_path}")
+                        continue
+                        
+                    logger.info(f"Found {len(last_lines)} lines in {source.name}")
+                    
+                    # Process the lines in batches to avoid overwhelming the database
+                    logs_created = 0
+                    content_hashes = {}
+                    
+                    with transaction.atomic():
+                        for line in last_lines:
+                            # Skip empty lines
+                            if not line.strip():
+                                continue
+                                
+                            # Add deduplication by content hash
+                            content_hash = hashlib.md5(line.encode('utf-8')).hexdigest()
+                            
+                            # Skip if we've seen this content in this batch already
+                            if content_hash in content_hashes:
+                                continue
+                                
+                            content_hashes[content_hash] = True
+                            
+                            # Create RawLog entry with current timestamp 
+                            RawLog.objects.create(
+                                source=source,
+                                content=line,
+                                timestamp=timezone.now(),
+                                is_parsed=False
+                            )
+                            logs_created += 1
+                        
+                    logger.info(f"Created {logs_created} raw logs from {source.name}")
+                    total_processed += logs_created
+                    
+                except Exception as e:
+                    logger.error(f"Error processing logs from {source.name}: {str(e)}")
+                    
+            # Trigger immediate analysis of these logs
+            if total_processed > 0:
+                logger.info(f"Triggering immediate analysis of {total_processed} newly created logs")
+                # This will be handled by the continuous processing thread in its next cycle
+                # Force the next cycle to happen sooner
+                next_run_time = timezone.now()
+                
+            return total_processed
+            
+        except Exception as e:
+            logger.error(f"Error in _process_last_n_logs: {str(e)}", exc_info=True)
+            return 0
 

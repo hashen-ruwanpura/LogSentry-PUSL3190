@@ -30,7 +30,7 @@ class MitreAttackMapper:
         }
         
         self.command_injection_mappings = {
-            'default': ('execution', 'T1059', 'Command and Scripting Interpreter'),
+            'default': ('execution', 'T1059', 'T1059'),
             'web_shell': ('persistence', 'T1505.003', 'Web Shell'),
             'reverse_shell': ('command_and_control', 'T1071.001', 'Web Protocols')
         }
@@ -50,7 +50,7 @@ class MitreAttackMapper:
             'default': ('defense_evasion', 'T1527', 'Application Access Token'),
             'admin': ('privilege_escalation', 'T1068', 'Exploitation for Privilege Escalation'),
             'config': ('impact', 'T1565', 'Data Manipulation'),
-            'import': ('execution', 'T1059', 'Command and Scripting Interpreter'),
+            'import': ('execution', 'T1059', 'T1059'),
             'sql': ('execution', 'T1059.007', 'JavaScript/WebShell'),
             'export': ('exfiltration', 'T1030', 'Data Transfer Size Limits'),
             'server': ('discovery', 'T1082', 'System Information Discovery'),

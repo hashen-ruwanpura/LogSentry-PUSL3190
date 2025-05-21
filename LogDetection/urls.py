@@ -41,6 +41,7 @@ from authentication.views_mysql_logs import mysql_logs_view  # Add this new impo
 from authentication import views_explore_agent  # Add this import
 from authentication import views_admin_auditlogs  # Add this import
 from authentication import views_admin_contact  # Add this import
+from authentication.views import profile_stats_api  # Import the profile_stats_api view
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -177,6 +178,9 @@ urlpatterns = [
 
     # Add this line for message API detail
     path('api/admin/messages/<int:message_id>/', views_admin_contact.message_api_detail, name='message_api_detail'),
+
+    # API endpoint for profile statistics
+    path('api/profile-stats/', profile_stats_api, name='profile_stats_api'),
 ]
 
 # AI ANALYTICS

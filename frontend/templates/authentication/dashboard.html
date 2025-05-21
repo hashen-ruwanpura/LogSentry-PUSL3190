@@ -802,14 +802,13 @@
                                 {% if security_alerts %}
                                 {% for alert in security_alerts %}
                                 <tr>
-                                    <td>{{ alert.created_at|date:"M d, H:i" }}</td>
+                                    <td>{{ alert.created_at|date:"M d, H:i:s" }}</td>
                                     <td>{{ alert.source_ip|default:"Unknown" }}</td>
                                     <td class="severity-{{ alert.severity }}">{{ alert.severity|title }}</td>
                                     <td>{{ alert.mitre_tactic|default:"Unclassified" }}</td>
                                     <td>{{ alert.description|truncatechars:70 }}</td>
                                     <td>
-                                        <a href="{% url 'alert_detail' alert.id %}"
-                                            class="btn btn-sm btn-outline-primary">
+                                        <a href="{% url 'alert_detail' alert.id %}" class="btn btn-sm btn-outline-primary">
                                             <i class="fas fa-eye"></i> Details
                                         </a>
                                     </td>
@@ -817,8 +816,8 @@
                                 {% endfor %}
                                 {% else %}
                                 <tr>
-                                    <td colspan="6" class="text-center py-4">No security alerts in the selected time
-                                        period.</td>
+                                    <td colspan="6" class="text-center py-4">No security alerts in the selected time period
+                                    </td>
                                 </tr>
                                 {% endif %}
                             </tbody>
@@ -1202,7 +1201,7 @@
 
                             // Configure alert row
                             row.innerHTML = `
-                                <td>${alert.formatted_time}</td>
+                                <td>${alert.created_at ? new Date(alert.created_at).toLocaleString('en-US', {month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: false}) : 'Unknown'}</td>
                                 <td>${alert.source_ip || 'Unknown'}</td>
                                 <td class="severity-${alert.severity}">${alert.severity.charAt(0).toUpperCase() + alert.severity.slice(1)}</td>
                                 <td>${alert.mitre_tactic || 'Unclassified'}</td>
@@ -1284,7 +1283,7 @@
                     .then(data => {
                         // Update the metric values in the UI
                         document.getElementById('total-logs-count').textContent = data.raw_count;
-                        document.getElementById('high-alerts-count').textContent = data.threat_count;
+                        document.getElementById('high-alerts-count').textContent = data.high_level_alerts;
 
                         // Flash updated elements to indicate change
                         ['total-logs-count', 'high-alerts-count'].forEach(id => {
@@ -1295,7 +1294,7 @@
                             }
                         });
 
-                        console.log(`Dashboard updated with ${data.timeframe} timeframe data: ${data.raw_count} logs, ${data.threat_count} threats`);
+                        console.log(`Dashboard updated with ${data.timeframe} timeframe data: ${data.raw_count} logs, ${data.high_level_alerts} high alerts`);
                     })
                     .catch(error => console.error('Error fetching dashboard counts:', error));
             }
