@@ -216,7 +216,7 @@ class RealtimeLogProcessor:
             self._process_last_n_logs(logs_per_file=50)
             
             # Reset alerted threats set when starting
-            self.alerted_threats = set()
+            self.clear_alert_history()  # Replace self.alerted_threats = set()
             
             logger.info(f"Real-time log processor started with interval={self.processing_interval}s, batch={self.logs_per_batch}")
             return True
@@ -564,17 +564,18 @@ class RealtimeLogProcessor:
                                                         from authentication.views_settings import determine_mitre_classification
                                                         mitre_tactic, mitre_tactic_id, mitre_technique, mitre_technique_id = determine_mitre_classification(
                                                             parsed_log.raw_log.content if parsed_log.raw_log else "",
-                                                            attack_type,
+                                                            attack_type,  # Pass the detected attack_type
                                                             analysis_data.get('threat_details', [])
                                                         )
                                                 
                                                 # Always provide at least basic classification for command injection
-                                                if 'command_injection' in str(parsed_log.raw_log.content).lower() and not mitre_tactic:
-                                                    mitre_tactic = 'Execution'
-                                                    mitre_tactic_id = 'TA0002'
-                                                    mitre_technique = 'T1059'
-                                                    mitre_technique_id = 'T1059'
-                                                    
+                                                # REMOVE or modify this block - don't blindly classify as command injection
+                                                # if 'command_injection' in str(parsed_log.raw_log.content).lower() and not mitre_tactic:
+                                                #    mitre_tactic = 'Execution'
+                                                #    mitre_tactic_id = 'TA0002'
+                                                #    mitre_technique = 'T1059'
+                                                #    mitre_technique_id = 'T1059'
+                                                
                                                 # Create threat with enhanced MITRE information and proper transaction handling
                                                 with transaction.atomic():  # Ensure database transaction commits
                                                     threat = Threat.objects.create(
@@ -1203,6 +1204,22 @@ class RealtimeLogProcessor:
     def clear_alert_history(self):
         """Clear the alert deduplication history to start alerting on threats again"""
         self.alerted_threats = set()
+    
+        # Also clear the database-backed deduplication cache
+        try:
+            from authentication.models import SystemSettings
+            dedup_setting = SystemSettings.objects.filter(
+                section='alert_deduplication',
+                settings_key='alert_signatures'
+            ).first()
+            
+            if dedup_setting:
+                dedup_setting.settings_value = '{}'
+                dedup_setting.save()
+                logger.info("Database alert deduplication cache cleared")
+        except Exception as e:
+            logger.error(f"Error clearing database deduplication cache: {str(e)}")
+        
         logger.info("Alert deduplication history cleared")
         
     def _create_default_sources(self):

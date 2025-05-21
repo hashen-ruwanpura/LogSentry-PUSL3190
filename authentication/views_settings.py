@@ -73,7 +73,7 @@ MITRE_ATTACK_MAPPINGS = {
     'sql_injection': {
         'tactic': 'Defense Evasion',
         'tactic_id': 'TA0005',
-        'technique': 'Exploit Public-Facing Application',
+        'technique': 'T1190',
         'technique_id': 'T1190',
         'description': 'Adversary attempts to exploit vulnerable parameters to inject and execute SQL commands'
     },
@@ -87,35 +87,35 @@ MITRE_ATTACK_MAPPINGS = {
     'xss': {
         'tactic': 'Initial Access',
         'tactic_id': 'TA0001',
-        'technique': 'Drive-by Compromise',
+        'technique': 'T1189',
         'technique_id': 'T1189',
         'description': 'Adversary attempts to inject scripts processed by web browsers'
     },
     'path_traversal': {
         'tactic': 'Discovery',
         'tactic_id': 'TA0007',
-        'technique': 'File and Directory Discovery',
+        'technique': 'T1083',
         'technique_id': 'T1083',
         'description': 'Adversary attempts to navigate directory structure beyond intended boundaries'
     },
     'session_hijacking': {
         'tactic': 'Credential Access',
         'tactic_id': 'TA0006',
-        'technique': 'Steal Web Session Cookie',
+        'technique': 'T1539',
         'technique_id': 'T1539',
         'description': 'Adversary attempts to steal or manipulate web session identifiers'
     },
     'csrf': {
         'tactic': 'Privilege Escalation',
         'tactic_id': 'TA0004',
-        'technique': 'Abuse Elevation Control Mechanism',
+        'technique': 'T1548',
         'technique_id': 'T1548',
         'description': 'Adversary exploits authentication mechanisms to perform unauthorized actions'
     },
     'data_exfiltration': {
         'tactic': 'Exfiltration',
         'tactic_id': 'TA0010',
-        'technique': 'Exfiltration Over Web Service',
+        'technique': 'T1567',
         'technique_id': 'T1567',
         'description': 'Adversary attempts to steal data through web requests'
     }
@@ -127,31 +127,31 @@ ATTACK_PATTERN_MITRE_MAPPINGS = {
     r'cat[\s\n]+\/etc\/passwd': {
         'tactic': 'Discovery',
         'tactic_id': 'TA0007',
-        'technique': 'System Information Discovery',
+        'technique': 'T1082',
         'technique_id': 'T1082'
     },
     r'nc[\s\n]+\-e': {
         'tactic': 'Command and Control',
         'tactic_id': 'TA0011',
-        'technique': 'Remote Access Software',
+        'technique': 'T1219',
         'technique_id': 'T1219'
     },
     r'bash[\s\n]+\-i': {
         'tactic': 'Command and Control',
         'tactic_id': 'TA0011', 
-        'technique': 'Remote Access Software',
+        'technique': 'T1219',
         'technique_id': 'T1219'
     },
     r'wget[\s\n]+http': {
         'tactic': 'Command and Control',
         'tactic_id': 'TA0011',
-        'technique': 'Ingress Tool Transfer',
+        'technique': 'T1105',
         'technique_id': 'T1105'
     },
     r'curl[\s\n]+http': {
         'tactic': 'Command and Control',
         'tactic_id': 'TA0011',
-        'technique': 'Ingress Tool Transfer',
+        'technique': 'T1105',
         'technique_id': 'T1105'
     },
     
@@ -159,13 +159,13 @@ ATTACK_PATTERN_MITRE_MAPPINGS = {
     r'UNION[\s\n]+SELECT': {
         'tactic': 'Collection',
         'tactic_id': 'TA0009',
-        'technique': 'Data from Information Repositories',
+        'technique': 'T1213',
         'technique_id': 'T1213'
     },
     'information_schema': {
         'tactic': 'Discovery',
         'tactic_id': 'TA0007',
-        'technique': 'Database Schema Discovery', 
+        'technique': 'T1046', 
         'technique_id': 'T1046'
     },
     
@@ -173,7 +173,7 @@ ATTACK_PATTERN_MITRE_MAPPINGS = {
     r'\/etc\/passwd': {
         'tactic': 'Credential Access',
         'tactic_id': 'TA0006',
-        'technique': 'OS Credential Dumping',
+        'technique': 'T1003',
         'technique_id': 'T1003'
     }
 }
@@ -210,13 +210,13 @@ ATTACK_PATTERN_MITRE_MAPPINGS.update({
     r'/phpmyadmin': {
         'tactic': 'Initial Access',
         'tactic_id': 'TA0001',
-        'technique': 'Valid Accounts: Default Accounts',
+        'technique': 'T1078.001',
         'technique_id': 'T1078.001'
     },
     r'/admin': {
         'tactic': 'Initial Access',
         'tactic_id': 'TA0001',
-        'technique': 'Valid Accounts: Default Accounts',
+        'technique': 'T1078.001',
         'technique_id': 'T1078.001'
     },
     
@@ -224,19 +224,19 @@ ATTACK_PATTERN_MITRE_MAPPINGS.update({
     r'ls\s+-la': {
         'tactic': 'Discovery',
         'tactic_id': 'TA0007',
-        'technique': 'File and Directory Discovery',
+        'technique': 'T1083',
         'technique_id': 'T1083'
     },
     r'cat\s+/proc': {
         'tactic': 'Discovery',
         'tactic_id': 'TA0007',
-        'technique': 'System Information Discovery',
+        'technique': 'T1082',
         'technique_id': 'T1082'
     },
     r'uname\s+-a': {
         'tactic': 'Discovery',
         'tactic_id': 'TA0007',
-        'technique': 'System Information Discovery',
+        'technique': 'T1082',
         'technique_id': 'T1082'
     },
     
@@ -244,13 +244,13 @@ ATTACK_PATTERN_MITRE_MAPPINGS.update({
     r'\.exe\s+download': {
         'tactic': 'Command and Control',
         'tactic_id': 'TA0011',
-        'technique': 'Ingress Tool Transfer',
+        'technique': 'T1105',
         'technique_id': 'T1105'
     },
     r'powershell\s+-e': {
         'tactic': 'Execution',
         'tactic_id': 'TA0002',
-        'technique': 'PowerShell',
+        'technique': 'T1059.001',
         'technique_id': 'T1059.001'
     },
     
@@ -258,7 +258,7 @@ ATTACK_PATTERN_MITRE_MAPPINGS.update({
     r'file_uploads': {
         'tactic': 'Defense Evasion',
         'tactic_id': 'TA0005',
-        'technique': 'Upload Malicious Tool',
+        'technique': 'T1608.001',
         'technique_id': 'T1608.001'
     },
     
@@ -266,7 +266,7 @@ ATTACK_PATTERN_MITRE_MAPPINGS.update({
     r'/phpmyadmin/index\.php': {
         'tactic': 'Initial Access',
         'tactic_id': 'TA0001',
-        'technique': 'Valid Accounts: Default Accounts',
+        'technique': 'T1078.001',
         'technique_id': 'T1078.001'
     },
     
@@ -274,19 +274,19 @@ ATTACK_PATTERN_MITRE_MAPPINGS.update({
     r'profile\.php\?email=.*&bio=.*&display_name=': {
         'tactic': 'Privilege Escalation',
         'tactic_id': 'TA0004',
-        'technique': 'Abuse Elevation Control Mechanism',
+        'technique': 'T1548',
         'technique_id': 'T1548'
     },
     r'GET-CSRF-ATTACK-SUCCESSFUL': {
         'tactic': 'Privilege Escalation',
         'tactic_id': 'TA0004',
-        'technique': 'Abuse Elevation Control Mechanism', 
+        'technique': 'T1548', 
         'technique_id': 'T1548'
     },
     r'HACKED-VIA-GET': {
         'tactic': 'Privilege Escalation',
         'tactic_id': 'TA0004',
-        'technique': 'Abuse Elevation Control Mechanism',
+        'technique': 'T1548',
         'technique_id': 'T1548'
     },
     
@@ -312,38 +312,38 @@ ATTACK_PATTERN_MITRE_MAPPINGS.update({
     r'/vuln_blog/[^/]+(?:\.php)?\b': {
         'tactic': 'Initial Access',
         'tactic_id': 'TA0001',
-        'technique': 'Exploit Public-Facing Application',
+        'technique': 'T1190',
         'technique_id': 'T1190'
     },
     
     r'/vuln_blog/register\.php': {
         'tactic': 'Initial Access',
         'tactic_id': 'TA0001',
-        'technique': 'Valid Accounts: Default Accounts',
+        'technique': 'T1078.001',
         'technique_id': 'T1078.001'
     },
     r'/vuln_blog/login\.php': {
         'tactic': 'Initial Access',
         'tactic_id': 'TA0001',
-        'technique': 'Valid Accounts',
+        'technique': 'T1078',
         'technique_id': 'T1078'
     },
     r'POST /vuln_blog/login\.php': {
         'tactic': 'Initial Access',
         'tactic_id': 'TA0001',
-        'technique': 'Valid Accounts',
+        'technique': 'T1078',
         'technique_id': 'T1078'
     },
     r'/vuln_blog/profile\.php': {
         'tactic': 'Credential Access',
         'tactic_id': 'TA0006',
-        'technique': 'Modify Authentication Process',
+        'technique': 'T1556',
         'technique_id': 'T1556'
     },
     r'POST /vuln_blog/profile\.php': {
         'tactic': 'Defense Evasion',
         'tactic_id': 'TA0005',
-        'technique': 'Modify Authentication Process',
+        'technique': 'T1556',
         'technique_id': 'T1556'
     },
 
@@ -351,13 +351,13 @@ ATTACK_PATTERN_MITRE_MAPPINGS.update({
     r'/phpmyadmin/': {
         'tactic': 'Initial Access',
         'tactic_id': 'TA0001',
-        'technique': 'Valid Accounts: Default Accounts',
+        'technique': 'T1078.001',
         'technique_id': 'T1078.001'
     },
     r'GET /phpmyadmin/': {
         'tactic': 'Initial Access',
         'tactic_id': 'TA0001',
-        'technique': 'Valid Accounts: Default Accounts',
+        'technique': 'T1078.001',
         'technique_id': 'T1078.001'
     },
 })
@@ -1751,6 +1751,7 @@ def create_parsed_log_from_raw(raw_log):
             raw_log.is_parsed = True
             raw_log.save(update_fields=['is_parsed'])
             
+            
             # DELETE THE NORMAL RAW LOG TO SAVE SPACE - UNCOMMENT THIS
             raw_log.delete()
             
@@ -2351,6 +2352,10 @@ def analyze_logs_api(request):
         msg += f"analyzed {processed_raw} logs, found {threat_count} potential threats"
         logger.info(msg)
         
+        # Clear alert history to ensure fresh alerts on manual analysis
+        processor = RealtimeLogProcessor.get_instance()
+        processor.clear_alert_history()
+        
         return JsonResponse({
             'success': True, 
             'sources_processed': sources_processed,
@@ -2677,6 +2682,69 @@ def determine_mitre_classification(content, attack_type, attack_patterns=None):
     """
     logger.debug(f"Determining MITRE classification for content: {content[:100]}...")
     
+        # Add this at the beginning of the function, after the debug logging
+    if attack_type and attack_type in MITRE_ATTACK_MAPPINGS:
+        mapping = MITRE_ATTACK_MAPPINGS[attack_type]
+        logger.info(f"Using attack_type '{attack_type}' for classification")
+        return (
+            mapping['tactic'],
+            mapping['tactic_id'],
+            mapping['technique'],
+            mapping['technique_id']
+        )
+    
+    # PRIORITY SECTION: SQL INJECTION DETECTION - Check before any other classifications
+    # This must run before the command injection checks to catch SQLi in vuln_blog paths
+    sql_injection_patterns = [
+        r"'.*OR.*'1'.*=.*'1",    # Classic login bypass patterns
+        r"'+OR+",                # URL-encoded OR operators
+        r"UNION[\s\+]+SELECT",   # UNION SELECT statements
+        r"information_schema\.",  # Database schema access
+        r"%27%20OR%20",          # URL-encoded ' OR
+        r"1=1",                  # Common equality check
+        r"--",                   # SQL comment
+        r";--",                  # Statement terminator with comment
+        r"query=%27",            # URL-encoded single quote in query parameter
+        r"search\.php\?query=\S*%27"  # Search page with quote parameter (common SQLi entry point)
+    ]
+    
+    # Look for SQL injection in content, especially in vuln_blog paths
+    if '/vuln_blog/' in content:
+        for pattern in sql_injection_patterns:
+            if re.search(pattern, content, re.IGNORECASE):
+                logger.info(f"SQL Injection detected in vuln_blog: {pattern}")
+                return (
+                    'Defense Evasion',
+                    'TA0005', 
+                    'Exploit Public-Facing Application',
+                    'T1190'
+                )
+    
+    # PRIORITY SECTION: XSS DETECTION
+    # This should also run before command injection checks
+    xss_patterns = [
+        r"<script>",
+        r"<img[^>]+onerror=",
+        r"<svg[^>]+onload=",
+        r"javascript:",
+        r"alert\(",
+        r"document\.cookie",
+        r"<iframe[^>]+src="
+    ]
+    
+    # Look for XSS in content for vuln_blog paths
+    if '/vuln_blog/' in content:
+        for pattern in xss_patterns:
+            if re.search(pattern, content, re.IGNORECASE):
+                logger.info(f"XSS attack detected in vuln_blog: {pattern}")
+                return (
+                    'Initial Access',
+                    'TA0001',
+                    'Drive-by Compromise', 
+                    'T1189'
+                )
+    
+    # Continue with existing detection logic
     # NEW: Enhanced detection for command injection in vuln_blog requests - HIGH PRIORITY
     if 'detected command_injection in request to /vuln_blog/' in content.lower():
         logger.info(f"HIGH PRIORITY: Command injection detected in vuln_blog request")
@@ -2687,36 +2755,48 @@ def determine_mitre_classification(content, attack_type, attack_patterns=None):
             'T1059'
         )
     
-    # NEW: Path-specific command injection detection
+    # MODIFIED: Path-specific detection for command injection symptoms
+    # Only classify as command injection if actual command injection patterns exist
     vuln_blog_cmd_paths = ['/profile.php', '/login.php', '/logout.php', '/index.php']
+    command_injection_indicators = [';', '|', '&&', '`', '$(',')']
+    
     for path in vuln_blog_cmd_paths:
         if f"command_injection in request to /vuln_blog{path}" in content.lower():
-            logger.info(f"HIGH PRIORITY: Command injection detected in {path}")
+            # Only classify as command injection if command characters are present
+            if any(cmd_char in content for cmd_char in command_injection_indicators):
+                logger.info(f"HIGH PRIORITY: Command injection detected in {path}")
+                return (
+                    'Execution',
+                    'TA0002',
+                    'T1059',
+                    'T1059'
+                )
+    
+    # Keep CSRF detection logic unchanged
+    if 'profile.php?email=' in content and ('CSRF' in content or 'HACKED-VIA-GET' in content or 'GET-CSRF-ATTACK-SUCCESSFUL' in content):
+        logger.info(f"FOUND CSRF Attack pattern - SECURITY BREACH")
+        return (
+            'Privilege Escalation',
+            'TA0004',
+            'T1548',
+            'T1548'
+        )
+    
+    # MODIFIED: Require both command injection indicators AND vuln_blog path
+    # Don't blanket classify all vuln_blog paths as command injection
+    if 'command_injection' in content.lower() and '/vuln_blog/' in content:
+        # Check for actual command injection indicators
+        if any(cmd_char in content for cmd_char in command_injection_indicators):
+            logger.info(f"HIGH PRIORITY: Command injection in vulnerable blog detected")
             return (
                 'Execution',
                 'TA0002',
                 'T1059',
                 'T1059'
             )
+        # If no command injection indicators, don't classify as command injection
     
-    if 'profile.php?email=' in content and ('CSRF' in content or 'HACKED-VIA-GET' in content or 'GET-CSRF-ATTACK-SUCCESSFUL' in content):
-        logger.info(f"FOUND CSRF Attack pattern - SECURITY BREACH")
-        return (
-            'Privilege Escalation',
-            'TA0004',
-            'Abuse Elevation Control Mechanism',
-            'T1548'
-        )
-        
-    if 'command_injection' in content.lower() and '/vuln_blog/' in content:
-        logger.info(f"HIGH PRIORITY: Command injection in vulnerable blog detected")
-        return (
-            'Execution',
-            'TA0002',
-            'T1059',
-            'T1059'
-        )
-    
+    # Rest of the function remains unchanged
     # HIGH PRIORITY MATCH: Direct detection for command_injection in request
     if 'detected command_injection in request' in content.lower():
         logger.info(f"HIGH PRIORITY: Command injection detected in request")
@@ -2740,17 +2820,45 @@ def determine_mitre_classification(content, attack_type, attack_patterns=None):
     # Add to ATTACK_PATTERN_MITRE_MAPPINGS dictionary
     # These pattern-specific mappings help with detailed classification
     ATTACK_PATTERN_MITRE_MAPPINGS.update({
+        
+        r"'.*OR.*'1'.*=.*'1": {
+            'tactic': 'Defense Evasion',
+            'tactic_id': 'TA0005', 
+            'technique': 'T1190',
+            'technique_id': 'T1190'
+        },
+        r"UNION[\s\+]+SELECT": {
+            'tactic': 'Collection',
+            'tactic_id': 'TA0009',
+            'technique': 'T1213',
+            'technique_id': 'T1213'
+        },
+        # Update specific path mappings
+        '/vuln_blog/search.php': {
+            'tactic': 'Defense Evasion',
+            'tactic_id': 'TA0005', 
+            'technique': 'T1190',
+            'technique_id': 'T1190'
+        },
+        '/vuln_blog/login.php': {
+            'tactic': 'Initial Access',
+            'tactic_id': 'TA0001',
+            'technique': 'T1078',
+            'technique_id': 'T1078'
+        },
+        
         'detected command_injection in request to /vuln_blog/': {
             'tactic': 'Execution',
             'tactic_id': 'TA0002',
             'technique': 'T1059',
             'technique_id': 'T1059'
         },
-        '/vuln_blog/profile.php': {
-            'tactic': 'Execution', 
-            'tactic_id': 'TA0002',
-            'technique': 'T1059',
-            'technique_id': 'T1059'
+               
+        r'/vuln_blog/profile.php': {
+            'tactic': 'Credential Access',  
+            'tactic_id': 'TA0006',          
+            'technique': 'T1556',  
+            'technique_id': 'T1556'        
         },
         '/vuln_blog/login.php': {
             'tactic': 'Execution',
@@ -2773,11 +2881,11 @@ def determine_mitre_classification(content, attack_type, attack_patterns=None):
     })
     
     vuln_blog_paths = {
-        '/vuln_blog/login.php': ('Initial Access', 'TA0001', 'Valid Accounts', 'T1078'),
-        '/vuln_blog/register.php': ('Initial Access', 'TA0001', 'Valid Accounts: Default Accounts', 'T1078.001'),
-        '/vuln_blog/profile.php': ('Credential Access', 'TA0006', 'Modify Authentication Process', 'T1556'),
-        '/vuln_blog/index.php': ('Initial Access', 'TA0001', 'Valid Accounts', 'T1078'),
-        '/vuln_blog/search.php': ('Discovery', 'TA0007', 'File and Directory Discovery', 'T1083')
+        '/vuln_blog/login.php': ('Initial Access', 'TA0001', 'T1078', 'T1078'),
+        '/vuln_blog/register.php': ('Initial Access', 'TA0001', 'T1078.001', 'T1078.001'),
+        '/vuln_blog/profile.php': ('Credential Access', 'TA0006', 'T1556', 'T1556'),
+        '/vuln_blog/index.php': ('Initial Access', 'TA0001', 'T1078', 'T1078'),
+        '/vuln_blog/search.php': ('Discovery', 'TA0007', 'T1083', 'T1083')
     }
     
     if attack_type and 'command_injection' in attack_type.lower():
@@ -2816,7 +2924,7 @@ def determine_mitre_classification(content, attack_type, attack_patterns=None):
             return (
                 'Initial Access',
                 'TA0001', 
-                'Valid Accounts: Default Accounts',
+                'T1078.001',
                 'T1078.001'
             )
 
@@ -2954,7 +3062,7 @@ def determine_mitre_classification(content, attack_type, attack_patterns=None):
             return (
                 "Initial Access",
                 "TA0001", 
-                "Valid Accounts: Default Accounts", 
+                "T1078.001", 
                 "T1078.001"
             )
     
@@ -2966,7 +3074,7 @@ def determine_mitre_classification(content, attack_type, attack_patterns=None):
             return (
                 "Command and Control",
                 "TA0011",
-                "Ingress Tool Transfer",
+                "T110",
                 "T1105"
             )
         elif any(cmd in content.lower() for cmd in ['cat', 'type', 'ls', 'dir']):
@@ -2974,7 +3082,7 @@ def determine_mitre_classification(content, attack_type, attack_patterns=None):
             return (
                 "Discovery",
                 "TA0007",
-                "File and Directory Discovery",
+                "T1083",
                 "T1083"
             )
         else:
@@ -2992,7 +3100,7 @@ def determine_mitre_classification(content, attack_type, attack_patterns=None):
         return (
             "Credential Access",
             "TA0006",
-            "Exploitation for Credential Access",
+            "T1212",
             "T1212"
         )
     
@@ -3001,7 +3109,7 @@ def determine_mitre_classification(content, attack_type, attack_patterns=None):
         return (
             "Initial Access",
             "TA0001",
-            "Valid Accounts: Default Accounts",
+            "T1078.001",
             "T1078.001"
         )
     
@@ -3010,7 +3118,7 @@ def determine_mitre_classification(content, attack_type, attack_patterns=None):
         return (
             "Discovery",
             "TA0007",
-            "File and Directory Discovery",
+            "T1083",
             "T1083"
         )
     
@@ -3023,7 +3131,7 @@ def determine_mitre_classification(content, attack_type, attack_patterns=None):
         return (
             "Initial Access",
             "TA0001", 
-            "Valid Accounts",
+            "T1078",
             "T1078"
         )
     
@@ -3038,7 +3146,7 @@ def determine_mitre_classification(content, attack_type, attack_patterns=None):
             return (
                 "Initial Access",
                 "TA0001",
-                "Valid Accounts",
+                "T1078",
                 "T1078"
             )
         elif '.php' in url_path:
@@ -3062,7 +3170,7 @@ def determine_mitre_classification(content, attack_type, attack_patterns=None):
             return (
                 "Defense Evasion",
                 "TA0005",
-                "Exploit Public-Facing Application", 
+                "T1190", 
                 "T1190"
             )
     
@@ -3070,7 +3178,7 @@ def determine_mitre_classification(content, attack_type, attack_patterns=None):
     return (
         "Initial Access",
         "TA0001",
-        "Exploit Public-Facing Application",
+        "T1190",
         "T1190"
     )
 
