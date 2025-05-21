@@ -1262,12 +1262,42 @@ def export_events(request):
     elif export_format == 'pdf':
         # Create a PDF with ReportLab
         buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), 
+                           rightMargin=36, leftMargin=36, 
+                           topMargin=36, bottomMargin=36)
         elements = []
         
-        # Add title
+        # Define brand colors
+        brand_primary = colors.HexColor('#3f51b5')  # Primary blue
+        brand_secondary = colors.HexColor('#6c757d')
+        brand_accent = colors.HexColor('#7986cb')
+        
+        # Create custom styles
         styles = getSampleStyleSheet()
-        title = Paragraph("Security Events Report", styles['Title'])
+        
+        # Custom title style
+        styles.add(ParagraphStyle(
+            name='ReportTitle',
+            parent=styles['Title'],
+            fontName='Helvetica-Bold',
+            fontSize=20,
+            textColor=brand_primary,
+            spaceAfter=12,
+            alignment=1  # Center alignment
+        ))
+        
+        # Custom heading styles
+        styles.add(ParagraphStyle(
+            name='ReportHeading',
+            parent=styles['Heading2'],
+            fontName='Helvetica-Bold',
+            fontSize=14,
+            textColor=brand_primary,
+            spaceAfter=10,
+        ))
+        
+        # Add title
+        title = Paragraph("Security Events Report", styles['ReportTitle'])
         elements.append(title)
         
         # Add report metadata
@@ -1280,39 +1310,150 @@ def export_events(request):
         elements.append(Paragraph(filter_info, styles['Normal']))
         elements.append(Spacer(1, 20))
         
-        # Create table data - adjusted for Threat model
-        data = [['Timestamp', 'Source IP', 'Severity', 'Status', 'Description']]  # Header row
+        # Add summary section
+        elements.append(Paragraph("Summary Statistics", styles['ReportHeading']))
+        
+        # Create summary statistics
+        total_events = events.count()
+        critical_count = events.filter(severity='critical').count()
+        high_count = events.filter(severity='high').count()
+        medium_count = events.filter(severity='medium').count()
+        low_count = events.filter(severity='low').count()
+        
+        summary_data = [
+            ['Metric', 'Count', 'Percentage'],
+            ['Total Events', str(total_events), '100%'],
+            ['Critical Severity', str(critical_count), f"{(critical_count/total_events*100 if total_events else 0):.1f}%"],
+            ['High Severity', str(high_count), f"{(high_count/total_events*100 if total_events else 0):.1f}%"],
+            ['Medium Severity', str(medium_count), f"{(medium_count/total_events*100 if total_events else 0):.1f}%"],
+            ['Low Severity', str(low_count), f"{(low_count/total_events*100 if total_events else 0):.1f}%"],
+        ]
+        
+        # Create summary table
+        summary_table = Table(summary_data, colWidths=[200, 100, 100])
+        summary_table.setStyle(TableStyle([
+            # Header styling
+            ('BACKGROUND', (0, 0), (-1, 0), brand_primary),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('TOPPADDING', (0, 0), (-1, 0), 8),
+            
+            # Data rows styling
+            ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+            ('ALIGN', (1, 1), (2, -1), 'CENTER'),  # Center numeric columns
+            ('FONTSIZE', (0, 1), (-1, -1), 10),
+            
+            # Grid styling
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            
+            # Alternating row colors
+            ('BACKGROUND', (0, 2), (-1, 2), colors.HexColor('#f8f9fa')),
+            ('BACKGROUND', (0, 4), (-1, 4), colors.HexColor('#f8f9fa')),
+        ]))
+        
+        elements.append(summary_table)
+        elements.append(Spacer(1, 20))
+        
+        # Add events section
+        elements.append(Paragraph("Detailed Events", styles['ReportHeading']))
+        elements.append(Spacer(1, 10))
+        
+        # Create events table data
+        data = [['Timestamp', 'Source IP', 'Severity', 'Status', 'MITRE Tactic', 'Description']]  # Enhanced header row
         
         # Add data rows (limit to 200 events to prevent very large PDFs)
-        for event in events[:200]:  # Limit to 200 for reasonable PDF size
+        for event in events[:200]:
             data.append([
                 event.created_at.strftime("%Y-%m-%d %H:%M:%S"),
                 event.source_ip or "N/A",
                 event.severity,
                 event.status,
-                event.description[:100] + ('...' if len(event.description) > 100 else ''),  # Truncate long messages
+                event.mitre_tactic or "Unclassified",
+                event.description[:80] + ('...' if len(event.description) > 80 else ''),
             ])
         
-        # Create the table
-        table = Table(data, repeatRows=1)
+        # Create the events table with specific column widths
+        col_widths = [100, 90, 70, 80, 100, '*']  # '*' means flexible width
+        table = Table(data, repeatRows=1, colWidths=col_widths)
         
-        # Define table style
+        # Define severity colors
+        severity_colors = {
+            'critical': colors.HexColor('#dc3545'),
+            'high': colors.HexColor('#fd7e14'),
+            'medium': colors.HexColor('#ffc107'),
+            'low': colors.HexColor('#17a2b8')
+        }
+        
+        # Create row color commands for alternating rows
+        row_commands = []
+        for i in range(2, len(data), 2):
+            row_commands.append(('BACKGROUND', (0, i), (-1, i), colors.HexColor('#f8f9fa')))
+        
+        # Style the table with enhanced formatting
         table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            # Header styling
+            ('BACKGROUND', (0, 0), (-1, 0), brand_primary),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('ALIGN', (0, 0), (-1, 0), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 12),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.white),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('TOPPADDING', (0, 0), (-1, 0), 8),
+            
+            # Content styling
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 4),
+            ('TOPPADDING', (0, 1), (-1, -1), 4),
+            ('WORDWRAP', (5, 1), (5, -1), True),  # Enable word wrap for description
+            
+            # Grid
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            
+            # Apply row alternating colors
+            *row_commands
         ]))
+        
+        # Color severity cells based on severity value
+        for i in range(1, len(data)):
+            severity = data[i][2].lower()
+            if severity in severity_colors:
+                table.setStyle(TableStyle([
+                    ('TEXTCOLOR', (2, i), (2, i), severity_colors[severity]),
+                    ('FONTNAME', (2, i), (2, i), 'Helvetica-Bold'),
+                ]))
         
         # Add the table to the elements
         elements.append(table)
         
-        # Build the PDF
-        doc.build(elements)
+        # Add helper function for custom header and footer
+        def add_page_numbers(canvas, doc):
+            canvas.saveState()
+            # Draw header with logo
+            canvas.setFillColor(brand_primary)
+            canvas.rect(36, doc.height + 36, doc.width, 24, fill=True, stroke=False)
+            canvas.setFont('Helvetica-Bold', 12)
+            canvas.setFillColor(colors.white)
+            canvas.drawString(46, doc.height + doc.topMargin + 6, "Security Events Report")
+            
+            # Add generation timestamp to header
+            canvas.setFont('Helvetica', 8)
+            gen_time = f"Generated on {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            canvas.drawRightString(doc.width + 20, doc.height + doc.topMargin + 6, gen_time)
+            
+            # Add page number to footer - fixed to use canvas.getPageNumber()
+            canvas.setFont('Helvetica', 9)
+            canvas.setFillColor(colors.black)
+            page_num = f"Page {canvas.getPageNumber()}"
+            canvas.drawRightString(doc.width + 30, 30, page_num)
+            canvas.restoreState()
+        
+        # Build the PDF with custom page decoration
+        doc.build(elements, onFirstPage=add_page_numbers, onLaterPages=add_page_numbers)
         
         # Get the PDF value from the BytesIO buffer
         pdf = buffer.getvalue()
@@ -1914,7 +2055,7 @@ def mitre_details_view(request):
             ('FONTSIZE', (0, 1), (-1, -1), 10),
             
             # Grid styling
-            ('GRID', (0, 0), (-1, -1), 0.5, brand_secondary),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
             ('BOX', (0, 0), (-1, -1), 1, brand_primary),
             
             # Alternating row colors
@@ -1924,9 +2065,6 @@ def mitre_details_view(request):
         
         elements.append(summary_table)
         elements.append(Spacer(1, 30))
-        
-        # Add page break after executive summary
-        elements.append(PageBreak())
         
         # MITRE ATT&CK Tactics Section
         elements.append(Paragraph("MITRE ATT&CK Tactics", styles['LogSentryHeading1']))
