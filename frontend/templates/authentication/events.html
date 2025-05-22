@@ -908,9 +908,9 @@
             });
         });
 
-        // Show event details in modal - FIXED VERSION
+        // Show event details in modal - CORRECTLY ROUTED endpoint
         function showEventDetails(eventId) {
-            // Prepare modal content
+            // Prepare modal content for loading state
             const modalContent = document.getElementById('eventModalContent');
             modalContent.innerHTML = `
                 <div class="d-flex justify-content-center p-5">
@@ -920,14 +920,14 @@
                 </div>
             `;
             
-            // Update "View Full Details" button with correct URL format
+            // Update the "View Full Details" button URL
             document.getElementById('viewFullDetailsBtn').href = `{% url 'alert_detail' 999 %}`.replace('999', eventId);
             
-            // Show modal
+            // Show modal while loading
             eventModal.show();
             
-            // IMPORTANT: Use the correct API endpoint URL
-            fetch(`/api/events/detail/${eventId}/`)
+            // FIXED: Use the correct API endpoint matching the api_event_detail view function
+            fetch(`/api/event_detail/${eventId}/`)
                 .then(response => {
                     if (!response.ok) {
                         throw new Error(`Server returned ${response.status}`);
@@ -935,21 +935,15 @@
                     return response.json();
                 })
                 .then(data => {
-                    console.log("Event data received:", data);
-                    
-                    if (!data.success) {
-                        throw new Error(data.error || "Unknown error occurred");
-                    }
-                    
-                    // Get the event data from the response
-                    const event = data.event || data.threat;  // Handle both response formats
+                    // Get the event data from the nested 'event' field in the response
+                    const event = data.event;  // FIXED: Properly access nested event data
                     
                     // Update modal header based on severity
                     const modalHeader = document.querySelector('#eventDetailsModal .modal-header');
                     modalHeader.className = 'modal-header modal-header-' + event.severity;
                     modalHeader.querySelector('.modal-title').textContent = `Event #${event.id} Details`;
                     
-                    // Build HTML content
+                    // Build HTML content with available data
                     let content = `
                         <div class="row mb-4">
                             <div class="col-md-6">
@@ -1010,80 +1004,26 @@
                         `;
                     }
                     
-                    // Add fallback option if API fails
-                    content += `
-                        <div class="mt-3 text-center">
-                            <a href="{% url 'alert_detail' 999 %}".replace('999', eventId) class="text-primary">
-                                <i class="fas fa-external-link-alt me-1"></i> View complete details
-                            </a>
-                        </div>
-                    `;
-                    
+                    // Update content
                     modalContent.innerHTML = content;
                 })
                 .catch(error => {
                     console.error("Error fetching event details:", error);
-                    
-                    // Display fallback information from the page data when API fails
-                    const eventRow = document.querySelector(`tr[data-event-id="${eventId}"]`);
-                    let fallbackContent = '';
-                    
-                    if (eventRow) {
-                        // Extract basic information from the table row
-                        const severity = eventRow.querySelector('.severity-badge').className.split('severity-')[1].split(' ')[0];
-                        const status = eventRow.querySelector('.status-badge').className.split('status-')[1].split(' ')[0];
-                        const description = eventRow.querySelector('td:nth-child(3)').textContent.trim();
-                        const mitreTactic = eventRow.querySelector('td:nth-child(4)').textContent.trim();
-                        
-                        fallbackContent = `
-                            <div class="alert alert-warning mb-3">
-                                <i class="fas fa-exclamation-triangle me-2"></i>
-                                Unable to load complete details from the server.
-                            </div>
-                            
-                            <div class="row mb-4">
-                                <div class="col-md-6">
-                                    <div class="detail-section">
-                                        <div class="detail-label">Event ID</div>
-                                        <div class="detail-value">#${eventId}</div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="detail-section">
-                                        <div class="detail-label">Severity</div>
-                                        <div><span class="severity-badge severity-${severity}">${severity}</span></div>
-                                    </div>
-                                    <div class="detail-section">
-                                        <div class="detail-label">Status</div>
-                                        <div><span class="status-badge status-${status}">${status}</span></div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="detail-section">
-                                <div class="detail-label">Description</div>
-                                <div class="detail-value">${description}</div>
-                            </div>
-                            
-                            <div class="mt-4 text-center">
-                                <a href="{% url 'alert_detail' 999 %}".replace('999', eventId) class="btn btn-primary">
-                                    <i class="fas fa-external-link-alt me-1"></i> View complete details
-                                </a>
-                            </div>
-                        `;
-                    } else {
-                        fallbackContent = `
-                            <div class="alert alert-danger">
-                                <i class="fas fa-exclamation-triangle me-2"></i>
-                                Failed to load event details: ${error.message}<br>
-                                <a href="{% url 'alert_detail' 999 %}".replace('999', eventId) class="alert-link">
-                                    View on full details page instead
-                                </a>
-                            </div>
-                        `;
-                    }
-                    
-                    modalContent.innerHTML = fallbackContent;
+                    // Better error message that's more useful for the user
+                    modalContent.innerHTML = `
+                        <div class="alert alert-warning mb-3">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            Unable to load event #${eventId} details from the server.
+                        </div>
+                        <div class="detail-section">
+                            <div class="detail-label">Event ID</div>
+                            <div class="detail-value">#${eventId}</div>
+                        </div>
+                        <div class="detail-section">
+                            <div class="detail-label">Description</div>
+                            <div class="detail-value">Details will be available on the full page view</div>
+                        </div>
+                    `;
                 });
         }
         

@@ -2826,64 +2826,41 @@ def validate_log_file(file_path, log_type):
 def api_event_detail(request, event_id):
     """API endpoint for retrieving event details"""
     try:
-        event = Threat.objects.get(id=event_id)
+        # Get the threat by ID
+        threat = Threat.objects.get(id=event_id)
         
-        # Create event data dictionary
-        event_data = {
-            'id': event.id,
-            'created_at': event.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-            'updated_at': event.updated_at.strftime('%Y-%m-%d %H:%M:%S'),
-            'severity': event.severity,
-            'status': event.status,
-            'description': event.description,
-            'source_ip': event.source_ip or 'Unknown',
-            'affected_system': event.affected_system or 'Not specified',
-            'mitre_tactic': event.mitre_tactic or 'Unclassified',
-            'mitre_technique': event.mitre_technique or 'Unclassified',
-            'recommendation': event.recommendation or 'No specific recommendation available',
+        # Create response with the nested 'event' structure the frontend expects
+        response_data = {
+            'success': True,
+            'event': {
+                'id': threat.id,
+                'severity': threat.severity,
+                'status': threat.status,
+                'description': threat.description,
+                'source_ip': threat.source_ip,
+                'mitre_technique': threat.mitre_technique,
+                'mitre_tactic': threat.mitre_tactic,
+                'created_at': threat.created_at.isoformat(),
+                'recommendation': threat.recommendation,
+                # Include other fields used by the frontend
+            }
         }
         
-        # Get related log details if available
-        log_details = None
-        if event.parsed_log:
-            log_details = {
-                'id': event.parsed_log.id,
-                'timestamp': event.parsed_log.raw_log.timestamp.strftime('%Y-%m-%d %H:%M:%S') if hasattr(event.parsed_log, 'raw_log') else None,
-                'source_type': event.parsed_log.source.source_type if hasattr(event.parsed_log, 'raw_log') and hasattr(event.parsed_log.raw_log, 'source') else None,
-                'source_ip': event.parsed_log.source_ip or 'Unknown',
-                'user_agent': event.parsed_log.user_agent or 'Not available',
-                'status_code': event.parsed_log.status_code,
-                'content': event.parsed_log.raw_log.content if hasattr(event.parsed_log, 'raw_log') else 'Log content not available'
-            }
+        return JsonResponse(response_data)
         
-        # Get related analyses
-        analyses = []
-        for analysis in ThreatAnalysis.objects.filter(threat=event):
-            analyses.append({
-                'id': analysis.id,
-                'type': analysis.analysis_type,
-                'generated_at': analysis.generated_at.strftime('%Y-%m-%d %H:%M:%S'),
-                'summary': analysis.content[:200] + '...' if len(analysis.content) > 200 else analysis.content
-            })
-        
-        return JsonResponse({
-            'success': True,
-            'event': event_data,
-            'log_details': log_details,
-            'analyses': analyses
-        })
-    
     except Threat.DoesNotExist:
+        # Return 404 if event doesn't exist
         return JsonResponse({
             'success': False,
             'error': f"Event #{event_id} not found"
         }, status=404)
     
     except Exception as e:
-        logger.exception(f"Error in api_event_detail: {str(e)}")
+        # Log the exception for debugging
+        logger.error(f"Error retrieving event #{event_id}: {str(e)}")
         return JsonResponse({
             'success': False,
-            'error': f"An error occurred: {str(e)}"
+            'error': f"Server error retrieving event #{event_id}"
         }, status=500)
 
 @login_required

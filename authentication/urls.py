@@ -119,4 +119,7 @@ urlpatterns = [
     
     # Event resolve API endpoint
     path('api/resolve_event/<int:event_id>/', views.api_resolve_event, name='api_resolve_event'),
+
+    # Make sure this route is defined and comes before any potential conflicts
+    path('api/event_detail/<int:event_id>/', views.api_event_detail, name='api_event_detail'),
 ]
