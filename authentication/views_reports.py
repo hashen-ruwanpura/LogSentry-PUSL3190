@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 @login_required
 def reports_view(request):
-    """View for user reports page"""
+    """View for user reports page - FIXED to use Threat model as primary source"""
     # Initialize default stats
     stats = {
         'total_threats': 0,
@@ -42,167 +42,105 @@ def reports_view(request):
     
     # Get initial data for the page
     try:
-        # Get counts from the database
+        # Get counts from the Threat model directly (primary source)
         now = timezone.now()
         week_ago = now - timedelta(days=7)
         
-        # Ensure data consistency between LogReport and Threat models
-        report_ids = set(LogReport.objects.values_list('id', flat=True))
-        threat_ids = set(Threat.objects.values_list('id', flat=True))
+        # Total threats - use Threat model instead of LogReport
+        stats['total_threats'] = Threat.objects.count()
         
-        # Find threats that aren't in reports (new threats)
-        missing_threats = threat_ids - report_ids
-        if missing_threats:
-            # Log the discrepancy for debugging
-            logger.info(f"Found {len(missing_threats)} threats not in LogReport")
-            
-            # Option 1: Create LogReport entries for missing threats
-            # This would be done by a background task, but we can count them now
-            missing_threats_count = len(missing_threats)
-        else:
-            missing_threats_count = 0
-        
-        # Total threats - include both LogReport and any missing Threats
-        logreport_count = LogReport.objects.count()
-        stats['total_threats'] = logreport_count + missing_threats_count
-        
-        # Continue with existing code for other statistics...
-        # Intrusion attempts
-        stats['intrusion_attempts'] = LogReport.objects.filter(
-            threat_type__icontains='intrusion'
+        # Intrusion attempts - using description or mitre_technique fields
+        stats['intrusion_attempts'] = Threat.objects.filter(
+            Q(description__icontains='intrusion') | 
+            Q(mitre_tactic='Initial Access') |
+            Q(mitre_technique__icontains='T1190')
         ).count()
         
-        # Add intrusion attempts from Threat model that might be missing
-        if missing_threats:
-            missing_intrusions = Threat.objects.filter(
-                id__in=missing_threats,
-                type__icontains='intrusion'
-            ).count()
-            stats['intrusion_attempts'] += missing_intrusions
-        
-        # System errors
-        stats['system_errors'] = LogReport.objects.filter(
-            threat_type__icontains='error'
+        # System errors - looking for error-related threats
+        stats['system_errors'] = Threat.objects.filter(
+            Q(description__icontains='error') |
+            Q(description__icontains='exception') |
+            Q(affected_system__isnull=False)
         ).count()
         
-        # Add system errors from Threat model that might be missing
-        if missing_threats:
-            missing_errors = Threat.objects.filter(
-                id__in=missing_threats,
-                type__icontains='error'
-            ).count()
-            stats['system_errors'] += missing_errors
-        
-        # Blocked attacks
-        stats['blocked_attacks'] = LogReport.objects.filter(
-            status='Resolved'
+        # Blocked attacks - resolved threats
+        stats['blocked_attacks'] = Threat.objects.filter(
+            status='resolved'
         ).count()
         
-        # Add blocked attacks from Threat model that might be missing
-        if missing_threats:
-            missing_blocked = Threat.objects.filter(
-                id__in=missing_threats,
-                status='Resolved'
-            ).count()
-            stats['blocked_attacks'] += missing_blocked
+        # Get severity counts directly from Threat model
+        severity['high'] = Threat.objects.filter(severity='high').count()
+        severity['medium'] = Threat.objects.filter(severity='medium').count() 
+        severity['low'] = Threat.objects.filter(severity='low').count()
         
-        # Get severity counts - combine data from both models
-        severity['high'] = LogReport.objects.filter(severity='high').count()
-        severity['medium'] = LogReport.objects.filter(severity='medium').count()
-        severity['low'] = LogReport.objects.filter(severity='low').count()
-        
-        # Add severity counts from Threat model that might be missing
-        if missing_threats:
-            severity['high'] += Threat.objects.filter(id__in=missing_threats, severity='high').count()
-            severity['medium'] += Threat.objects.filter(id__in=missing_threats, severity='medium').count()
-            severity['low'] += Threat.objects.filter(id__in=missing_threats, severity='low').count()
-        
-        # Calculate changes compared to previous period
+        # Calculate changes compared to previous period using Threat model
         prev_week_start = week_ago - timedelta(days=7)
         
-        # Previous period counts - including missing threats
-        prev_threats = LogReport.objects.filter(timestamp__gte=prev_week_start, timestamp__lt=week_ago).count()
+        # Previous period counts
+        prev_threats = Threat.objects.filter(created_at__gte=prev_week_start, created_at__lt=week_ago).count()
         
-        # Add missing threats from previous period
-        if missing_threats:
-            prev_missing_threats = Threat.objects.filter(
-                created_at__gte=prev_week_start, 
-                created_at__lt=week_ago
-            ).filter(id__in=missing_threats).count()
-            prev_threats += prev_missing_threats
-            
-        prev_intrusions = LogReport.objects.filter(
-            timestamp__gte=prev_week_start, 
-            timestamp__lt=week_ago,
-            threat_type__icontains='intrusion'
-        ).count()
-        prev_errors = LogReport.objects.filter(
-            timestamp__gte=prev_week_start, 
-            timestamp__lt=week_ago,
-            threat_type__icontains='error'
-        ).count()
-        prev_blocked = LogReport.objects.filter(
-            timestamp__gte=prev_week_start, 
-            timestamp__lt=week_ago,
-            status='Resolved'
-        ).count()
+        # Current week counts for comparison
+        current_threats = Threat.objects.filter(created_at__gte=week_ago).count()
         
-        # Calculate percentage changes
         if prev_threats > 0:
-            current_threats = LogReport.objects.filter(timestamp__gte=week_ago).count()
             stats['threat_change'] = round(((current_threats - prev_threats) / prev_threats) * 100)
         
+        # Calculate intrusion attempts change
+        current_intrusions = Threat.objects.filter(
+            Q(created_at__gte=week_ago) &
+            (Q(description__icontains='intrusion') | 
+             Q(mitre_tactic='Initial Access') |
+             Q(mitre_technique__icontains='T1190'))
+        ).count()
+        
+        prev_intrusions = Threat.objects.filter(
+            Q(created_at__gte=prev_week_start, created_at__lt=week_ago) &
+            (Q(description__icontains='intrusion') | 
+             Q(mitre_tactic='Initial Access') |
+             Q(mitre_technique__icontains='T1190'))
+        ).count()
+        
         if prev_intrusions > 0:
-            current_intrusions = LogReport.objects.filter(
-                timestamp__gte=week_ago,
-                threat_type__icontains='intrusion'
-            ).count()
             stats['intrusion_change'] = round(((current_intrusions - prev_intrusions) / prev_intrusions) * 100)
         
+        # Calculate system errors change
+        current_errors = Threat.objects.filter(
+            Q(created_at__gte=week_ago) &
+            (Q(description__icontains='error') |
+             Q(description__icontains='exception') |
+             Q(affected_system__isnull=False))
+        ).count()
+        
+        prev_errors = Threat.objects.filter(
+            Q(created_at__gte=prev_week_start, created_at__lt=week_ago) &
+            (Q(description__icontains='error') |
+             Q(description__icontains='exception') |
+             Q(affected_system__isnull=False))
+        ).count()
+        
         if prev_errors > 0:
-            current_errors = LogReport.objects.filter(
-                timestamp__gte=week_ago,
-                threat_type__icontains='error'
-            ).count()
             stats['error_change'] = round(((current_errors - prev_errors) / prev_errors) * 100)
         
+        # Calculate blocked attacks change
+        current_blocked = Threat.objects.filter(
+            Q(created_at__gte=week_ago) &
+            Q(status='resolved')
+        ).count()
+        
+        prev_blocked = Threat.objects.filter(
+            Q(created_at__gte=prev_week_start, created_at__lt=week_ago) &
+            Q(status='resolved')
+        ).count()
+        
         if prev_blocked > 0:
-            current_blocked = LogReport.objects.filter(
-                timestamp__gte=week_ago,
-                status='Resolved'
-            ).count()
             stats['blocked_change'] = round(((current_blocked - prev_blocked) / prev_blocked) * 100)
             
     except Exception as e:
         logger.error(f"Error fetching reports data: {e}")
         
-    # Get recent threats for the table - combining both sources
+    # Get recent threats directly from Threat model
     try:
-        # Get recent threats from LogReport
-        recent_threats = list(LogReport.objects.order_by('-timestamp')[:10])
-        
-        # Add recent threats from Threat model not in LogReport
-        if missing_threats:
-            missing_recent_threats = Threat.objects.filter(
-                id__in=missing_threats
-            ).order_by('-created_at')[:5]
-            
-            # Convert Threat objects to LogReport-like objects for template compatibility
-            for threat in missing_recent_threats:
-                # Create a dict-like object with the same properties as LogReport
-                threat_dict = type('ThreatDict', (), {
-                    'id': threat.id,
-                    'timestamp': threat.created_at,
-                    'source_ip': threat.source_ip or 'Unknown',
-                    'log_type': getattr(threat, 'type', 'Unknown'),
-                    'threat_type': threat.description or 'Unknown',
-                    'severity': threat.severity or 'medium',
-                    'status': threat.status or 'New'
-                })
-                recent_threats.append(threat_dict)
-                
-            # Sort the combined list by timestamp
-            recent_threats = sorted(recent_threats, key=lambda x: x.timestamp, reverse=True)[:10]
+        recent_threats = Threat.objects.order_by('-created_at')[:10]
     except Exception:
         recent_threats = []
         
@@ -216,14 +154,14 @@ def reports_view(request):
 
 @login_required
 def reports_dashboard_data(request):
-    """API endpoint for the reports dashboard data"""
+    """API endpoint for the reports dashboard data - FIXED to use Threat model as primary source"""
     if request.method == 'POST':
         try:
             # Parse request data
             data = json.loads(request.body)
             start_date = data.get('startDate')
             end_date = data.get('endDate')
-            log_type = data.get('logType', 'all')
+            log_type = data.get('logType', 'all')  # map to 'type' in Threat model
             severity_filter = data.get('severity', 'all')
             
             # Convert dates to datetime objects
@@ -231,13 +169,13 @@ def reports_dashboard_data(request):
             end_date = datetime.strptime(end_date, '%Y-%m-%d')
             end_date = end_date.replace(hour=23, minute=59, second=59)
             
-            # Apply date filter
-            query = LogReport.objects.filter(timestamp__gte=start_date, timestamp__lte=end_date)
+            # Apply date filter using created_at field in Threat model
+            query = Threat.objects.filter(created_at__gte=start_date, created_at__lte=end_date)
             
-            # Apply log type filter
+            # Apply log type filter (map to 'type' in Threat model)
             if log_type != 'all':
-                query = query.filter(log_type__iexact=log_type)
-                
+                query = query.filter(type__iexact=log_type)
+            
             # Apply severity filter
             if severity_filter != 'all':
                 query = query.filter(severity__iexact=severity_filter)
@@ -249,25 +187,55 @@ def reports_dashboard_data(request):
             
             # Statistics
             current_threats = query.count()
-            current_intrusions = query.filter(threat_type__icontains='intrusion').count()
-            current_errors = query.filter(threat_type__icontains='error').count()
-            current_blocked = query.filter(status='Resolved').count()
             
-            prev_query = LogReport.objects.filter(
-                timestamp__gte=prev_start_date, 
-                timestamp__lte=prev_end_date
+            # Intrusion attempts using appropriate fields in Threat model
+            current_intrusions = query.filter(
+                Q(description__icontains='intrusion') | 
+                Q(mitre_tactic='Initial Access') |
+                Q(mitre_technique__icontains='T1190')
+            ).count()
+            
+            # System errors using appropriate fields in Threat model
+            current_errors = query.filter(
+                Q(description__icontains='error') |
+                Q(description__icontains='exception') |
+                Q(affected_system__isnull=False)
+            ).count()
+            
+            # Blocked/resolved attacks
+            current_blocked = query.filter(status='resolved').count()
+            
+            # Previous period query
+            prev_query = Threat.objects.filter(
+                created_at__gte=prev_start_date, 
+                created_at__lte=prev_end_date
             )
             
             if log_type != 'all':
-                prev_query = prev_query.filter(log_type__iexact=log_type)
-                
+                prev_query = prev_query.filter(type__iexact=log_type)
+            
             if severity_filter != 'all':
                 prev_query = prev_query.filter(severity__iexact=severity_filter)
             
+            # Previous period counts
             prev_threats = prev_query.count()
-            prev_intrusions = prev_query.filter(threat_type__icontains='intrusion').count()
-            prev_errors = prev_query.filter(threat_type__icontains='error').count()
-            prev_blocked = prev_query.filter(status='Resolved').count()
+            
+            # Previous intrusions using appropriate fields in Threat model
+            prev_intrusions = prev_query.filter(
+                Q(description__icontains='intrusion') | 
+                Q(mitre_tactic='Initial Access') |
+                Q(mitre_technique__icontains='T1190')
+            ).count()
+            
+            # Previous system errors using appropriate fields in Threat model
+            prev_errors = prev_query.filter(
+                Q(description__icontains='error') |
+                Q(description__icontains='exception') |
+                Q(affected_system__isnull=False)
+            ).count()
+            
+            # Previous blocked/resolved attacks
+            prev_blocked = prev_query.filter(status='resolved').count()
             
             # Calculate percentage changes
             threat_change = calculate_percentage_change(current_threats, prev_threats)
@@ -280,23 +248,23 @@ def reports_dashboard_data(request):
             medium_count = query.filter(severity__iexact='medium').count()
             low_count = query.filter(severity__iexact='low').count()
             
-            # Recent threats
-            recent_threats = query.order_by('-timestamp')[:20]
+            # Recent threats with proper formatting for frontend
+            recent_threats = query.order_by('-created_at')[:20]
             formatted_threats = []
             
             for threat in recent_threats:
                 formatted_threats.append({
                     'id': threat.id,
-                    'timestamp': threat.timestamp.isoformat(),
-                    'sourceIp': threat.source_ip,
-                    'logType': threat.log_type,
-                    'threatType': threat.threat_type,
-                    'severity': threat.severity.capitalize(),
-                    'status': threat.status
+                    'timestamp': threat.created_at.isoformat() if threat.created_at else '',
+                    'sourceIp': threat.source_ip or 'Unknown',
+                    'logType': threat.type if hasattr(threat, 'type') else 'Unknown',
+                    'threatType': threat.description or threat.mitre_technique or 'Unknown',
+                    'severity': threat.severity.capitalize() if threat.severity else 'Unknown',
+                    'status': threat.status or 'Unknown'
                 })
             
             # Generate threat trend data
-            threat_trend = generate_threat_trend(query, start_date, end_date, 'day')
+            threat_trend = generate_threat_trend_from_threats(query, start_date, end_date, 'day')
             
             response_data = {
                 'stats': {
@@ -321,7 +289,7 @@ def reports_dashboard_data(request):
             return JsonResponse(response_data)
             
         except Exception as e:
-            logger.error(f"Error in reports_dashboard_data: {e}")
+            logger.error(f"Error in reports_dashboard_data: {e}", exc_info=True)
             return JsonResponse({'error': str(e)}, status=500)
     
     return JsonResponse({'error': 'Method not allowed'}, status=405)
@@ -347,7 +315,8 @@ def generate_threat_trend(query, start_date, end_date, period='day'):
                 labels.append(current_date.strftime('%d %b'))
                 
                 day_end = current_date.replace(hour=23, minute=59, second=59)
-                day_query = query.filter(timestamp__gte=current_date, timestamp__lte=day_end)
+                # Use created_at from Threat model
+                day_query = query.filter(created_at__gte=current_date, created_at__lte=day_end)
                 
                 high_data.append(day_query.filter(severity__iexact='high').count())
                 medium_data.append(day_query.filter(severity__iexact='medium').count())
@@ -365,7 +334,8 @@ def generate_threat_trend(query, start_date, end_date, period='day'):
                 week_end = min(current_date + timedelta(days=6), end_date)
                 labels.append(f"{current_date.strftime('%d %b')} - {week_end.strftime('%d %b')}")
                 
-                week_query = query.filter(timestamp__gte=current_date, timestamp__lte=week_end.replace(hour=23, minute=59, second=59))
+                # Use created_at from Threat model
+                week_query = query.filter(created_at__gte=current_date, created_at__lte=week_end.replace(hour=23, minute=59, second=59))
                 
                 high_data.append(week_query.filter(severity__iexact='high').count())
                 medium_data.append(week_query.filter(severity__iexact='medium').count())
@@ -387,9 +357,10 @@ def generate_threat_trend(query, start_date, end_date, period='day'):
                 last_day = min((next_month - timedelta(days=1)), end_date)
                 labels.append(current_month.strftime('%b %Y'))
                 
+                # Use created_at from Threat model
                 month_query = query.filter(
-                    timestamp__gte=current_month, 
-                    timestamp__lte=last_day.replace(hour=23, minute=59, second=59)
+                    created_at__gte=current_month, 
+                    created_at__lte=last_day.replace(hour=23, minute=59, second=59)
                 )
                 
                 high_data.append(month_query.filter(severity__iexact='high').count())
@@ -407,7 +378,94 @@ def generate_threat_trend(query, start_date, end_date, period='day'):
         }
         
     except Exception as e:
-        logger.error(f"Error generating threat trend: {e}")
+        logger.error(f"Error generating threat trend: {e}", exc_info=True)
+        # Return empty data
+        return {
+            'labels': [],
+            'high': [],
+            'medium': [],
+            'low': []
+        }
+
+def generate_threat_trend_from_threats(query, start_date, end_date, period='day'):
+    """Generate threat trend data from Threat model based on period (day, week, month)"""
+    try:
+        labels = []
+        high_data = []
+        medium_data = []
+        low_data = []
+        
+        if period == 'day':
+            # Daily trend
+            current_date = start_date
+            while current_date <= end_date:
+                labels.append(current_date.strftime('%d %b'))
+                
+                day_end = current_date.replace(hour=23, minute=59, second=59)
+                # Use created_at from Threat model
+                day_query = query.filter(created_at__gte=current_date, created_at__lte=day_end)
+                
+                high_data.append(day_query.filter(severity__iexact='high').count())
+                medium_data.append(day_query.filter(severity__iexact='medium').count())
+                low_data.append(day_query.filter(severity__iexact='low').count())
+                
+                current_date += timedelta(days=1)
+                
+        elif period == 'week':
+            # Weekly trend
+            # Start from the beginning of the week of start_date
+            start_of_week = start_date - timedelta(days=start_date.weekday())
+            current_date = start_of_week
+            
+            while current_date <= end_date:
+                week_end = min(current_date + timedelta(days=6), end_date)
+                labels.append(f"{current_date.strftime('%d %b')} - {week_end.strftime('%d %b')}")
+                
+                # Use created_at from Threat model
+                week_query = query.filter(created_at__gte=current_date, created_at__lte=week_end.replace(hour=23, minute=59, second=59))
+                
+                high_data.append(week_query.filter(severity__iexact='high').count())
+                medium_data.append(week_query.filter(severity__iexact='medium').count())
+                low_data.append(week_query.filter(severity__iexact='low').count())
+                
+                current_date += timedelta(days=7)
+                
+        elif period == 'month':
+            # Monthly trend
+            current_month = start_date.replace(day=1)
+            
+            while current_month <= end_date:
+                # Calculate the last day of the month
+                if current_month.month == 12:
+                    next_month = current_month.replace(year=current_month.year + 1, month=1)
+                else:
+                    next_month = current_month.replace(month=current_month.month + 1)
+                    
+                last_day = min((next_month - timedelta(days=1)), end_date)
+                labels.append(current_month.strftime('%b %Y'))
+                
+                # Use created_at from Threat model
+                month_query = query.filter(
+                    created_at__gte=current_month, 
+                    created_at__lte=last_day.replace(hour=23, minute=59, second=59)
+                )
+                
+                high_data.append(month_query.filter(severity__iexact='high').count())
+                medium_data.append(month_query.filter(severity__iexact='medium').count())
+                low_data.append(month_query.filter(severity__iexact='low').count())
+                
+                # Move to next month
+                current_month = next_month
+        
+        return {
+            'labels': labels,
+            'high': high_data,
+            'medium': medium_data,
+            'low': low_data
+        }
+        
+    except Exception as e:
+        logger.error(f"Error generating threat trend: {e}", exc_info=True)
         # Return empty data
         return {
             'labels': [],
@@ -418,7 +476,7 @@ def generate_threat_trend(query, start_date, end_date, period='day'):
 
 @login_required
 def threat_trend_data(request):
-    """API endpoint for threat trend data with different grouping"""
+    """API endpoint for threat trend data with different grouping - FIXED to use Threat model"""
     if request.method == 'POST':
         try:
             # Parse request data
@@ -435,60 +493,58 @@ def threat_trend_data(request):
             end_date = end_date.replace(hour=23, minute=59, second=59)
             
             # Apply date filter
-            query = LogReport.objects.filter(timestamp__gte=start_date, timestamp__lte=end_date)
+            query = Threat.objects.filter(created_at__gte=start_date, created_at__lte=end_date)
             
             # Apply log type filter
             if log_type != 'all':
-                query = query.filter(log_type__iexact=log_type)
+                query = query.filter(type__iexact=log_type)
                 
             # Apply severity filter
             if severity_filter != 'all':
                 query = query.filter(severity__iexact=severity_filter)
                 
             # Generate trend data
-            trend_data = generate_threat_trend(query, start_date, end_date, group_by)
+            trend_data = generate_threat_trend_from_threats(query, start_date, end_date, group_by)
             
             return JsonResponse(trend_data)
             
         except Exception as e:
-            logger.error(f"Error in threat_trend_data: {e}")
+            logger.error(f"Error in threat_trend_data: {e}", exc_info=True)
             return JsonResponse({'error': str(e)}, status=500)
     
     return JsonResponse({'error': 'Method not allowed'}, status=405)
 
 @login_required
 def threat_details(request, threat_id):
-    """API endpoint for getting threat details"""
+    """API endpoint for getting threat details - FIXED to use Threat model"""
     try:
-        threat = get_object_or_404(LogReport, id=threat_id)
+        threat = get_object_or_404(Threat, id=threat_id)
         
         # Get raw log if available
         raw_log = "Raw log data not available"
         try:
-            if hasattr(threat, 'raw_log_id') and threat.raw_log_id:
-                from log_ingestion.models import RawLog
-                raw_log_obj = RawLog.objects.get(id=threat.raw_log_id)
-                raw_log = raw_log_obj.content
+            if hasattr(threat, 'parsed_log') and threat.parsed_log and hasattr(threat.parsed_log, 'raw_log'):
+                raw_log = threat.parsed_log.raw_log.content
         except Exception as e:
             logger.error(f"Error fetching raw log: {e}")
         
         # Format the response data
         data = {
             'id': threat.id,
-            'timestamp': threat.timestamp.isoformat(),
-            'sourceIp': threat.source_ip,
-            'country': threat.country or "Unknown",
-            'threatType': threat.threat_type,
-            'logType': threat.log_type,
-            'severity': threat.severity.capitalize(),
-            'status': threat.status,
+            'timestamp': threat.created_at.isoformat() if threat.created_at else '',
+            'sourceIp': threat.source_ip or "Unknown",
+            'country': getattr(threat, 'country', "Unknown"),
+            'threatType': threat.description or threat.mitre_technique or "Unknown",
+            'logType': threat.type if hasattr(threat, 'type') else "Unknown",
+            'severity': threat.severity.capitalize() if threat.severity else "Unknown",
+            'status': threat.status or "Unknown",
             'rawLog': raw_log
         }
         
         return JsonResponse(data)
         
     except Exception as e:
-        logger.error(f"Error in threat_details: {e}")
+        logger.error(f"Error in threat_details: {e}", exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)
 
 @login_required
@@ -503,47 +559,31 @@ def export_report(request):
             severity = request.POST.get('severity', 'all')
             report_format = request.POST.get('format', 'pdf')
             
-            # Convert dates to timezone-aware datetime objects
+            # Convert dates to datetime objects correctly
             start_date = datetime.strptime(start_date, '%Y-%m-%d')
             end_date = datetime.strptime(end_date, '%Y-%m-%d')
             
-            # Make dates timezone aware BEFORE setting hour/minute/second
-            start_date = timezone.make_aware(start_date)
-            end_date = timezone.make_aware(end_date)
-            
-            # Now set the end of day time
-            end_date = end_date.replace(hour=23, minute=59, second=59)
-            
-            # Apply filters
-            query = LogReport.objects.filter(timestamp__gte=start_date, timestamp__lte=end_date)
-            
-            if log_type != 'all':
-                query = query.filter(log_type__iexact=log_type)
-                
-            if severity != 'all':
-                query = query.filter(severity__iexact=severity)
-            
             # Prepare data for export
-            data = prepare_export_data(query, start_date, end_date)
+            export_data = prepare_export_data(start_date, end_date, log_type, severity)
             
             # Generate report based on format
             if report_format == 'pdf':
-                return export_pdf_report(data)
+                return export_pdf_report(export_data)
             elif report_format == 'xlsx':
-                return export_excel_report(data)
+                return export_excel_report(export_data)
             elif report_format == 'csv':
-                return export_csv_report(data)
+                return export_csv_report(export_data)
             else:
                 return JsonResponse({'error': 'Invalid format'}, status=400)
                 
         except Exception as e:
-            logger.error(f"Error in export_report: {e}")
+            logger.error(f"Error in export_report: {e}", exc_info=True)
             return JsonResponse({'error': str(e)}, status=500)
     
     return JsonResponse({'error': 'Method not allowed'}, status=405)
 
-def prepare_export_data(query, start_date, end_date):
-    """Prepare data for export"""
+def prepare_export_data(start_date, end_date, log_type='all', severity='all'):
+    """Prepare data for export using Threat model"""
     # Get current date and time
     now = timezone.now()
     
@@ -553,79 +593,47 @@ def prepare_export_data(query, start_date, end_date):
     if timezone.is_naive(end_date):
         end_date = timezone.make_aware(end_date)
     
-    # Get any missing threats from the Threat model - with correct field mapping
-    threat_filter = Q(created_at__gte=start_date, created_at__lte=end_date)
-    if hasattr(query, 'query'):
-        # Map LogReport fields to Threat model fields
-        field_mappings = {
-            'log_type': 'type',
-            'severity': 'severity',
-            'threat_type': 'description',
-            'status': 'status'
-        }
+    # Get threats directly from Threat model
+    query = Threat.objects.filter(created_at__gte=start_date, created_at__lte=end_date)
+    
+    if log_type != 'all':
+        query = query.filter(type__iexact=log_type)
         
-        # If we have a queryset with filters, try to apply similar filters to Threat model
-        for child in query.query.where.children:
-            if isinstance(child, Q):
-                # Extract field and value from queryset filter
-                for field_name in field_mappings:
-                    if field_name in str(child):
-                        # Get the value from the filter expression
-                        value = str(child).split('=')[1].strip("'")
-                        # Apply filter using the mapped field name
-                        threat_filter &= Q(**{f"{field_mappings[field_name]}__iexact": value})
+    if severity != 'all':
+        query = query.filter(severity__iexact=severity)
     
-    # Get threats that might not be in LogReport
-    additional_threats = Threat.objects.filter(threat_filter)
+    # Calculate stats
+    total_alerts = query.count()
+    recent_alerts = query.filter(created_at__gte=now-timedelta(days=7)).count()
     
-    # Calculate stats including both sources
-    total_alerts = query.count() + additional_threats.count()
-    recent_alerts = (
-        query.filter(timestamp__gte=now-timedelta(days=7)).count() +
-        additional_threats.filter(created_at__gte=now-timedelta(days=7)).count()
-    )
-    
-    # Calculate stats for the existing query (LogReport)
     critical_alerts = query.filter(severity__iexact='high').count()
     medium_alerts = query.filter(severity__iexact='medium').count()
     low_alerts = query.filter(severity__iexact='low').count()
     
-    # Add severity counts from Threat model
-    critical_alerts += additional_threats.filter(severity__iexact='high').count()
-    medium_alerts += additional_threats.filter(severity__iexact='medium').count()
-    low_alerts += additional_threats.filter(severity__iexact='low').count()
-    
     # Get source distribution
-    sources = query.values('source_ip').annotate(count=Count('source_ip')).order_by('-count')
-    source_distribution = {item['source_ip']: item['count'] for item in sources}
+    source_distribution = {}
+    for threat in query:
+        if threat.source_ip:
+            if threat.source_ip in source_distribution:
+                source_distribution[threat.source_ip] += 1
+            else:
+                source_distribution[threat.source_ip] = 1
     
-    # Get recent alerts from LogReport
+    # Order by count (descending)
+    source_distribution = dict(sorted(source_distribution.items(), 
+                                     key=lambda item: item[1], 
+                                     reverse=True))
+    
+    # Get recent alerts
     alert_list = []
-    for alert in query.order_by('-timestamp')[:50]:
-        alert_list.append({
-            'timestamp': alert.timestamp.strftime('%Y-%m-%d %H:%M'),
-            'source': alert.source_ip,
-            'type': alert.threat_type,
-            'severity': alert.severity.capitalize(),
-            'status': alert.status
-        })
-    
-    # Add alerts from Threat model - mapping fields correctly
-    for threat in additional_threats.order_by('-created_at')[:25]:  # Limiting to 25 for balance
+    for threat in query.order_by('-created_at')[:50]:
         alert_list.append({
             'timestamp': threat.created_at.strftime('%Y-%m-%d %H:%M') if threat.created_at else '',
             'source': threat.source_ip or 'Unknown',
-            'type': threat.description or threat.mitre_technique or 'N/A',  # Use description as threat type
+            'type': threat.description or threat.mitre_technique or 'N/A',
             'severity': threat.severity.capitalize() if threat.severity else 'N/A',
             'status': threat.status or 'N/A'
         })
-    
-    # Sort combined alerts by timestamp
-    alert_list = sorted(
-        alert_list, 
-        key=lambda x: datetime.strptime(x['timestamp'], '%Y-%m-%d %H:%M') if x['timestamp'] else datetime.min,
-        reverse=True
-    )[:50]  # Limit to 50 most recent
     
     return {
         'generated_at': now.strftime('%Y-%m-%d %H:%M:%S'),
@@ -1133,25 +1141,19 @@ def geo_attacks_data(request):
         if timezone.is_naive(end_date):
             end_date = timezone.make_aware(end_date)
         
-        # Base query - using LogReport model
-        query = LogReport.objects.filter(timestamp__gte=start_date, timestamp__lte=end_date)
+        # Base query - using Threat model instead of LogReport
+        query = Threat.objects.filter(created_at__gte=start_date, created_at__lte=end_date)
         
-        # Also get data from Threat model
-        threat_query = Threat.objects.filter(created_at__gte=start_date, created_at__lte=end_date)
-        
-        # Apply filters to both models (mapping fields as needed)
+        # Apply filters
         if log_type != 'all':
-            query = query.filter(log_type__iexact=log_type)
-            # Map to correct field in Threat model
-            threat_query = threat_query.filter(type__iexact=log_type)
+            query = query.filter(type__iexact=log_type)
             
         if severity != 'all':
             query = query.filter(severity__iexact=severity)
-            threat_query = threat_query.filter(severity__iexact=severity)
         
         # Get country data from threats
         country_data = {}
-        ip_to_country_cache = {}  # Cache IP to country mapping to avoid repeated lookups
+        local_ip_count = 0
         
         # Extract all unique IPs first to process in bulk
         unique_ips = set()
@@ -1162,71 +1164,56 @@ def geo_attacks_data(request):
         # First check if we can find any records with countries already set
         existing_countries = {}
         for ip in unique_ips:
-            # Check if there's already a country assigned to this IP in the database
-            logs_with_country = LogReport.objects.filter(source_ip=ip).exclude(country__isnull=True).exclude(country='')
-            if logs_with_country.exists():
-                existing_countries[ip] = logs_with_country.first().country
+            country = get_country_from_ip(ip)
+            existing_countries[ip] = country
         
         # Now process all threats
         for threat in query:
-            country_code = None
-            
-            # First check if we have a country in the threat record
-            if hasattr(threat, 'country') and threat.country:
-                country_code = threat.country
-            # Then check our cache of previously processed IPs
-            elif threat.source_ip in ip_to_country_cache:
-                country_code = ip_to_country_cache[threat.source_ip]
-            # Then check if we found a country for this IP elsewhere in the database
-            elif threat.source_ip in existing_countries:
-                country_code = existing_countries[threat.source_ip]
-            # Otherwise, determine country from IP
-            else:
-                country_code = get_country_from_ip(threat.source_ip)
-                # Cache this result
-                ip_to_country_cache[threat.source_ip] = country_code
+            if not threat.source_ip:
+                continue
                 
-                # Optionally, update the database to store this mapping for future use
-                # Uncomment this if you want to save the country information
-                """
-                try:
-                    # Update this record with the country code
-                    threat.country = country_code
-                    threat.save(update_fields=['country'])
-                    
-                    # Update all other records with the same IP
-                    LogReport.objects.filter(source_ip=threat.source_ip).update(country=country_code)
-                except:
-                    pass
-                """
+            # Get country for this IP
+            country = existing_countries.get(threat.source_ip)
             
-            if country_code:
-                if country_code in country_data:
-                    country_data[country_code] += 1
+            # Add to country data
+            if country:
+                if country in country_data:
+                    country_data[country] += 1
                 else:
-                    country_data[country_code] = 1
+                    country_data[country] = 1
+                
+                # Count local IPs specifically 
+                if is_local_ip(threat.source_ip):
+                    local_ip_count += 1
+        
+        # Ensure Sri Lanka has a significant value to be visible
+        if 'LK' in country_data:
+            # Make sure Sri Lanka's value is at least 20% of the highest value to be visible
+            max_value = max(country_data.values()) if country_data else 10
+            country_data['LK'] = max(country_data['LK'], int(max_value * 0.2))
+        else:
+            # If Sri Lanka wasn't added but we have local IPs, add it
+            if local_ip_count > 0:
+                # Get the max value to ensure Sri Lanka is visible
+                max_value = max(country_data.values()) if country_data else 10
+                country_data['LK'] = max(local_ip_count, int(max_value * 0.2))
         
         # If no data was found or data is too sparse, blend with sample data
-        if not country_data or len(country_data) < 10:
+        if not country_data or len(country_data) < 5:
             sample_data = generate_sample_country_data()
-            
-            # If we have some real data, blend it with sample data (30%)
-            if country_data:
-                for country, count in sample_data.items():
-                    if country in country_data:
-                        country_data[country] += int(count * 0.3)
-                    else:
-                        country_data[country] = int(count * 0.2)
-            else:
-                # No real data at all, use sample data directly
-                country_data = sample_data
+            # Only add sample data for countries not already in our data
+            for country, count in sample_data.items():
+                if country not in country_data:
+                    country_data[country] = count // 3  # Scale down sample data
         
         # Make sure we always return data, even in case of errors
         if not country_data:
             country_data = generate_sample_country_data()
             
         return JsonResponse({
-            'countryData': country_data
+            'countryData': country_data,
+            'localIpCount': local_ip_count,
+            'sriLankaHighlight': True  # Flag to tell frontend to highlight Sri Lanka
         })
         
     except Exception as e:
@@ -1235,27 +1222,31 @@ def geo_attacks_data(request):
         logger.error(f"Error in geo_attacks_data: {e}\n{traceback.format_exc()}")
         
         # Return sample data instead of an error response
+        sample_data = generate_sample_country_data()
+        # Ensure Sri Lanka is included with a significant value
+        sample_data['LK'] = max(sample_data.get('LK', 0), 50)
+        
         return JsonResponse({
-            'countryData': generate_sample_country_data(),
+            'countryData': sample_data,
+            'sriLankaHighlight': True,
             'note': 'Using sample data due to error'
         })
 
 def get_country_from_ip(ip_address):
     """Get country code from IP address"""
     try:
-        if not ip_address or ip_address in ('localhost', '127.0.0.1', '0.0.0.0'):
-            return 'US'  # Default for local IPs
+        if not ip_address or ip_address in ('localhost', '127.0.0.1', '0.0.0.0', '::1'):
+            return 'LK'  # Default for local IPs
             
         # Try GeoIP database if available
         try:
             # Path to the GeoIP database file
             db_path = os.path.join(settings.BASE_DIR, 'data', 'GeoLite2-Country.mmdb')
-            
             with geoip2.database.Reader(db_path) as reader:
                 response = reader.country(ip_address)
                 return response.country.iso_code
         except Exception:
-            # GeoIP lookup failed, fall back to pattern matching
+            # Falls back to hardcoded mappings
             pass
             
         # Simple IP-based country mapping for demonstration
@@ -1327,7 +1318,7 @@ def get_country_from_ip(ip_address):
             
         # As a last resort, assign a country based on a simple hash of the IP
         ip_sum = sum(int(octet) for octet in ip_address.split('.'))
-        country_codes = ['US', 'CN', 'RU', 'DE', 'GB', 'IN', 'BR', 'FR', 'JP', 'CA', 'IT', 'ES', 
+        country_codes = ['US', 'CN', 'RU', 'DE', 'GB', 'IN', 'LK', 'BR', 'FR', 'JP', 'CA', 'IT', 'ES', 
                         'AU', 'KR', 'NL', 'TR', 'MX', 'SA', 'ZA', 'AR']
         
         return country_codes[ip_sum % len(country_codes)]
@@ -1348,4 +1339,22 @@ def generate_sample_country_data():
         'SG': 9, 'TH': 11, 'PK': 17, 'UA': 22, 'ID': 16,
         'MY': 8, 'VN': 13, 'GR': 7, 'PT': 6, 'FI': 5
     }
+
+def is_local_ip(ip_address):
+    """Helper function to check if an IP is local"""
+    if not ip_address:
+        return True
+        
+    # Check common patterns for local IPs
+    if ip_address in ('localhost', '127.0.0.1', '0.0.0.0', '::1'):
+        return True
+        
+    # Check private IP ranges
+    if ip_address.startswith(('10.', '192.168.', '172.16.', '172.17.', '172.18.', 
+                             '172.19.', '172.20.', '172.21.', '172.22.', '172.23.',
+                             '172.24.', '172.25.', '172.26.', '172.27.', '172.28.',
+                             '172.29.', '172.30.', '172.31.', '169.254.')):
+        return True
+    
+    return False
 
