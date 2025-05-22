@@ -253,11 +253,18 @@ def reports_dashboard_data(request):
             formatted_threats = []
             
             for threat in recent_threats:
+                # Get log type from parsed_log if available, otherwise use affected_system or 'Unknown'
+                log_type = 'Unknown'
+                if hasattr(threat, 'parsed_log') and threat.parsed_log:
+                    log_type = threat.parsed_log.source_type
+                elif threat.affected_system:
+                    log_type = threat.affected_system
+                
                 formatted_threats.append({
                     'id': threat.id,
                     'timestamp': threat.created_at.isoformat() if threat.created_at else '',
                     'sourceIp': threat.source_ip or 'Unknown',
-                    'logType': threat.type if hasattr(threat, 'type') else 'Unknown',
+                    'logType': log_type,
                     'threatType': threat.description or threat.mitre_technique or 'Unknown',
                     'severity': threat.severity.capitalize() if threat.severity else 'Unknown',
                     'status': threat.status or 'Unknown'
