@@ -289,79 +289,7 @@ ATTACK_PATTERN_MITRE_MAPPINGS.update({
         'technique': 'T1548',
         'technique_id': 'T1548'
     },
-    
-    r'/vuln_blog/x': {
-        'tactic': 'Execution',
-        'tactic_id': 'TA0002',
-        'technique': 'T1059',
-        'technique_id': 'T1059'
-    },
-    r'command_injection in request to /vuln_blog/': {
-        'tactic': 'Execution',
-        'tactic_id': 'TA0002',
-        'technique': 'T1059',
-        'technique_id': 'T1059'
-    },
-    r'Detected command_injection': {
-        'tactic': 'Execution',
-        'tactic_id': 'TA0002',
-        'technique': 'T1059',
-        'technique_id': 'T1059'
-    },
-    # General vulnerable blog path pattern with broad matching
-    r'/vuln_blog/[^/]+(?:\.php)?\b': {
-        'tactic': 'Initial Access',
-        'tactic_id': 'TA0001',
-        'technique': 'T1190',
-        'technique_id': 'T1190'
-    },
-    
-    r'/vuln_blog/register\.php': {
-        'tactic': 'Initial Access',
-        'tactic_id': 'TA0001',
-        'technique': 'T1078.001',
-        'technique_id': 'T1078.001'
-    },
-    r'/vuln_blog/login\.php': {
-        'tactic': 'Initial Access',
-        'tactic_id': 'TA0001',
-        'technique': 'T1078',
-        'technique_id': 'T1078'
-    },
-    r'POST /vuln_blog/login\.php': {
-        'tactic': 'Initial Access',
-        'tactic_id': 'TA0001',
-        'technique': 'T1078',
-        'technique_id': 'T1078'
-    },
-    r'/vuln_blog/profile\.php': {
-        'tactic': 'Credential Access',
-        'tactic_id': 'TA0006',
-        'technique': 'T1556',
-        'technique_id': 'T1556'
-    },
-    r'POST /vuln_blog/profile\.php': {
-        'tactic': 'Defense Evasion',
-        'tactic_id': 'TA0005',
-        'technique': 'T1556',
-        'technique_id': 'T1556'
-    },
-
-    # Enhanced phpMyAdmin classifications
-    r'/phpmyadmin/': {
-        'tactic': 'Initial Access',
-        'tactic_id': 'TA0001',
-        'technique': 'T1078.001',
-        'technique_id': 'T1078.001'
-    },
-    r'GET /phpmyadmin/': {
-        'tactic': 'Initial Access',
-        'tactic_id': 'TA0001',
-        'technique': 'T1078.001',
-        'technique_id': 'T1078.001'
-    },
 })
-
 
 @login_required
 def settings_view(request):
@@ -1483,29 +1411,64 @@ def create_parsed_log_from_raw(raw_log):
                 # Add this code before is_vulnerable_endpoint is first used (around line 1030)
         
         # ENHANCED VULNERABILITY DETECTION - Special handling for known vulnerable endpoints
-        known_vulnerable_endpoints = [
-            '/vuln_blog/search.php',
-            '/vuln_blog/login.php',
-            '/vuln_blog/user.php',
-            '/vuln_blog/comments.php',
-            '/vuln_blog/profile.php',
-            '/phpmyadmin/index.php',
-            '/admin/login.php',
-            '/wp-login.php',
-            '/wp-admin'
-        ]
-        
+        # Map endpoints to their typical vulnerability types - this helps with accurate detection
+        known_vulnerable_endpoints = {
+            # Removed all /vuln_blog/ paths as they were causing false positives
+            # Only keep legitimate vulnerable endpoints
+            '/phpmyadmin/index.php': {
+                'description': 'Admin interface vulnerable to SQLi and command execution',
+                'primary_risk': 'sql_injection',
+                'patterns': [
+                    r".*SELECT\s+.*FROM\s+.*", 
+                    r".*information_schema.*",
+                    r".*\s+INTO\s+OUTFILE\s+.*",
+                    r".*\s+LOAD_FILE\s*\(.*"
+                ]
+            },
+            '/admin/login.php': {
+                'description': 'Admin login vulnerable to brute force and SQLi',
+                'primary_risk': 'sql_injection',
+                'patterns': [
+                    r".*'\s*OR\s*'?1'?\s*=\s*'?1.*", 
+                    r".*admin['\"]\s*--.*",
+                    r".*OR\s+1=1\s*--.*"
+                ]
+            },
+            '/wp-login.php': {
+                'description': 'WordPress login vulnerable to brute force and SQLi',
+                'primary_risk': 'sql_injection',
+                'patterns': [
+                    r".*'\s*OR\s*'?1'?\s*=\s*'?1.*",
+                    r".*user_login=admin.*"
+                ]
+            }
+        }
+
+        # Initialize the variable that was causing the error
         is_vulnerable_endpoint = False
-        if request_path:
-            for endpoint in known_vulnerable_endpoints:
-                if endpoint.lower() in request_path.lower():
-                    is_vulnerable_endpoint = True
-                    logger.info(f"Request to known vulnerable endpoint: {request_path}")
-                    break
-        # 4. NEVER whitelist vulnerable blog or admin paths with query parameters
-        if is_vulnerable_endpoint and query_string:
-            is_whitelisted = False
-            logger.debug(f"Not whitelisting vulnerable endpoint with query: {full_request_path}")
+
+        # 4. Modify the endpoint checking to require pattern matching, not just path matching
+        if request_path and any(endpoint in request_path.lower() for endpoint in known_vulnerable_endpoints):
+            # Flag as potentially vulnerable, but don't automatically mark it as such
+            potential_vulnerable_endpoint = request_path.lower()
+            endpoint_matched = None
+            
+            for endpoint, endpoint_info in known_vulnerable_endpoints.items():
+                if endpoint in potential_vulnerable_endpoint:
+                    endpoint_matched = endpoint
+                    # Only mark as vulnerable if we detect one of the specified attack patterns
+                    if query_string:
+                        decoded_query = unquote(query_string)
+                        for pattern in endpoint_info['patterns']:
+                            if re.search(pattern, decoded_query, re.IGNORECASE) or re.search(pattern, decoded_content, re.IGNORECASE):
+                                is_vulnerable_endpoint = True
+                                logger.info(f"Detected {endpoint_info['primary_risk']} at endpoint: {request_path}")
+                                is_whitelisted = False
+                                break
+            
+            # If not explicitly vulnerable based on patterns, don't treat it specially
+            if not is_vulnerable_endpoint and endpoint_matched:
+                logger.debug(f"Request to monitored endpoint, but no attack pattern detected: {request_path}")
         
         # IMPROVED SQL INJECTION DETECTION - Check both URL path and query separately
         # Only proceed with analysis if not whitelisted
@@ -1515,7 +1478,7 @@ def create_parsed_log_from_raw(raw_log):
             if query_string and is_vulnerable_endpoint:
                 # Common SQL injection patterns in query parameters
                 obvious_patterns = [
-                    r"'.*OR.*'.*=.*'",              # 'OR '1'='1
+                    r"'.*OR.*'.*=.*'1",    # 'OR '1'='1
                     r"--",                          # SQL comment
                     r"UNION.*SELECT",               # UNION SELECT
                     r"DROP.*TABLE",                 # DROP TABLE
@@ -2682,7 +2645,7 @@ def determine_mitre_classification(content, attack_type, attack_patterns=None):
     """
     logger.debug(f"Determining MITRE classification for content: {content[:100]}...")
     
-        # Add this at the beginning of the function, after the debug logging
+    # Add this at the beginning of the function, after the debug logging
     if attack_type and attack_type in MITRE_ATTACK_MAPPINGS:
         mapping = MITRE_ATTACK_MAPPINGS[attack_type]
         logger.info(f"Using attack_type '{attack_type}' for classification")
@@ -2880,33 +2843,6 @@ def determine_mitre_classification(content, attack_type, attack_patterns=None):
         }
     })
     
-    vuln_blog_paths = {
-        '/vuln_blog/login.php': ('Initial Access', 'TA0001', 'T1078', 'T1078'),
-        '/vuln_blog/register.php': ('Initial Access', 'TA0001', 'T1078.001', 'T1078.001'),
-        '/vuln_blog/profile.php': ('Credential Access', 'TA0006', 'T1556', 'T1556'),
-        '/vuln_blog/index.php': ('Initial Access', 'TA0001', 'T1078', 'T1078'),
-        '/vuln_blog/search.php': ('Discovery', 'TA0007', 'T1083', 'T1083')
-    }
-    
-    if attack_type and 'command_injection' in attack_type.lower():
-        logger.info(f"Command injection classified via attack_type: {attack_type}")
-        return (
-            'Execution',
-            'TA0002',
-            'T1059',
-            'T1059'
-        )
-    
-    for path, classification in vuln_blog_paths.items():
-        if path in content:
-            # For POST requests to profile.php, classify as Defense Evasion
-            if path == '/vuln_blog/profile.php' and 'POST /vuln_blog/profile.php' in content:
-                logger.info(f"FOUND vulnerable blog POST profile - SECURITY BREACH")
-                return ('Defense Evasion', 'TA0005', 'Modify Authentication Process', 'T1556')
-            
-            logger.info(f"FOUND vulnerable blog path {path} - SECURITY BREACH")
-            return classification
-    
     # 3. Check for PHPMyAdmin access which should be properly classified
     if '/phpmyadmin/' in content or 'phpmyadmin' in content.lower():
         logger.info(f"FOUND phpMyAdmin access - SECURITY BREACH")
@@ -2924,7 +2860,7 @@ def determine_mitre_classification(content, attack_type, attack_patterns=None):
             return (
                 'Initial Access',
                 'TA0001', 
-                'T1078.001',
+                'T1078.001', 
                 'T1078.001'
             )
 
@@ -2957,6 +2893,7 @@ def determine_mitre_classification(content, attack_type, attack_patterns=None):
         # Extract potential command patterns
         command_matches = re.findall(r'(?:;|&&|\||\$\(|\`)\s*([a-zA-Z0-9_/.\-]+)', content)
         context_data['commands'] = command_matches
+    logger.info(f"Context data extracted: {context_data}")
     
     # Continue with existing layers of detection...
     
